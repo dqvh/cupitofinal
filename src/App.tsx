@@ -54,12 +54,29 @@ function ScrollProgress() {
 }
 
 function parseRoute(): { name: "landing" | "auth" | "app" | "b" | "admin"; query: string; slug?: string } {
-  const h = window.location.hash || "#/";
-  if (h.startsWith("#/auth")) return { name: "auth", query: h };
-  if (h.startsWith("#/app")) return { name: "app", query: h };
-  if (h.startsWith("#/central")) return { name: "admin", query: h };
-  if (h.startsWith("#/b/")) return { name: "b", query: h, slug: h.slice(4).split("?")[0] };
-  return { name: "landing", query: h };
+  const h = window.location.hash || "";
+  const p = window.location.pathname || "/";
+
+  // Usar hash si existe (ej. #/b/slug), o pathname limpio (ej. /b/slug)
+  const raw = h.startsWith("#/") ? h.slice(2) : p.startsWith("/") ? p.slice(1) : p;
+  const path = raw.split("?")[0].split("#")[0].toLowerCase();
+  const query = h || window.location.search;
+
+  if (path === "admin" || path === "central" || path.startsWith("admin/") || path.startsWith("central/")) {
+    return { name: "admin", query };
+  }
+  if (path === "auth" || path === "login" || path === "registro" || path.startsWith("auth/")) {
+    return { name: "auth", query };
+  }
+  if (path === "app" || path === "dashboard" || path.startsWith("app/")) {
+    return { name: "app", query };
+  }
+  if (path.startsWith("b/")) {
+    const slug = raw.slice(2).split("?")[0].split("#")[0].trim();
+    return { name: "b", query, slug };
+  }
+
+  return { name: "landing", query };
 }
 
 function Router() {
@@ -68,20 +85,24 @@ function Router() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("preapproval_id") || params.get("preapprovalId") || params.get("preapproval")) {
-      if (!window.location.hash.startsWith("#/app")) {
+      if (!window.location.hash.startsWith("#/app") && window.location.pathname !== "/app") {
         window.location.hash = "#/app";
       }
     }
-    const onHash = () => {
+    const onNav = () => {
       setRoute(parseRoute());
-      if (!window.location.hash.startsWith("#/")) {
+      if (window.location.hash && !window.location.hash.startsWith("#/")) {
         /* anclas internas: no scrollear al tope */
         return;
       }
       window.scrollTo({ top: 0 });
     };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    window.addEventListener("hashchange", onNav);
+    window.addEventListener("popstate", onNav);
+    return () => {
+      window.removeEventListener("hashchange", onNav);
+      window.removeEventListener("popstate", onNav);
+    };
   }, []);
 
   if (route.name === "auth") {

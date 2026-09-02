@@ -58,6 +58,7 @@ import {
   IconLogout,
   IconCheck,
   IconArrow,
+  IconWhatsApp,
   CopyButton,
   IconSearch,
   IconCopy,
@@ -305,7 +306,7 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-ink/35">Panel · {sectionOf(view)}</p>
                   <CopyButton
-                    text={`https://cupito.app/#/b/${user.slug}`}
+                    text={`https://cupito.app/b/${user.slug}`}
                     label="Copiar mi link"
                     copiedLabel="¡Link copiado!"
                     className="border border-ink/15 shadow-none hover:border-ink/40"

@@ -563,6 +563,8 @@ interface StoreApi {
   loginAs(userId: string): void;
   stopImpersonating(): void;
   adminSetPlan(userId: string, plan: Plan): void;
+  adminUpdateUser(userId: string, updates: Partial<User>): void;
+  adminAddUser(data: { name: string; business: string; email: string; password: string; plan: Plan; billing?: "mensual" | "anual"; durationDays?: number }): { ok: boolean; error?: string; user?: User };
   adminDeleteUser(userId: string): void;
   /* negocio */
   addService(s: Omit<Service, "id">): void;
@@ -698,6 +700,57 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   adminSetPlan(userId, plan) {
     saveUsers(users.map((u) => (u.id === userId ? { ...u, plan } : u)));
     emit();
+  },
+  adminUpdateUser(userId, updates) {
+    saveUsers(
+      users.map((u) => {
+        if (u.id !== userId) return u;
+        const updated = { ...u, ...updates };
+        if (updates.business && !updates.slug) {
+          updated.slug = slugify(updates.business);
+        }
+        return updated;
+      })
+    );
+    emit();
+  },
+  adminAddUser(data) {
+    const em = data.email.trim().toLowerCase();
+    if (users.some((u) => u.email === em)) {
+      return { ok: false, error: "Ya existe un negocio registrado con ese email." };
+    }
+    const business = data.business.trim();
+    let baseSlug = slugify(business) || "negocio";
+    let slug = baseSlug;
+    let counter = 1;
+    while (users.some((u) => u.slug === slug)) {
+      slug = `${baseSlug}-${counter++}`;
+    }
+    const now = Date.now();
+    const billing = data.billing ?? "mensual";
+    const days = data.durationDays ?? (billing === "anual" ? 365 : 30);
+    const nextRenewal = now + days * 24 * 3600 * 1000;
+    const newUser: User = {
+      id: uid(),
+      name: data.name.trim(),
+      business,
+      email: em,
+      password: data.password || "cupito123",
+      slug,
+      plan: data.plan,
+      createdAt: now,
+      subscription: data.plan !== "semilla" ? {
+        billing,
+        activeSince: now,
+        nextRenewal,
+        autoRenew: true,
+        status: "activa",
+      } : undefined,
+    };
+    saveUsers([...users, newUser]);
+    loadData(newUser.id);
+    emit();
+    return { ok: true, user: newUser };
   },
   adminDeleteUser(userId) {
     saveUsers(users.filter((u) => u.id !== userId));
