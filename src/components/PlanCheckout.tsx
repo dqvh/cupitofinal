@@ -27,8 +27,6 @@ export function PlanCheckout({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const paid = isPaidPlan(plan);
-
   const pickFree = () => {
     setPlan("semilla");
     toast("Quedaste en el plan Semilla, gratis. Podés subir cuando quieras.");
@@ -49,11 +47,11 @@ export function PlanCheckout({
       return;
     }
     savePendingCheckout(target, billing);
-    toast("Te llevamos a MercadoPago para pagar la suscripción…");
+    toast("Te llevamos a Mercado Pago para pagar la suscripción…");
     window.location.href = r.url;
   };
 
-  if (!paid) {
+  if (!isPaidPlan(plan)) {
     return (
       <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-[2px]" onClick={onClose}>
         <div className="pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" onClick={(e) => e.stopPropagation()}>
@@ -105,14 +103,34 @@ export function PlanCheckout({
           ))}
         </ul>
 
-        {error && <p className="mt-4 rounded-xl border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
+        {error && (
+          <div className="mt-4 rounded-xl border-2 border-coral/40 bg-coral/10 p-3 text-xs text-coral">
+            <p className="font-semibold">{error}</p>
+            {error.includes("MP_ACCESS_TOKEN") && (
+              <div className="mt-3 border-t border-coral/20 pt-2.5">
+                <p className="text-inkmute">¿Estás probando en local o antes de poner las keys en Vercel?</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlan(plan);
+                    toast(`Plan ${PLAN_META[plan].name} activado en modo demo ✓`);
+                    onClose();
+                  }}
+                  className="mt-2 rounded-lg bg-coral/20 px-3 py-1.5 font-bold text-coral transition-colors hover:bg-coral hover:text-white"
+                >
+                  Activar {PLAN_META[plan].name} de prueba (Modo Demo)
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <button onClick={() => pay(plan)} disabled={processing}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-4 font-display text-base font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep disabled:opacity-60">
-          {processing ? (<><span className="blinkdot h-2.5 w-2.5 rounded-full bg-ink" /> Abriendo MercadoPago…</>) : (<>Pagar con MercadoPago <IconArrow className="h-4 w-4" /></>)}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-4 font-display text-base font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep disabled:opacity-60 shadow-block-ink">
+          {processing ? (<><span className="blinkdot h-2.5 w-2.5 rounded-full bg-ink" /> Conectando con Mercado Pago…</>) : (<>Pagar con Mercado Pago <IconArrow className="h-4 w-4" /></>)}
         </button>
         <p className="mt-3 text-center text-[11px] leading-snug text-inkmute">
-          No te cambiamos el plan hasta que MercadoPago confirme el pago.
+          Tu suscripción se procesa en el sitio seguro de Mercado Pago.
         </p>
       </div>
     </div>

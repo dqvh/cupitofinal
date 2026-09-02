@@ -37,30 +37,45 @@ export default async function handler(req: Request): Promise<Response> {
   const TOKEN = process.env.MP_ACCESS_TOKEN;
   if (!TOKEN) return json({ demo: true, reason: "Falta MP_ACCESS_TOKEN en Vercel → modo demo." });
 
-  const PUBLIC_URL = process.env.PUBLIC_URL || "https://cupito.app";
+  const originHeader = req.headers.get("origin") || req.headers.get("referer");
+  let origin = "";
+  if (originHeader) {
+    try {
+      const u = new URL(originHeader);
+      origin = `${u.protocol}//${u.host}`;
+    } catch { /* ignore */ }
+  }
+
+  const PUBLIC_URL = process.env.PUBLIC_URL || origin || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://cupito.app");
   const amount = PLANS[plan][billing];
+
+  const payload: Record<string, unknown> = {
+    reason: `Cupito — Plan ${plan === "crece" ? "Crece" : "Escala"} (${billing})`,
+    external_reference: `${body.email || "anon"}::${plan}::${billing}`,
+    back_url: `${PUBLIC_URL}/#/app`,
+    status: "pending",
+    auto_recurring: {
+      frequency: billing === "mensual" ? 1 : 12,
+      frequency_type: "months",
+      transaction_amount: amount,
+      currency_id: "ARS",
+    },
+  };
+
+  if (body.email && /^\S+@\S+\.\S+$/.test(body.email)) {
+    payload.payer_email = body.email;
+  }
 
   try {
     const res = await fetch("https://api.mercadopago.com/preapproval", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify({
-        reason: `Cupito — Plan ${plan === "crece" ? "Crece" : "Escala"} (${billing})`,
-        external_reference: `${body.email || "anon"}::${plan}::${billing}`,
-        back_url: `${PUBLIC_URL}/#/app`,
-        status: "pending",
-        auto_recurring: {
-          frequency: billing === "mensual" ? 1 : 12,
-          frequency_type: "months",
-          transaction_amount: amount,
-          currency_id: "ARS",
-        },
-      }),
+      body: JSON.stringify(payload),
     });
 
     const d = await res.json();
     const url = d.init_point || d.sandbox_init_point;
-    if (!res.ok || !url) return json({ demo: false, error: d.message || "MercadoPago rechazó la suscripción." }, 400);
+    if (!res.ok || !url) return json({ demo: false, error: d.message || d.cause?.[0]?.description || "MercadoPago rechazó la suscripción." }, 400);
 
     return json({ init_point: url, sandbox_init_point: d.sandbox_init_point ?? null });
   } catch {

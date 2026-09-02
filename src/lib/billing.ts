@@ -4,6 +4,7 @@ export type BillingCycle = "mensual" | "anual";
 
 export const PAID_PLANS = ["crece", "escala"] as const;
 export type PaidPlan = (typeof PAID_PLANS)[number];
+export const isPaidPlan = (p: Plan): p is PaidPlan => p === "crece" || p === "escala";
 
 export const PLAN_AMOUNTS: Record<PaidPlan, Record<BillingCycle, number>> = {
   crece: { mensual: 9900, anual: 9400 },
@@ -71,16 +72,16 @@ export async function createMercadoPagoCheckout(opts: {
     });
     const r = await res.json().catch(() => ({}));
     if (r.demo) {
-      return { ok: false, error: "MercadoPago todavía no está configurado en el servidor (falta MP_ACCESS_TOKEN). El plan no se cambia hasta que pagues." };
+      return { ok: false, error: "Mercado Pago no tiene configurado MP_ACCESS_TOKEN en Vercel (Settings → Environment Variables). Agregá tu token para habilitar los pagos reales." };
     }
     if (!res.ok || r.error) {
-      return { ok: false, error: String(r.error || "MercadoPago rechazó la suscripción. Probá de nuevo.") };
+      return { ok: false, error: String(r.error || "Mercado Pago rechazó la solicitud de suscripción. Por favor intentá nuevamente.") };
     }
     const url = r.init_point || r.sandbox_init_point || r.sandbox;
-    if (!url) return { ok: false, error: "MercadoPago no devolvió el link de pago." };
+    if (!url) return { ok: false, error: "Mercado Pago no devolvió el link de pago." };
     return { ok: true, url };
   } catch {
-    return { ok: false, error: "No pudimos conectar con MercadoPago. Revisá tu conexión e intentá otra vez." };
+    return { ok: false, error: "No pudimos conectar con el servidor de Mercado Pago. Revisá tu conexión a internet." };
   }
 }
 

@@ -112,6 +112,7 @@ export default function Dashboard() {
   const [filter, setFilter] = useState<"todas" | BookingStatus>("todas");
   const [proFilter, setProFilter] = useState<string>("todos");
   const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +120,11 @@ export default function Dashboard() {
       const checkout = getHashParam("checkout");
       if (checkout === "crece" || checkout === "escala" || checkout === "semilla") {
         setCheckoutPlan(checkout);
+      }
+
+      const onboardingParam = getHashParam("onboarding") || getHashParam("setup");
+      if (onboardingParam === "1" || (data && data.services.length === 0 && !data.settings.setupDismissed)) {
+        setShowOnboarding(true);
       }
 
       const preapprovalId = getPreapprovalIdFromUrl();
@@ -133,7 +139,7 @@ export default function Dashboard() {
       } else if (result.error) {
         store.toast(result.error, "warn");
       } else {
-        store.toast("MercadoPago todavía no autorizó el pago. Si ya pagaste, recargá en un momento.", "warn");
+        store.toast("Mercado Pago todavía no autorizó el pago. Si ya pagaste, recargá en un momento.", "warn");
       }
       if (window.location.search.includes("preapproval")) {
         const url = new URL(window.location.href);
@@ -294,7 +300,7 @@ export default function Dashboard() {
               )}
             </div>
 
-            {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} />}
+            {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} onOpenOnboarding={() => setShowOnboarding(true)} />}
 
             {pendingClaims > 0 && (
               <div className="pop-in mt-6 flex items-center gap-3 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3">
@@ -563,6 +569,7 @@ export default function Dashboard() {
       {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} onClose={() => setShowNew(false)} />}
       {serviceModal.open && <ServiceModal service={serviceModal.id ? data.services.find((s) => s.id === serviceModal.id) : undefined} onClose={() => setServiceModal({ open: false })} />}
       {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => setCheckoutPlan(null)} />}
+      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} onGoToPlan={(p) => { setShowOnboarding(false); setCheckoutPlan(p); }} />}
     </div>
   );
 }
@@ -592,15 +599,15 @@ function EmptyState({ text, sub, action }: { text: string; sub: string; action?:
   );
 }
 
-function SetupGuide({ onGo, onCheckout }: { onGo: (v: View) => void; onCheckout: (p: Plan) => void }) {
+function SetupGuide({ onGo, onCheckout, onOpenOnboarding }: { onGo: (v: View) => void; onCheckout: (p: Plan) => void; onOpenOnboarding: () => void }) {
   const { user, data, updateSettings } = useStore();
   if (!user || !data || data.settings.setupDismissed) return null;
 
   const steps: { id: string; done: boolean; title: string; hint: string; go: () => void }[] = [
     { id: "servicio", done: data.services.length > 0, title: "Cargá tu primer servicio", hint: "Nombre, precio y duración. Es lo que ven tus clientes.", go: () => onGo("servicios") },
-    { id: "horarios", done: JSON.stringify(data.settings.hours) !== JSON.stringify(defaultHours()), title: "Confirmá días y horarios", hint: "Los turnos se arman solos con esto. Hoy tenés un horario de ejemplo.", go: () => onGo("ajustes") },
+    { id: "horarios", done: JSON.stringify(data.settings.hours) !== JSON.stringify(defaultHours()), title: "Confirmá días y horarios", hint: "Los turnos se arman solos con esto según cuándo abras.", go: () => onGo("ajustes") },
     { id: "pagina", done: !!(data.settings.whatsapp || data.settings.description || data.settings.address), title: "Completá tu página", hint: "WhatsApp, dirección o una descripción corta.", go: () => onGo("ajustes") },
-    { id: "plan", done: user.plan !== "semilla", title: "Elegí un plan", hint: user.plan === "semilla" ? "Estás en Semilla (gratis). Crece se paga con MercadoPago." : `Ya estás en ${PLAN_META[user.plan].name}.`, go: () => onCheckout("crece") },
+    { id: "plan", done: user.plan !== "semilla", title: "Elegí un plan", hint: user.plan === "semilla" ? "Estás en Semilla (gratis). Crece y Escala se pagan con Mercado Pago." : `Plan activo: ${PLAN_META[user.plan].name}.`, go: () => onCheckout("crece") },
   ];
   const done = steps.filter((s) => s.done).length;
   if (done === steps.length) return null;
@@ -609,13 +616,20 @@ function SetupGuide({ onGo, onCheckout }: { onGo: (v: View) => void; onCheckout:
     <div className="pop-in mt-8 overflow-hidden rounded-[22px] border-2 border-evergreen bg-evergreen text-paper shadow-block">
       <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-6">
         <div>
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-lime">Primeros pasos</p>
-          <h2 className="mt-1 font-display text-2xl font-extrabold">Tu local está vacío. Arranquemos.</h2>
-          <p className="mt-1 text-sm text-paper/70">En unos minutos: servicios, horarios y tu link listo para compartir.</p>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-lime/20 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.2em] text-lime">
+            <IconSpark className="h-3.5 w-3.5" /> Primeros pasos
+          </span>
+          <h2 className="mt-2 font-display text-2xl font-extrabold">Tu local está listo para configurarse</h2>
+          <p className="mt-1 text-sm text-paper/70">En pocos minutos tenés tus servicios, horarios y tu link listo para compartir.</p>
         </div>
-        <button type="button" onClick={() => updateSettings({ setupDismissed: true })} className="text-xs font-bold text-paper/50 underline-offset-4 hover:text-lime hover:underline">Ocultar</button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={onOpenOnboarding} className="rounded-full bg-lime px-4 py-2 font-display text-xs font-bold text-ink transition-all hover:bg-limedeep shadow-sm">
+            ✨ Abrir Asistente
+          </button>
+          <button type="button" onClick={() => updateSettings({ setupDismissed: true })} className="text-xs font-bold text-paper/50 underline-offset-4 hover:text-lime hover:underline">Ocultar</button>
+        </div>
       </div>
-      <div className="mt-2 px-6 pb-2">
+      <div className="mt-3 px-6 pb-2">
         <div className="h-1.5 overflow-hidden rounded-full bg-paper/15">
           <div className="h-full rounded-full bg-lime transition-all" style={{ width: `${(done / steps.length) * 100}%` }} />
         </div>
@@ -637,6 +651,297 @@ function SetupGuide({ onGo, onCheckout }: { onGo: (v: View) => void; onCheckout:
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/* ============ ASISTENTE DE INICIO (ONBOARDING) ============ */
+function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToPlan: (p: Plan) => void }) {
+  const { user, data, addService, updateSettings, toast } = useStore();
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+  
+  // Paso 0: Horarios
+  const [hours, setHours] = useState<DayHours[]>(data?.settings.hours || defaultHours());
+  
+  // Paso 1: Primer Servicio
+  const [serviceName, setServiceName] = useState("");
+  const [servicePrice, setServicePrice] = useState("10000");
+  const [serviceDuration, setServiceDuration] = useState("45");
+  
+  // Paso 2: Link y Contacto
+  const [whatsapp, setWhatsapp] = useState(data?.settings.whatsapp || "");
+  const [address, setAddress] = useState(data?.settings.address || "");
+  const [copied, setCopied] = useState(false);
+
+  if (!user || !data) return null;
+
+  const publicUrl = `${window.location.origin}${window.location.pathname}#/b/${user.slug}`;
+
+  const saveHoursAndNext = () => {
+    updateSettings({ hours });
+    setStep(1);
+  };
+
+  const saveServiceAndNext = () => {
+    if (serviceName.trim()) {
+      addService({
+        name: serviceName.trim(),
+        price: Number(servicePrice) || 0,
+        duration: Number(serviceDuration) || 45,
+      });
+      toast("¡Primer servicio guardado! ✓");
+    }
+    setStep(2);
+  };
+
+  const finishOnboarding = () => {
+    updateSettings({
+      whatsapp: whatsapp.replace(/\D/g, ""),
+      address: address.trim(),
+      setupDismissed: true,
+    });
+    toast("¡Felicitaciones! Tu agenda ya está lista para recibir reservas 🎉");
+    onClose();
+  };
+
+  const copyLink = () => {
+    void navigator.clipboard.writeText(publicUrl);
+    setCopied(true);
+    toast("Link copiado al portapapeles 📋");
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-ink/65 p-4 backdrop-blur-[3px]" onClick={onClose}>
+      <div className="pop-in max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[24px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-8" onClick={(e) => e.stopPropagation()}>
+        {/* Header con pasos */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-lime/25 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-evergreen">
+              🚀 Configuración inicial · Paso {step + 1} de 3
+            </span>
+            <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
+              {step === 0 && "Días y horarios de atención"}
+              {step === 1 && "Cargá tu primer servicio"}
+              {step === 2 && "Tu link público y contacto"}
+            </h2>
+            <p className="mt-1 text-xs text-inkmute sm:text-sm">
+              {step === 0 && "Tus clientes solo podrán reservar turnos dentro de estos días y horarios."}
+              {step === 1 && "Definí qué ofrecés, cuánto cobrás y cuánto dura cada turno."}
+              {step === 2 && "Este es el link que podés poner en tu Instagram, WhatsApp o bio."}
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral">✕</button>
+        </div>
+
+        {/* Barra de progreso */}
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          {["Horarios", "Servicios", "Tu Link"].map((label, idx) => (
+            <div key={label} className="space-y-1">
+              <div className={`h-1.5 rounded-full transition-all ${idx <= step ? "bg-evergreen" : "bg-ink/10"}`} />
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${idx === step ? "text-evergreen" : "text-inkmute"}`}>{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Paso 0: Horarios */}
+        {step === 0 && (
+          <div className="pop-in mt-6 space-y-4">
+            <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
+              {[1, 2, 3, 4, 5, 6, 0].map((dayIdx) => {
+                const h = hours[dayIdx];
+                return (
+                  <div key={dayIdx} className={`flex items-center justify-between rounded-xl border-2 p-3 transition-colors ${h.open ? "border-ink/12 bg-white/70" : "border-ink/8 bg-ink/[0.03] opacity-60"}`}>
+                    <div className="flex items-center gap-3">
+                      <Toggle
+                        on={h.open}
+                        onChange={(v) => {
+                          const next = [...hours];
+                          next[dayIdx] = { ...next[dayIdx], open: v };
+                          setHours(next);
+                        }}
+                        label={`Abrir ${DAY_NAMES[dayIdx]}`}
+                      />
+                      <span className={`font-display text-xs font-bold sm:text-sm ${h.open ? "text-ink" : "text-inkmute"}`}>
+                        {DAY_NAMES[dayIdx]}
+                      </span>
+                    </div>
+                    {h.open ? (
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <input
+                          type="time"
+                          className="field !h-8 !w-auto !py-1 !text-xs"
+                          value={h.from}
+                          onChange={(e) => {
+                            const next = [...hours];
+                            next[dayIdx] = { ...next[dayIdx], from: e.target.value };
+                            setHours(next);
+                          }}
+                        />
+                        <span className="text-inkmute">a</span>
+                        <input
+                          type="time"
+                          className="field !h-8 !w-auto !py-1 !text-xs"
+                          value={h.to}
+                          onChange={(e) => {
+                            const next = [...hours];
+                            next[dayIdx] = { ...next[dayIdx], to: e.target.value };
+                            setHours(next);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-xs font-bold text-inkmute">Cerrado</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={saveHoursAndNext}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine shadow-block-ink"
+            >
+              Guardar horarios y continuar <IconArrow className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Paso 1: Primer Servicio */}
+        {step === 1 && (
+          <div className="pop-in mt-6 space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Nombre del servicio</label>
+              <input
+                className="field"
+                placeholder="Ej: Corte clásico, Manicura semi, Consulta..."
+                value={serviceName}
+                onChange={(e) => setServiceName(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Precio (ARS)</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-inkmute">$</span>
+                  <input
+                    type="number"
+                    className="field !pl-8"
+                    placeholder="10000"
+                    value={servicePrice}
+                    onChange={(e) => setServicePrice(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Duración</label>
+                <select
+                  className="field cursor-pointer"
+                  value={serviceDuration}
+                  onChange={(e) => setServiceDuration(e.target.value)}
+                >
+                  <option value="15">15 minutos</option>
+                  <option value="30">30 minutos</option>
+                  <option value="45">45 minutos</option>
+                  <option value="60">60 minutos (1 h)</option>
+                  <option value="90">90 minutos (1.5 h)</option>
+                  <option value="120">120 minutos (2 h)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={saveServiceAndNext}
+                disabled={!serviceName.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine disabled:opacity-50 shadow-block-ink"
+              >
+                {serviceName.trim() ? "Guardar servicio y continuar" : "Ingresá el nombre del servicio"} <IconArrow className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="text-center text-xs font-bold text-inkmute hover:text-ink"
+              >
+                Omitir por ahora (puedo crearlo después)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Paso 2: Link público y contacto */}
+        {step === 2 && (
+          <div className="pop-in mt-6 space-y-5">
+            <div className="rounded-2xl border-2 border-evergreen/30 bg-lime/20 p-4">
+              <p className="text-xs font-extrabold uppercase tracking-wider text-evergreen">Tu link de reservas online</p>
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-white p-2.5 border-2 border-ink/10">
+                <span className="truncate text-xs font-bold text-ink font-mono sm:text-sm">{publicUrl}</span>
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className="shrink-0 rounded-lg bg-evergreen px-3 py-1.5 text-xs font-bold text-lime hover:bg-pine"
+                >
+                  {copied ? "¡Copiado! ✓" : "Copiar link"}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-inkmute">
+                💡 Pegá este link en tu biografía de Instagram o mandáselo a tus clientes por WhatsApp.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">WhatsApp del local</label>
+                <input
+                  className="field"
+                  placeholder="Ej: 1155551234"
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Dirección</label>
+                <input
+                  className="field"
+                  placeholder="Ej: Av. Santa Fe 1234, CABA"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border-2 border-ink/10 bg-white/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-display text-sm font-bold text-ink">Plan actual: <span className="text-fern">{PLAN_META[user.plan].name}</span></p>
+                  <p className="text-xs text-inkmute">¿Querés reservas ilimitadas y cobrar seña?</p>
+                </div>
+                {user.plan === "semilla" && (
+                  <button
+                    type="button"
+                    onClick={() => onGoToPlan("crece")}
+                    className="rounded-full bg-lime px-4 py-2 font-display text-xs font-bold text-ink hover:bg-limedeep"
+                  >
+                    Ver Plan Crece
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={finishOnboarding}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine shadow-block-ink"
+            >
+              ¡Terminar y empezar a recibir turnos! 🎉
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1201,36 +1506,77 @@ function CouponModal({ onClose }: { onClose: () => void }) {
 /* ============ SUSCRIPCIÓN ============ */
 function SubscriptionView({ current, onSelect }: { current: Plan; onSelect: (p: Plan) => void }) {
   const plans: Plan[] = ["semilla", "crece", "escala"];
-  const desc: Record<Plan, string> = {
-    semilla: "1 calendario · 25 reservas/mes · link propio · recordatorios por email",
-    crece: "Reservas ilimitadas · seña configurable · 3 profesionales · tienda y cupones · horarios por día",
-    escala: "Todo lo de Crece · equipo ilimitado · lista de espera avanzada · soporte prioritario",
+  const desc: Record<Plan, string[]> = {
+    semilla: ["1 profesional", "25 reservas al mes", "Link web propio", "Recordatorios por email", "Horarios configurables"],
+    crece: ["Reservas ilimitadas", "Hasta 3 profesionales", "Cobro de seña (Mercado Pago / Transferencia)", "Tienda de productos y cupones", "Horarios por día con corte"],
+    escala: ["Todo lo de Crece", "Profesionales y equipos ilimitados", "Lista de espera avanzada", "Estadísticas completas", "Soporte prioritario"],
   };
+
   return (
-    <div className="pop-in mt-8 grid gap-4">
-      {plans.map((p) => {
-        const active = current === p;
-        return (
-          <div key={p} className={`card flex flex-wrap items-center justify-between gap-4 p-6 ${active ? "!border-limedeep !bg-lime/20" : ""}`}>
-            <div>
-              <p className="flex items-center gap-2 font-display text-2xl font-extrabold text-ink">
-                {PLAN_META[p].name}
-                {active && <span className="rounded-full bg-evergreen px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-lime">Tu plan</span>}
-              </p>
-              <p className="mt-1 text-sm text-inkmute">{desc[p]}</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <p className="font-display text-2xl font-extrabold text-fern">{PLAN_META[p].price}</p>
-              {!active && (
-                <button onClick={() => onSelect(p)} className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">
-                  {p === "semilla" ? "Bajar a Semilla" : `Pagar ${PLAN_META[p].name}`}
-                </button>
+    <div className="pop-in mt-8 space-y-6">
+      <div className="grid gap-5 md:grid-cols-3">
+        {plans.map((p) => {
+          const active = current === p;
+          const isPopular = p === "crece";
+          return (
+            <div key={p} className={`card relative flex flex-col justify-between p-6 transition-all ${active ? "!border-limedeep !bg-lime/20 shadow-block-ink" : isPopular ? "border-fern/40 bg-card hover:border-evergreen shadow-sm" : "border-ink/12 bg-card hover:border-evergreen"}`}>
+              {isPopular && !active && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-coral px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm">
+                  ⭐ Recomendado
+                </span>
               )}
+              {active && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-evergreen px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-lime">
+                  ✓ Tu plan actual
+                </span>
+              )}
+              <div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="font-display text-2xl font-extrabold text-ink">{PLAN_META[p].name}</h3>
+                  {p === "semilla" && <span className="rounded-full bg-fern/15 px-2.5 py-0.5 text-xs font-bold text-fern">Gratis</span>}
+                </div>
+                <p className="mt-3 font-display text-3xl font-extrabold text-fern">{PLAN_META[p].price}</p>
+                <p className="mt-1 text-xs text-inkmute">
+                  {p === "semilla" ? "Sin tarjeta ni compromisos" : "Suscripción mensual o anual"}
+                </p>
+
+                <ul className="mt-5 space-y-2 border-t border-ink/10 pt-4">
+                  {desc[p].map((item) => (
+                    <li key={item} className="flex items-start gap-2 text-xs text-ink/80 leading-snug">
+                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime text-ink"><IconCheck className="h-2.5 w-2.5" /></span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="mt-6 border-t border-ink/10 pt-4">
+                {active ? (
+                  <div className="flex items-center justify-center gap-2 rounded-full bg-evergreen/10 py-3 font-display text-xs font-bold text-evergreen">
+                    <IconCheck className="h-4 w-4" /> Plan en uso
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSelect(p)}
+                    className={`flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-display text-xs font-bold transition-all hover:-translate-y-0.5 ${p === "semilla" ? "border-2 border-ink/20 text-ink hover:border-evergreen hover:bg-evergreen hover:text-lime" : "bg-evergreen text-lime hover:bg-pine shadow-block-ink"}`}
+                  >
+                    {p === "semilla" ? "Bajar a Semilla (Gratis)" : `Pagar ${PLAN_META[p].name} con Mercado Pago`}
+                    <IconArrow className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
-      <p className="text-sm text-inkmute">Los planes pagos se activan con MercadoPago (mensual o anual). Hasta que el pago quede autorizado, seguís en tu plan actual.</p>
+          );
+        })}
+      </div>
+
+      <div className="rounded-2xl border-2 border-ink/10 bg-card p-5 text-sm text-inkmute">
+        <p className="font-bold text-ink">💳 ¿Cómo funciona el cambio de plan?</p>
+        <p className="mt-1 text-xs sm:text-sm leading-relaxed">
+          Al tocar en <strong>Pagar con Mercado Pago</strong>, se abre la ventana de suscripción donde podés elegir pago mensual o anual con descuento. Una vez autorizado el pago en Mercado Pago, tu cuenta se actualiza automáticamente con todos los beneficios. Podés cancelar o cambiar tu plan en cualquier momento.
+        </p>
+      </div>
     </div>
   );
 }
@@ -1469,23 +1815,47 @@ function HoursCard({ hours, onChange }: { hours: DayHours[]; onChange: (hours: D
 function PlanTab({ current, onSelect }: { current: Plan; onSelect: (p: Plan) => void }) {
   const plans: Plan[] = ["semilla", "crece", "escala"];
   return (
-    <div className="space-y-3">
-      {plans.map((p) => (
-        <div key={p} className={`card flex items-center justify-between gap-3 p-5 ${current === p ? "!border-limedeep !bg-lime/20" : ""}`}>
-          <div>
-            <p className="font-display text-lg font-extrabold text-ink">{PLAN_META[p].name} <span className="ml-2 text-sm font-bold text-fern">{PLAN_META[p].price}</span></p>
-            <p className="mt-1 text-xs text-inkmute">{p === "semilla" ? "Gratis · sin tarjeta" : "Se paga con MercadoPago"}</p>
-          </div>
-          {current === p ? (
-            <span className="rounded-full bg-evergreen px-4 py-2 text-xs font-bold uppercase tracking-wider text-lime">Actual</span>
-          ) : (
-            <button type="button" onClick={() => onSelect(p)} className="rounded-full border-2 border-ink/15 px-4 py-2 font-display text-xs font-bold text-ink transition-all hover:border-evergreen hover:bg-evergreen hover:text-lime">
-              {p === "semilla" ? "Bajar" : "Pagar"}
-            </button>
-          )}
-        </div>
-      ))}
-      <p className="text-xs text-inkmute">Al tocar Pagar se abre MercadoPago. El plan no cambia hasta que el cobro quede autorizado.</p>
+    <div className="card p-6 space-y-5">
+      <div>
+        <h3 className="font-display text-lg font-extrabold text-ink">Plan y suscripción de tu negocio</h3>
+        <p className="mt-1 text-sm text-inkmute">
+          Tu plan determina la cantidad de profesionales, reservas simultáneas y herramientas de cobro de seña.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {plans.map((p) => {
+          const active = current === p;
+          return (
+            <div key={p} className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 p-4 transition-all ${active ? "!border-limedeep !bg-lime/20" : "border-ink/12 bg-white/60"}`}>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-base font-extrabold text-ink">{PLAN_META[p].name}</span>
+                  <span className="font-display text-sm font-bold text-fern">{PLAN_META[p].price}</span>
+                  {active && <span className="rounded-full bg-evergreen px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-lime">Activo</span>}
+                </div>
+                <p className="mt-0.5 text-xs text-inkmute">
+                  {p === "semilla" ? "Gratis para siempre · 1 profesional · 25 reservas/mes" : p === "crece" ? "Reservas ilimitadas · hasta 3 profesionales · seña y cupones" : "Profesionales ilimitados · soporte prioritario"}
+                </p>
+              </div>
+              {active ? (
+                <span className="rounded-full bg-evergreen/10 px-4 py-2 font-display text-xs font-bold text-evergreen">✓ En uso</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onSelect(p)}
+                  className={`rounded-full px-4 py-2 font-display text-xs font-bold transition-all hover:-translate-y-0.5 ${p === "semilla" ? "border-2 border-ink/20 text-ink hover:bg-ink/5" : "bg-evergreen text-lime hover:bg-pine shadow-sm"}`}
+                >
+                  {p === "semilla" ? "Bajar a Semilla" : `Elegir ${PLAN_META[p].name} (Mercado Pago)`}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-inkmute">
+        Al hacer clic en un plan pago, se abrirá la pasarela segura de Mercado Pago para procesar la suscripción mensual o anual.
+      </p>
     </div>
   );
 }

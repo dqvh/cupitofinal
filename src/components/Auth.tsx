@@ -39,8 +39,8 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const fail = (msg: string) => { setError(msg); setShakeKey((k) => k + 1); setLoading(false); };
 
   const goApp = (plan: Plan) => {
-    toast("¡Cuenta creada! Tu agenda ya está viva 🎉");
-    window.location.hash = plan === "semilla" ? "#/app?setup=1" : `#/app?checkout=${plan}`;
+    toast("¡Cuenta creada! Tu agenda ya está lista 🎉");
+    window.location.hash = plan === "semilla" ? "#/app?onboarding=1" : `#/app?checkout=${plan}&onboarding=1`;
   };
 
   const submit = (e: FormEvent) => {
@@ -113,27 +113,40 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
           <div className="rounded-[24px] border-2 border-ink/12 bg-card p-7 shadow-block-ink sm:p-9">
             {pickPlan ? (
               <div className="pop-in">
-                <h2 className="font-display text-3xl font-extrabold tracking-tight text-ink">¿Con qué plan arrancás?</h2>
-                <p className="mt-2 text-sm text-inkmute">Podés empezar gratis. Si elegís Crece o Escala, te llevamos a MercadoPago para pagar la suscripción.</p>
-                <div className="mt-6 space-y-2.5">
-                  {(["semilla", "crece", "escala"] as Plan[]).map((p) => (
-                    <button key={p} type="button" onClick={() => setChosen(p)}
-                      className={`flex w-full items-start justify-between gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition-all ${chosen === p ? "border-evergreen bg-lime/20" : "border-ink/12 hover:border-evergreen/50"}`}>
-                      <span>
-                        <span className="block font-display text-lg font-extrabold text-ink">{PLAN_META[p].name}</span>
-                        <span className="mt-0.5 block text-xs text-inkmute">{PLAN_BLURBS[p]}</span>
-                      </span>
-                      <span className="shrink-0 font-display text-sm font-bold text-fern">{PLAN_META[p].price}</span>
-                    </button>
-                  ))}
+                <div className="inline-flex items-center gap-2 rounded-full bg-lime/20 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-evergreen">
+                  Paso 2 de 2 · Elegí tu plan
                 </div>
+                <h2 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">¿Con qué plan querés arrancar?</h2>
+                <p className="mt-1 text-sm text-inkmute">Podés empezar 100% gratis con Semilla o suscribirte a Crece/Escala con Mercado Pago.</p>
+                
+                <div className="mt-5 space-y-3">
+                  {(["semilla", "crece", "escala"] as Plan[]).map((p) => {
+                    const isSelected = chosen === p;
+                    const isPopular = p === "crece";
+                    return (
+                      <button key={p} type="button" onClick={() => setChosen(p)}
+                        className={`relative flex w-full flex-col gap-1 rounded-2xl border-2 p-4 text-left transition-all ${isSelected ? "border-evergreen bg-lime/20 shadow-[3px_3px_0_rgba(8,43,34,0.15)]" : "border-ink/12 bg-white/50 hover:border-evergreen/40 hover:bg-white"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-display text-lg font-extrabold text-ink">{PLAN_META[p].name}</span>
+                            {isPopular && <span className="rounded-full bg-coral px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-white">Recomendado</span>}
+                            {p === "semilla" && <span className="rounded-full bg-fern/15 px-2 py-0.5 text-[10px] font-bold text-fern">Gratis</span>}
+                          </div>
+                          <span className="font-display text-base font-extrabold text-fern">{PLAN_META[p].price}</span>
+                        </div>
+                        <p className="text-xs text-inkmute leading-snug">{PLAN_BLURBS[p]}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <button type="button" onClick={() => goApp(chosen)}
-                  className="group mt-6 flex w-full items-center justify-center gap-2.5 rounded-full bg-evergreen px-6 py-4 font-display text-lg font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">
-                  {chosen === "semilla" ? "Empezar gratis" : `Continuar con ${PLAN_META[chosen].name}`}
+                  className="group mt-6 flex w-full items-center justify-center gap-2.5 rounded-full bg-evergreen px-6 py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine shadow-block-ink">
+                  {chosen === "semilla" ? "Empezar gratis en Semilla" : `Continuar y Pagar ${PLAN_META[chosen].name}`}
                   <IconArrow className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                 </button>
                 <p className="mt-3 text-center text-[11px] text-inkmute">
-                  {chosen === "semilla" ? "Después podés subir de plan desde el panel, pagando con MercadoPago." : "El plan se activa recién cuando MercadoPago confirma el pago."}
+                  {chosen === "semilla" ? "Configurás tus horarios y servicios de inmediato. Podés subir de plan cuando quieras." : "Te abriremos el checkout de Mercado Pago para confirmar la suscripción."}
                 </p>
               </div>
             ) : (
