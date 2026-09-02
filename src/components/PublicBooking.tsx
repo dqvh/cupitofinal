@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
-  type User, type BizData, type BizSettings, type Coupon,
+  THEMES, type User, type BizData, type BizSettings, type Coupon, type ColorTheme,
 } from "../lib/store";
 import { IconCheck, IconCalendar, IconChevron, IconBag, IconTicket, IconPlus, IconUsers, IconWhatsApp, LogoMark } from "./kit";
 
@@ -33,8 +33,8 @@ function gcalUrl(o: { title: string; date: string; time: string; duration: numbe
 }
 
 /* ---------- calendario mensual ---------- */
-function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed }: {
-  cursor: Date; setCursor: (d: Date) => void; selected: string | null; onSelect: (k: string) => void; isClosed: (k: string) => boolean;
+function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme }: {
+  cursor: Date; setCursor: (d: Date) => void; selected: string | null; onSelect: (k: string) => void; isClosed: (k: string) => boolean; theme: ColorTheme;
 }) {
   const year = cursor.getFullYear(), month = cursor.getMonth();
   const now = new Date();
@@ -49,12 +49,12 @@ function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed }: {
     <div>
       <div className="flex items-center justify-between">
         <button type="button" disabled={curMonth <= nowMonth} onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label="Mes anterior"
-          className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/12 bg-white/60 text-ink transition-all enabled:hover:-translate-x-0.5 enabled:hover:border-evergreen enabled:hover:text-evergreen disabled:opacity-30">
+          className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/12 bg-white/60 text-ink transition-all enabled:hover:-translate-x-0.5 enabled:hover:border-ink enabled:hover:bg-white disabled:opacity-30">
           <IconChevron className="h-4 w-4 rotate-180" />
         </button>
         <p className="font-display text-base font-extrabold capitalize text-ink">{label}</p>
         <button type="button" disabled={curMonth >= nowMonth + 2} onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Mes siguiente"
-          className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/12 bg-white/60 text-ink transition-all enabled:hover:translate-x-0.5 enabled:hover:border-evergreen enabled:hover:text-evergreen disabled:opacity-30">
+          className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/12 bg-white/60 text-ink transition-all enabled:hover:translate-x-0.5 enabled:hover:border-ink enabled:hover:bg-white disabled:opacity-30">
           <IconChevron className="h-4 w-4" />
         </button>
       </div>
@@ -71,7 +71,7 @@ function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed }: {
           const disabled = past || closed;
           return (
             <button type="button" key={key} disabled={disabled} onClick={() => onSelect(key)}
-              className={`relative flex aspect-square items-center justify-center rounded-lg border-2 font-display text-sm font-bold transition-all duration-150 ${sel ? "border-evergreen bg-evergreen text-lime shadow-[3px_3px_0_rgba(205,244,99,0.5)]" : disabled ? "cursor-not-allowed border-transparent bg-ink/[0.04] text-ink/25" : "border-ink/10 bg-white/60 text-ink hover:-translate-y-0.5 hover:border-evergreen"}`}>
+              className={`relative flex aspect-square items-center justify-center rounded-lg border-2 font-display text-sm font-bold transition-all duration-150 ${sel ? theme.activeSlot : disabled ? "cursor-not-allowed border-transparent bg-ink/[0.04] text-ink/25" : "border-ink/10 bg-white/60 text-ink hover:-translate-y-0.5 hover:border-ink/40"}`}>
               {d}
               {closed && !past && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-coral/60" />}
             </button>
@@ -109,6 +109,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const [couponMsg, setCouponMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showShop, setShowShop] = useState(false);
   const [showPay, setShowPay] = useState(false);
+  const [showCalHelp, setShowCalHelp] = useState(false);
   const [claimed, setClaimed] = useState(false);
   const [wlClient, setWlClient] = useState("");
   const [wlPhone, setWlPhone] = useState("");
@@ -120,6 +121,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
 
   const paid = isPaid(user);
   const settings = biz.settings;
+  const theme = THEMES[settings.theme ?? "evergreen"] ?? THEMES.evergreen;
   const hasPros = biz.professionals.length > 0;
   const depositOn = paid && settings.depositEnabled && settings.depositPct > 0;
   const service = biz.services.find((s) => s.id === serviceId);
@@ -199,20 +201,20 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
 
   return (
     <div className="overflow-hidden rounded-[22px] border-2 border-ink/15 bg-card text-ink shadow-block-ink">
-      {/* cabecera */}
-      <div className="relative bg-evergreen px-5 pb-8 pt-5 text-paper sm:px-6">
-        <div className="gridlines absolute inset-0" aria-hidden="true" />
+      {/* cabecera temática */}
+      <div className={`relative ${theme.cardHeaderBg} px-5 pb-8 pt-5 ${theme.cardHeaderText} sm:px-6`}>
+        <div className="gridlines absolute inset-0 opacity-30" aria-hidden="true" />
         <div className="relative flex items-center justify-between gap-2">
-          <span className="inline-flex min-w-0 items-center gap-2 rounded-full bg-paper/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-lime">
-            <LogoMark className="h-4 w-4 shrink-0 text-lime" />
+          <span className={`inline-flex min-w-0 items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${theme.accentText}`}>
+            <LogoMark className={`h-4 w-4 shrink-0 ${theme.accentText}`} />
             <span className="truncate">cupito.app/{user.slug}</span>
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-paper/70">
-            <span className="blinkdot h-1.5 w-1.5 rounded-full bg-lime" /> Abierto 24/7
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-bold opacity-80">
+            <span className={`blinkdot h-1.5 w-1.5 rounded-full ${theme.accentBg}`} /> Abierto 24/7
           </span>
         </div>
         <h3 className="relative mt-4 font-display text-2xl font-extrabold">{user.business}</h3>
-        <p className="relative text-sm text-paper/65">Reservá tu cupito en menos de un minuto · sin llamadas</p>
+        <p className="relative text-sm opacity-80">Reservá tu cupito en menos de un minuto · sin llamadas</p>
       </div>
 
       <div className="px-4 py-5 sm:px-6">
@@ -221,7 +223,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
           <div className="mb-4 flex items-center gap-1.5" aria-hidden="true">
             {Array.from({ length: totalSteps }, (_, i) => (
               <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink/10">
-                <div className="h-full rounded-full bg-evergreen transition-all duration-500" style={{ width: i + 1 < stepNum ? "100%" : i + 1 === stepNum ? "45%" : "0%" }} />
+                <div className={`h-full rounded-full ${theme.progressBar} transition-all duration-500`} style={{ width: i + 1 < stepNum ? "100%" : i + 1 === stepNum ? "45%" : "0%" }} />
               </div>
             ))}
           </div>
@@ -234,12 +236,12 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
             {biz.services.length === 0 && <p className="rounded-xl border-2 border-dashed border-ink/15 p-4 text-sm text-inkmute">Este negocio todavía no cargó sus servicios.</p>}
             {biz.services.map((s) => (
               <button key={s.id} onClick={() => { setServiceId(s.id); setStep(hasPros ? 1 : 2); }}
-                className="group flex items-center justify-between gap-3 rounded-xl border-2 border-ink/10 bg-white/60 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-evergreen hover:shadow-[4px_4px_0_rgba(12,36,28,0.1)]">
+                className="group flex items-center justify-between gap-3 rounded-xl border-2 border-ink/10 bg-white/60 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/50 hover:bg-white hover:shadow-sm">
                 <span>
                   <span className="block font-display text-[15px] font-bold">{s.name}</span>
                   <span className="text-xs text-inkmute">{s.duration} min</span>
                 </span>
-                <span className="shrink-0 font-display text-[15px] font-bold text-fern">{fmtMoney(s.price)}</span>
+                <span className="shrink-0 font-display text-[15px] font-bold text-ink">{fmtMoney(s.price)}</span>
               </button>
             ))}
           </div>
@@ -250,11 +252,11 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
           <div className="pop-in grid gap-2.5">
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-wider text-inkmute">2 · ¿Con quién?</p>
-              <button onClick={() => setStep(0)} className="rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-evergreen">← Servicio</button>
+              <button onClick={() => setStep(0)} className="rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-ink">← Servicio</button>
             </div>
             {biz.professionals.map((p) => (
               <button key={p.id} onClick={() => { setProId(p.id); setStep(2); }}
-                className="group flex items-center gap-3 rounded-xl border-2 border-ink/10 bg-white/60 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-evergreen hover:shadow-[4px_4px_0_rgba(12,36,28,0.1)]">
+                className="group flex items-center gap-3 rounded-xl border-2 border-ink/10 bg-white/60 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/50 hover:bg-white hover:shadow-sm">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full font-display text-sm font-extrabold text-ink" style={{ background: p.color }}>
                   {p.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                 </span>
@@ -262,7 +264,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                   <span className="block font-display text-[15px] font-bold">{p.name}</span>
                   <span className="text-xs text-inkmute">{p.role}</span>
                 </span>
-                <IconChevron className="ml-auto h-4 w-4 text-ink/30 transition-transform group-hover:translate-x-1 group-hover:text-evergreen" />
+                <IconChevron className="ml-auto h-4 w-4 text-ink/30 transition-transform group-hover:translate-x-1 group-hover:text-ink" />
               </button>
             ))}
           </div>
@@ -273,11 +275,12 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
           <div className="pop-in">
             <div className="mb-3 flex items-center justify-between gap-2">
               <p className="text-xs font-bold uppercase tracking-wider text-inkmute">{stepNum} · Elegí el día</p>
-              <button onClick={() => setStep(hasPros ? 1 : 0)} className="rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-evergreen">← {hasPros ? "Profesional" : "Servicio"}</button>
+              <button onClick={() => setStep(hasPros ? 1 : 0)} className="rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-ink">← {hasPros ? "Profesional" : "Servicio"}</button>
             </div>
             <MonthPicker cursor={cursor} setCursor={setCursor} selected={selectedDate}
               onSelect={(key) => { setSelectedDate(key); setTime(null); setWlDone(false); setShowWlForm(false); setStep(3); }}
-              isClosed={isClosed} />
+              isClosed={isClosed}
+              theme={theme} />
           </div>
         )}
 
@@ -286,9 +289,9 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
           <div className="pop-in">
             <div className="mb-3 flex items-center justify-between gap-2">
               <p className="text-xs font-bold uppercase tracking-wider text-inkmute">
-                {stepNum} · Horario para el <span className="text-evergreen">{fmtLong(selectedDate)}</span>
+                {stepNum} · Horario para el <span className="font-bold text-ink">{fmtLong(selectedDate)}</span>
               </p>
-              <button onClick={() => setStep(2)} className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-evergreen">← Día</button>
+              <button onClick={() => setStep(2)} className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-ink">← Día</button>
             </div>
 
             {slots.length === 0 ? (
@@ -351,7 +354,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
             {(allTaken || showWlForm) && wlDone && (
               <div className="pop-in mt-4 rounded-xl border-2 border-limedeep/60 bg-lime/15 p-4 text-center">
                 <p className="font-display text-[15px] font-extrabold text-ink">¡Listo! Estás en la lista 🎉</p>
-                <p className="mt-1 text-sm text-inkmute">Te avisamos al <strong className="text-fern">{wlPhone}</strong> si se libera un lugar el {fmtLong(selectedDate)}.</p>
+                <p className="mt-1 text-sm text-inkmute">Te avisamos al <strong className="text-ink font-bold">{wlPhone}</strong> si se libera un lugar el {fmtLong(selectedDate)}.</p>
               </div>
             )}
 
@@ -367,16 +370,16 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                   <p className="mt-1 text-[11px] text-inkmute">Te avisamos por ahí si hay algún cambio con tu turno.</p>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Email <span className="normal-case text-ink/40">(opcional, para el recordatorio)</span></label>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Email <span className="normal-case text-ink/40">(opcional, para confirmación y recordatorio)</span></label>
                   <input className="field" type="email" placeholder="ana@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
 
                 {/* tienda */}
                 {paid && biz.products.length > 0 && (
                   <button type="button" onClick={() => setShowShop(true)}
-                    className="group flex w-full items-center justify-between gap-3 rounded-xl border-2 border-limedeep/60 bg-lime/10 px-4 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-limedeep hover:bg-lime/20">
+                    className="group flex w-full items-center justify-between gap-3 rounded-xl border-2 border-ink/15 bg-white px-4 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/40 hover:shadow-sm">
                     <span className="flex items-center gap-2.5">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-evergreen text-lime"><IconBag className="h-4 w-4" /></span>
+                      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${theme.badgeBg} ${theme.badgeText}`}><IconBag className="h-4 w-4" /></span>
                       <span>
                         <span className="block font-display text-[15px] font-extrabold text-ink">¿Querés agregar algo a tu turno?</span>
                         <span className="block text-xs text-inkmute">
@@ -384,8 +387,8 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                         </span>
                       </span>
                     </span>
-                    <span className="flex items-center gap-2 font-display text-sm font-bold text-fern">
-                      {itemCount > 0 && <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-fern px-1.5 text-xs text-lime">{itemCount}</span>}
+                    <span className="flex items-center gap-2 font-display text-sm font-bold text-ink">
+                      {itemCount > 0 && <span className={`flex h-6 min-w-6 items-center justify-center rounded-full ${theme.badgeBg} ${theme.badgeText} px-1.5 text-xs font-bold`}>{itemCount}</span>}
                       Ver tienda <IconChevron className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
                     </span>
                   </button>
@@ -400,14 +403,14 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                     <div className="flex gap-2">
                       <input className="field flex-1 uppercase placeholder:normal-case" placeholder="MARTES20" value={couponInput} onChange={(e) => setCouponInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyCoupon(); } }} />
-                      <button type="button" onClick={applyCoupon} className="shrink-0 rounded-xl bg-evergreen px-4 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Aplicar</button>
+                      <button type="button" onClick={applyCoupon} className={`shrink-0 rounded-xl ${theme.primaryBtn} px-4 font-display text-sm font-bold transition-all hover:-translate-y-0.5 shadow-sm`}>Aplicar</button>
                     </div>
                     {couponMsg && <p className={`mt-1.5 text-xs font-semibold ${couponMsg.ok ? "text-fern" : "text-coral"}`}>{couponMsg.text}</p>}
                   </div>
                 )}
 
                 {/* resumen */}
-                <div className="space-y-1.5 rounded-xl border-2 border-dashed border-limedeep/70 bg-lime/15 px-4 py-3 text-sm">
+                <div className="space-y-1.5 rounded-xl border-2 border-dashed border-ink/20 bg-ink/[0.03] px-4 py-3 text-sm">
                   <div className="flex justify-between gap-3">
                     <span className="text-inkmute">{service?.name}{pro ? ` · con ${pro.name.split(" ")[0]}` : ""}</span>
                     <span className="font-display font-bold">{service ? fmtMoney(service.price) : ""}</span>
@@ -430,7 +433,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                   </div>
                   {depositOn ? (
                     <p className="pt-1 text-xs text-ink/70">
-                      Pagás ahora una <strong className="text-fern">seña del {settings.depositPct}% ({fmtMoney(deposit)})</strong> por transferencia y el resto en el local. Si cancelás con 24 h de anticipación, se devuelve.
+                      Pagás ahora una <strong className="text-ink font-bold">seña del {settings.depositPct}% ({fmtMoney(deposit)})</strong> por transferencia y el resto en el local. Si cancelás con 24 h de anticipación, se devuelve.
                     </p>
                   ) : (
                     <p className="pt-1 text-xs text-ink/70">Pagás en el local. Sin seña, sin sorpresas.</p>
@@ -438,7 +441,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                 </div>
 
                 {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-                <button onClick={confirm} className="w-full rounded-xl bg-coral py-3.5 font-display text-base font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.35)] active:translate-y-0">
+                <button onClick={confirm} className={`w-full rounded-xl ${theme.primaryBtn} py-3.5 font-display text-base font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-md active:translate-y-0`}>
                   {depositOn ? `Confirmar y pagar seña (${fmtMoney(deposit)}) →` : "Confirmar turno →"}
                 </button>
               </div>
@@ -450,10 +453,10 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
         {done && selectedDate && time && service && (
           <div className="pop-in py-2 text-center">
             <svg viewBox="0 0 56 56" className="mx-auto h-14 w-14">
-              <circle cx="28" cy="28" r="25" fill="none" stroke="#cdf463" strokeWidth="4" className="circle-draw" strokeLinecap="round" transform="rotate(-90 28 28)" />
-              <path d="M18 29l7 7 13-14" fill="none" stroke="#082b22" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" className="check-draw" />
+              <circle cx="28" cy="28" r="25" fill="none" stroke="currentColor" strokeWidth="4" className={`circle-draw ${theme.accentText}`} strokeLinecap="round" transform="rotate(-90 28 28)" />
+              <path d="M18 29l7 7 13-14" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" className={`check-draw ${theme.accentText}`} />
             </svg>
-            <h4 className="mt-2 font-display text-xl font-extrabold">
+            <h4 className="mt-2 font-display text-xl font-extrabold text-ink">
               {claimed ? "¡Turno reservado!" : "¡Tu cupito está asegurado!"}
             </h4>
             <p className="mt-1 text-sm text-inkmute">
@@ -462,29 +465,55 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
               {itemCount > 0 && ` · ${itemCount} producto${itemCount === 1 ? "" : "s"} agregado${itemCount === 1 ? "" : "s"}`}
             </p>
             {claimed && (
-              <p className="mx-auto mt-2 max-w-sm rounded-xl border-2 border-limedeep/60 bg-lime/15 px-3 py-2 text-xs font-semibold text-ink/80">
+              <p className="mx-auto mt-2 max-w-sm rounded-xl border-2 border-ink/15 bg-ink/5 px-3 py-2 text-xs font-semibold text-ink/80">
                 Tu comprobante ya está con {user.business}. Apenas verifique la transferencia, tu turno queda confirmado y te avisamos.
               </p>
             )}
-            <div className="mt-4 space-y-2 text-left">
-              <button onClick={() => {
-                downloadIcs(icsContent({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration, desc: `Turno en ${user.business}, reservado con Cupito.` }));
-                toast("Archivo de calendario descargado — abrílo para sumar tu turno");
-              }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-evergreen py-3 font-display text-[15px] font-bold text-lime transition-all duration-200 hover:-translate-y-0.5 hover:bg-pine hover:shadow-[4px_5px_0_rgba(205,244,99,0.4)] active:translate-y-0">
-                <IconCalendar className="h-4 w-4" /> Agregar a mi calendario
+
+            <div className="mt-5 space-y-2 text-left">
+              {/* Botón 1: Descarga universal .ics (iPhone / Android) */}
+              <button
+                type="button"
+                onClick={() => {
+                  downloadIcs(icsContent({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration, desc: `Turno en ${user.business}, reservado con Cupito.` }));
+                  toast("Archivo de calendario (.ics) descargado — tocalo para sumarlo a tu celu 📅");
+                }}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl ${theme.primaryBtn} py-3 font-display text-[15px] font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-sm active:translate-y-0`}
+              >
+                <IconCalendar className="h-4 w-4" /> Agregar a Apple Calendar / Celular (.ics)
               </button>
-              <a href={gcalUrl({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration })} target="_blank" rel="noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink/15 py-2.5 text-sm font-bold text-ink/70 transition-all hover:border-fern hover:text-fern">
-                Abrir en Google Calendar ↗
+
+              {/* Botón 2: Google Calendar */}
+              <a
+                href={gcalUrl({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration })}
+                target="_blank"
+                rel="noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink/15 bg-white/70 py-2.5 text-sm font-bold text-ink transition-all hover:border-ink/40 hover:bg-white"
+              >
+                📅 Abrir en Google Calendar ↗
               </a>
-              {user.slug === "studio-nails" && settings.whatsapp && (
-                <a href={`https://wa.me/54${settings.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola! Soy ${client}. Acabo de reservar ${service.name} para el ${fmtLong(selectedDate)} a las ${time} 🙌`)}`} target="_blank" rel="noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-fern/30 py-2.5 text-sm font-bold text-fern transition-all hover:-translate-y-0.5 hover:bg-fern/10">
-                  <IconWhatsApp className="h-4 w-4" /> Avisar por WhatsApp (opcional)
+
+              {/* Botón 3: Modal explicativo paso a paso */}
+              <button
+                type="button"
+                onClick={() => setShowCalHelp(true)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink/20 py-2 text-xs font-bold text-inkmute hover:text-ink hover:border-ink/40 transition-colors"
+              >
+                📱 ¿Cómo agrego este turno al calendario de mi celular? Ver paso a paso
+              </button>
+
+              {settings.whatsapp && (
+                <a
+                  href={`https://wa.me/54${settings.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola! Soy ${client}. Acabo de reservar ${service.name} para el ${fmtLong(selectedDate)} a las ${time} 🙌`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-600/30 bg-emerald-50 py-2.5 text-sm font-bold text-emerald-800 transition-all hover:-translate-y-0.5 hover:bg-emerald-100"
+                >
+                  <IconWhatsApp className="h-4 w-4 text-emerald-600" /> Avisar por WhatsApp (opcional)
                 </a>
               )}
-              <button onClick={reset} className="w-full rounded-xl py-2 text-sm font-bold text-ink/50 transition-colors hover:text-evergreen">
+
+              <button type="button" onClick={reset} className="w-full rounded-xl py-2 text-sm font-bold text-ink/50 transition-colors hover:text-ink">
                 Reservar otro turno
               </button>
             </div>
@@ -495,6 +524,10 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
       <p className="border-t-2 border-dashed border-ink/10 px-6 py-3 text-center text-[11px] font-semibold text-inkmute">
         ⚡ Hecho con Cupito — reservás en 60 segundos, sin app y sin llamadas
       </p>
+
+      {showCalHelp && (
+        <CalendarHelpModal onClose={() => setShowCalHelp(false)} />
+      )}
 
       {showShop && (
         <ShopOverlay products={biz.products} items={items} setQty={(id, q) => setItems((prev) => { const n = { ...prev }; if (q <= 0) delete n[id]; else n[id] = q; return n; })}
@@ -510,11 +543,68 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
     const busy = takenTimes(selectedDate ?? "").includes(t);
     return (
       <button key={t} disabled={busy} onClick={() => { setTime(t); setError(null); }}
-        className={`rounded-lg border-2 py-2 font-display text-sm font-bold transition-all duration-150 ${busy ? "cursor-not-allowed border-ink/8 bg-ink/5 text-ink/25 line-through" : time === t ? "border-evergreen bg-evergreen text-lime shadow-[3px_3px_0_rgba(205,244,99,0.5)]" : "border-ink/10 bg-white/60 hover:-translate-y-0.5 hover:border-evergreen"}`}>
+        className={`rounded-lg border-2 py-2 font-display text-sm font-bold transition-all duration-150 ${busy ? "cursor-not-allowed border-ink/8 bg-ink/5 text-ink/25 line-through" : time === t ? theme.activeSlot : "border-ink/10 bg-white/60 hover:-translate-y-0.5 hover:border-ink/40"}`}>
         {t}
       </button>
     );
   }
+}
+
+/* Modal explicativo de sincronización con calendario del celular */
+function CalendarHelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="pop-in max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-ink/15 bg-paper p-6 shadow-2xl text-ink" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-ink/10 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-evergreen text-lime">
+              <IconCalendar className="h-5 w-5" />
+            </span>
+            <h3 className="font-display text-lg font-extrabold text-ink">Cómo guardar tu turno en el celular</h3>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 text-inkmute hover:bg-ink/5 hover:text-ink">
+            ✕
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-4 text-sm leading-relaxed">
+          {/* Opción iPhone */}
+          <div className="rounded-2xl border-2 border-ink/10 bg-white p-4">
+            <p className="flex items-center gap-2 font-display text-base font-extrabold text-ink">
+              🍏 En iPhone / iPad (Apple Calendar)
+            </p>
+            <ol className="mt-2 space-y-1.5 pl-5 list-decimal text-xs sm:text-sm text-ink/80">
+              <li>Tocá el botón <strong>«Agregar a Apple Calendar (.ics)»</strong>.</li>
+              <li>Tu iPhone abrirá la vista previa del evento con la fecha, hora y dirección del negocio.</li>
+              <li>Tocá <strong>«Añadir a Calendario»</strong> (arriba a la derecha).</li>
+              <li>¡Listo! El turno quedará guardado con alarma 1 hora antes.</li>
+            </ol>
+          </div>
+
+          {/* Opción Android */}
+          <div className="rounded-2xl border-2 border-ink/10 bg-white p-4">
+            <p className="flex items-center gap-2 font-display text-base font-extrabold text-ink">
+              🤖 En Android / Google Calendar
+            </p>
+            <ol className="mt-2 space-y-1.5 pl-5 list-decimal text-xs sm:text-sm text-ink/80">
+              <li>Tocá el botón <strong>«Abrir en Google Calendar»</strong>.</li>
+              <li>Se abrirá la app o web de Google Calendar con todos los datos cargados.</li>
+              <li>Tocá <strong>«Guardar»</strong> en la esquina superior.</li>
+              <li>¡Listo! Ya tenés el evento sincronizado en tu cuenta.</li>
+            </ol>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full rounded-full bg-evergreen py-3 font-display text-sm font-bold text-lime hover:bg-pine transition-all"
+        >
+          Entendido, cerrar
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /* ---------- tienda (pantalla completa) ---------- */

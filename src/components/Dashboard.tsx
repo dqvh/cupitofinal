@@ -1156,7 +1156,7 @@ function ServiceModal({ service, onClose }: { service?: Service; onClose: () => 
 
 /* ============ ESTADÍSTICAS ============ */
 function StatsView({ db }: { db: BizData }) {
-  const { user, addReview, toast } = useStore();
+  const { user, removeReview, toast } = useStore();
   const today = new Date();
   const monthKey = dateKey(today).slice(0, 7);
   const isEscala = user?.plan === "escala";
@@ -1421,27 +1421,51 @@ function StatsView({ db }: { db: BizData }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h3 className="flex items-center gap-2 font-display text-lg font-extrabold text-ink"><IconStar className="h-5 w-5 text-limedeep" /> Reseñas de tus clientes</h3>
-            {reviews.length > 0 && <p className="mt-1 text-sm text-inkmute">Promedio de <strong className="text-fern">{avgRating.toFixed(1)} ★</strong> en {reviews.length} reseña{reviews.length === 1 ? "" : "s"}. Se muestran en tu página pública.</p>}
+            {reviews.length > 0 ? (
+              <p className="mt-1 text-sm text-inkmute">Promedio de <strong className="text-fern">{avgRating.toFixed(1)} ★</strong> en {reviews.length} reseña{reviews.length === 1 ? "" : "s"} reales dejadas por tus clientes.</p>
+            ) : (
+              <p className="mt-1 text-sm text-inkmute">Tus clientes pueden dejar reseñas directamente desde tu página pública.</p>
+            )}
           </div>
-          <button onClick={() => {
-            const names = ["Micaela", "Rocío", "Julieta", "Valen", "Camila", "Martina"];
-            const texts = ["Súper fácil reservar, vuelvo seguro.", "Todo puntual y prolijo. 10 puntos.", "Reservé desde el celu en un minuto.", "La seña me dio confianza, todo claro."];
-            addReview({ client: names[Math.floor(Math.random() * names.length)], rating: 4 + Math.round(Math.random()), text: texts[Math.floor(Math.random() * texts.length)], date: dateKey(new Date()) });
-            toast("Nueva reseña recibida ⭐");
-          }} className="rounded-full border-2 border-ink/15 px-5 py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:border-evergreen hover:bg-evergreen hover:text-lime">Simular respuesta</button>
+          <a
+            href={`#/b/${user?.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full border-2 border-ink/15 px-5 py-2 font-display text-xs font-bold text-ink transition-all hover:-translate-y-0.5 hover:border-evergreen hover:bg-evergreen hover:text-lime"
+          >
+            Ver en mi página pública ↗
+          </a>
         </div>
         <p className="mt-4 rounded-xl border-2 border-dashed border-limedeep/60 bg-lime/10 px-4 py-3 text-sm text-ink/80">
-          💡 Cuando marcás un turno como <strong>«Atendida»</strong>, Cupito le manda automáticamente al cliente un email con el link para dejar su reseña.
+          💡 Las reseñas provienen de clientes reales que visitan tu enlace público o completan su turno. Podés moderarlas o eliminarlas en cualquier momento.
         </p>
-        {reviews.length > 0 && (
+        {reviews.length > 0 ? (
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {reviews.slice(0, 6).map((r) => (
-              <div key={r.id} className="rounded-xl border-2 border-ink/8 bg-white/60 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-evergreen">
-                <div className="flex gap-0.5 text-limedeep">{[...Array(5)].map((_, i) => <IconStar key={i} className={`h-3.5 w-3.5 ${i < r.rating ? "" : "opacity-20"}`} />)}</div>
+            {reviews.map((r) => (
+              <div key={r.id} className="relative group rounded-xl border-2 border-ink/8 bg-white/60 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-0.5 text-limedeep">{[...Array(5)].map((_, i) => <IconStar key={i} className={`h-3.5 w-3.5 ${i < r.rating ? "" : "opacity-20"}`} />)}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`¿Eliminar la reseña de ${r.client}?`)) {
+                        removeReview(r.id);
+                        toast("Reseña eliminada");
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-coral hover:underline"
+                  >
+                    Eliminar
+                  </button>
+                </div>
                 <p className="mt-2 text-sm leading-snug text-ink">“{r.text}”</p>
                 <p className="mt-2 font-display text-xs font-bold text-inkmute">{r.client} · {fmtLong(r.date)}</p>
               </div>
             ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border-2 border-dashed border-ink/10 p-6 text-center text-sm text-inkmute">
+            Aún no recibiste reseñas. A medida que tus clientes atiendan sus turnos u opinen en tu página pública, aparecerán acá.
           </div>
         )}
       </Reveal>

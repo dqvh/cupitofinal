@@ -52,13 +52,21 @@ export type ThemeId = "evergreen" | "midnight" | "coral" | "rose" | "obsidian" |
 export interface ColorTheme {
   id: ThemeId;
   name: string;
-  headerBg: string; // Tailwind background for header/hero
+  headerBg: string;
   headerText: string;
   accentText: string;
   accentBg: string;
   badgeBg: string;
   badgeText: string;
   borderAccent: string;
+  cardHeaderBg: string;
+  cardHeaderText: string;
+  primaryBtn: string;
+  primaryBtnText: string;
+  activeBadge: string;
+  activeSlot: string;
+  progressBar: string;
+  ratingStar: string;
   sampleGradient: string;
 }
 
@@ -72,7 +80,15 @@ export const THEMES: Record<ThemeId, ColorTheme> = {
     accentBg: "bg-[#cdf463]",
     badgeBg: "bg-[#cdf463]",
     badgeText: "text-[#082b22]",
-    borderAccent: "border-[#cdf463]",
+    borderAccent: "border-[#082b22]",
+    cardHeaderBg: "bg-[#082b22]",
+    cardHeaderText: "text-[#fbf9f4]",
+    primaryBtn: "bg-[#082b22] text-[#cdf463] hover:bg-[#0f3d32]",
+    primaryBtnText: "text-[#cdf463]",
+    activeBadge: "bg-[#082b22] text-[#cdf463]",
+    activeSlot: "border-[#082b22] bg-[#082b22] text-[#cdf463] shadow-[3px_3px_0_rgba(205,244,99,0.5)]",
+    progressBar: "bg-[#082b22]",
+    ratingStar: "text-[#8cb829]",
     sampleGradient: "from-[#082b22] to-[#cdf463]",
   },
   midnight: {
@@ -84,7 +100,15 @@ export const THEMES: Record<ThemeId, ColorTheme> = {
     accentBg: "bg-[#38bdf8]",
     badgeBg: "bg-[#38bdf8]",
     badgeText: "text-[#0f172a]",
-    borderAccent: "border-[#38bdf8]",
+    borderAccent: "border-[#0f172a]",
+    cardHeaderBg: "bg-[#0f172a]",
+    cardHeaderText: "text-[#f8fafc]",
+    primaryBtn: "bg-[#0f172a] text-[#38bdf8] hover:bg-[#1e293b]",
+    primaryBtnText: "text-[#38bdf8]",
+    activeBadge: "bg-[#0f172a] text-[#38bdf8]",
+    activeSlot: "border-[#0f172a] bg-[#0f172a] text-[#38bdf8] shadow-[3px_3px_0_rgba(56,189,248,0.5)]",
+    progressBar: "bg-[#0f172a]",
+    ratingStar: "text-[#38bdf8]",
     sampleGradient: "from-[#0f172a] to-[#38bdf8]",
   },
   coral: {
@@ -97,6 +121,14 @@ export const THEMES: Record<ThemeId, ColorTheme> = {
     badgeBg: "bg-[#ff7a59]",
     badgeText: "text-white",
     borderAccent: "border-[#ff7a59]",
+    cardHeaderBg: "bg-[#27171a]",
+    cardHeaderText: "text-[#fff5f5]",
+    primaryBtn: "bg-[#ff7a59] text-white hover:bg-[#e05b38]",
+    primaryBtnText: "text-white",
+    activeBadge: "bg-[#ff7a59] text-white",
+    activeSlot: "border-[#ff7a59] bg-[#ff7a59] text-white shadow-[3px_3px_0_rgba(255,122,89,0.4)]",
+    progressBar: "bg-[#ff7a59]",
+    ratingStar: "text-[#ff7a59]",
     sampleGradient: "from-[#27171a] to-[#ff7a59]",
   },
   rose: {
@@ -108,7 +140,15 @@ export const THEMES: Record<ThemeId, ColorTheme> = {
     accentBg: "bg-[#f472b6]",
     badgeBg: "bg-[#f472b6]",
     badgeText: "text-[#3b0764]",
-    borderAccent: "border-[#f472b6]",
+    borderAccent: "border-[#3b0764]",
+    cardHeaderBg: "bg-[#3b0764]",
+    cardHeaderText: "text-[#fdf2f8]",
+    primaryBtn: "bg-[#3b0764] text-[#f472b6] hover:bg-[#581c87]",
+    primaryBtnText: "text-[#f472b6]",
+    activeBadge: "bg-[#3b0764] text-[#f472b6]",
+    activeSlot: "border-[#3b0764] bg-[#3b0764] text-[#f472b6] shadow-[3px_3px_0_rgba(244,114,182,0.4)]",
+    progressBar: "bg-[#3b0764]",
+    ratingStar: "text-[#f472b6]",
     sampleGradient: "from-[#3b0764] to-[#f472b6]",
   },
   obsidian: {
@@ -121,6 +161,14 @@ export const THEMES: Record<ThemeId, ColorTheme> = {
     badgeBg: "bg-[#fbbf24]",
     badgeText: "text-[#18181b]",
     borderAccent: "border-[#fbbf24]",
+    cardHeaderBg: "bg-[#18181b]",
+    cardHeaderText: "text-[#fafaf9]",
+    primaryBtn: "bg-[#18181b] text-[#fbbf24] hover:bg-[#27272a]",
+    primaryBtnText: "text-[#fbbf24]",
+    activeBadge: "bg-[#18181b] text-[#fbbf24]",
+    activeSlot: "border-[#18181b] bg-[#18181b] text-[#fbbf24] shadow-[3px_3px_0_rgba(251,191,36,0.4)]",
+    progressBar: "bg-[#18181b]",
+    ratingStar: "text-[#fbbf24]",
     sampleGradient: "from-[#18181b] to-[#fbbf24]",
   },
   ocean: {
@@ -132,7 +180,15 @@ export const THEMES: Record<ThemeId, ColorTheme> = {
     accentBg: "bg-[#34d399]",
     badgeBg: "bg-[#34d399]",
     badgeText: "text-[#064e3b]",
-    borderAccent: "border-[#34d399]",
+    borderAccent: "border-[#064e3b]",
+    cardHeaderBg: "bg-[#064e3b]",
+    cardHeaderText: "text-[#ecfdf5]",
+    primaryBtn: "bg-[#064e3b] text-[#34d399] hover:bg-[#065f46]",
+    primaryBtnText: "text-[#34d399]",
+    activeBadge: "bg-[#064e3b] text-[#34d399]",
+    activeSlot: "border-[#064e3b] bg-[#064e3b] text-[#34d399] shadow-[3px_3px_0_rgba(52,211,153,0.4)]",
+    progressBar: "bg-[#064e3b]",
+    ratingStar: "text-[#34d399]",
     sampleGradient: "from-[#064e3b] to-[#34d399]",
   },
 };
@@ -520,6 +576,8 @@ interface StoreApi {
   cancelSubscription(): void;
   resumeSubscription(): void;
   addReview(r: Omit<Review, "id">): void;
+  removeReview(id: string): void;
+  addReviewFor(ownerId: string, r: Omit<Review, "id">): void;
   addCoupon(c: { code: string; pct: number }): string | null;
   updateCoupon(id: string, patch: Partial<Omit<Coupon, "id">>): void;
   removeCoupon(id: string): void;
@@ -758,6 +816,19 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const data = loadData(sessionUserId);
     data.reviews = [{ ...r, id: uid() }, ...data.reviews];
     saveData(sessionUserId, data);
+    emit();
+  },
+  removeReview(id) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    data.reviews = data.reviews.filter((r) => r.id !== id);
+    saveData(sessionUserId, data);
+    emit();
+  },
+  addReviewFor(ownerId, r) {
+    const data = loadData(ownerId);
+    data.reviews = [{ ...r, id: uid() }, ...data.reviews];
+    saveData(ownerId, data);
     emit();
   },
   addCoupon({ code, pct }) {
