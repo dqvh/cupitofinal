@@ -66,6 +66,12 @@ function Router() {
   const [route, setRoute] = useState(parseRoute);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("preapproval_id") || params.get("preapprovalId") || params.get("preapproval")) {
+      if (!window.location.hash.startsWith("#/app")) {
+        window.location.hash = "#/app";
+      }
+    }
     const onHash = () => {
       setRoute(parseRoute());
       if (!window.location.hash.startsWith("#/")) {

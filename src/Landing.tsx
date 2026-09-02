@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useStore, type Plan } from "./lib/store";
+import { createMercadoPagoCheckout, isPaidPlan, savePendingCheckout } from "./lib/billing";
 import {
   Reveal,
   LogoMark,
@@ -858,7 +859,7 @@ function Pricing() {
                       {p.cta} <IconArrow className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                     </a>
                   ) : (
-                    <button onClick={() => (user ? setSubscribing(p) : (window.location.hash = "#/auth"))}
+                    <button onClick={() => (user ? setSubscribing(p) : (window.location.hash = `#/auth?plan=${p.id}`))}
                       className={`group mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-4 font-display text-base font-bold transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 ${p.highlight ? "bg-lime text-ink hover:bg-limedeep hover:shadow-[0_14px_35px_rgba(205,244,99,0.4)]" : "border-2 border-ink/20 text-ink hover:border-evergreen hover:bg-evergreen hover:text-lime"}`}>
                       {user ? p.cta : "Crear cuenta y " + p.cta.toLowerCase()}
                       <IconArrow className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
@@ -884,33 +885,32 @@ function Pricing() {
 }
 
 function SubscriptionModal({ plan, billing, onClose }: { plan: PlanDef; billing: Billing; onClose: () => void }) {
-  const { user, setPlan, toast } = useStore();
+  const { user, toast } = useStore();
   const price = billing === "mensual" ? plan.monthly : plan.yearly;
   const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const subscribe = async () => {
-    setProcessing(true);
-    try {
-      const res = await fetch("/api/create-subscription", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: plan.id, billing, email: user?.email }),
-      });
-      const r = await res.json();
-      if (res.ok && !r.demo && r.init_point) {
-        setPlan(plan.id);
-        toast("Te llevamos al checkout de MercadoPago…");
-        window.location.href = r.init_point;
-        return;
-      }
-      throw new Error(r.error || "demo");
-    } catch {
-      setTimeout(() => {
-        setPlan(plan.id);
-        toast(`Modo demo: plan ${plan.name} activado. En producción acá entra MercadoPago.`);
-        onClose();
-      }, 900);
+    if (plan.id === "semilla") {
+      window.location.hash = "#/auth";
+      return;
     }
+    if (!user) {
+      window.location.hash = `#/auth?plan=${plan.id}`;
+      return;
+    }
+    setProcessing(true);
+    setError(null);
+    if (!isPaidPlan(plan.id)) return;
+    const r = await createMercadoPagoCheckout({ plan: plan.id, billing, email: user.email });
+    if (!r.ok) {
+      setProcessing(false);
+      setError(r.error);
+      return;
+    }
+    savePendingCheckout(plan.id, billing);
+    toast("Te llevamos al checkout de MercadoPago…");
+    window.location.href = r.url;
   };
 
   return (
@@ -930,13 +930,13 @@ function SubscriptionModal({ plan, billing, onClose }: { plan: PlanDef; billing:
             </li>
           ))}
         </ul>
+        {error && <p className="mt-4 rounded-xl border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
         <button onClick={subscribe} disabled={processing}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-4 font-display text-base font-bold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:bg-limedeep disabled:opacity-60">
           {processing ? (<><span className="blinkdot h-2.5 w-2.5 rounded-full bg-ink" /> Conectando con MercadoPago…</>) : (<>Suscribirme con MercadoPago <IconArrow className="h-4 w-4" /></>)}
         </button>
         <p className="mt-3 text-center text-[11px] leading-snug text-inkmute">
-          El cobro lo hace MercadoPago de forma segura. Cancelás cuando quieras desde tu cuenta.
-          {processing ? "" : " (Demo: si el backend no está configurado, se activa al instante.)"}
+          El cobro lo hace MercadoPago de forma segura. El plan se activa cuando el pago queda autorizado. Cancelás cuando quieras.
         </p>
       </div>
     </div>

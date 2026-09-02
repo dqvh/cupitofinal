@@ -37,9 +37,11 @@ export default async function handler(req: Request): Promise<Response> {
     });
     const sub = await mp.json();
 
-    const email: string = sub.payer_email ?? ""; // = external_reference que mandamos al crear
+    const ref = String(sub.external_reference ?? "");
+    const email: string = (ref.split("::")[0] || sub.payer_email || "").trim();
     const status: string = sub.status ?? ""; // "authorized" | "paused" | "cancelled"
-    const planId = String(sub.reason ?? "").toLowerCase().includes("escala") ? "escala" : "crece";
+    const blob = `${sub.reason ?? ""} ${ref}`.toLowerCase();
+    const planId = blob.includes("escala") ? "escala" : "crece";
 
     console.log(`[Cupito] Suscripción de ${email} → ${status} (plan ${planId})`);
 

@@ -6,7 +6,7 @@
  *   MP_ACCESS_TOKEN = tu token de MercadoPago (APP_USR-... en producción, TEST-... en sandbox)
  *   PUBLIC_URL      = https://cupito.app (tu dominio o la URL de Vercel)
  *
- * Si falta el token, responde { demo: true } y el frontend activa el plan en modo demo.
+ * Si falta el token, responde { demo: true }. El frontend NO activa el plan.
  */
 
 export const config = { runtime: "edge" };
@@ -46,9 +46,9 @@ export default async function handler(req: Request): Promise<Response> {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
       body: JSON.stringify({
         reason: `Cupito — Plan ${plan === "crece" ? "Crece" : "Escala"} (${billing})`,
-        external_reference: body.email || "suscripcion-cupito",
-        ...(body.email ? { payer_email: body.email } : {}),
+        external_reference: `${body.email || "anon"}::${plan}::${billing}`,
         back_url: `${PUBLIC_URL}/#/app`,
+        status: "pending",
         auto_recurring: {
           frequency: billing === "mensual" ? 1 : 12,
           frequency_type: "months",
@@ -59,9 +59,10 @@ export default async function handler(req: Request): Promise<Response> {
     });
 
     const d = await res.json();
-    if (!res.ok || !d.init_point) return json({ demo: false, error: d.message || "MercadoPago rechazó la suscripción." }, 400);
+    const url = d.init_point || d.sandbox_init_point;
+    if (!res.ok || !url) return json({ demo: false, error: d.message || "MercadoPago rechazó la suscripción." }, 400);
 
-    return json({ init_point: d.init_point, sandbox: d.sandbox_init_point ?? null });
+    return json({ init_point: url, sandbox_init_point: d.sandbox_init_point ?? null });
   } catch {
     return json({ demo: false, error: "No se pudo conectar con MercadoPago." }, 500);
   }

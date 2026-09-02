@@ -59,6 +59,7 @@ export interface BizSettings {
   transferAlias: string;
   transferCBU: string;
   transferHolder: string;
+  setupDismissed: boolean;
 }
 
 export interface BizData {
@@ -201,6 +202,7 @@ export function defaultSettings(): BizSettings {
     transferAlias: "",
     transferCBU: "",
     transferHolder: "",
+    setupDismissed: false,
   };
 }
 
@@ -305,6 +307,7 @@ function seedDemoExtras(userId: string) {
     };
     changed = true;
   }
+  if (!data.settings.setupDismissed) { data.settings.setupDismissed = true; changed = true; }
   if (changed) saveData(userId, data);
 }
 
@@ -333,6 +336,7 @@ function normalizeData(p: Partial<BizData>): BizData {
       transferAlias: typeof s.transferAlias === "string" ? s.transferAlias : "",
       transferCBU: typeof s.transferCBU === "string" ? s.transferCBU : "",
       transferHolder: typeof s.transferHolder === "string" ? s.transferHolder : "",
+      setupDismissed: typeof s.setupDismissed === "boolean" ? s.setupDismissed : false,
     },
   };
 }

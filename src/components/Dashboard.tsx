@@ -11,6 +11,7 @@ import {
   isPaid,
   PLAN_META,
   PRO_LIMIT,
+  defaultHours,
   type Booking,
   type BookingStatus,
   type Service,
@@ -21,6 +22,15 @@ import {
   type BizData,
 } from "../lib/store";
 import PublicBooking from "./PublicBooking";
+import { PlanCheckout } from "./PlanCheckout";
+import {
+  clearPendingCheckout,
+  confirmMercadoPago,
+  getHashParam,
+  getPreapprovalIdFromUrl,
+  readPendingCheckout,
+  requestCheckout,
+} from "../lib/billing";
 import {
   Reveal,
   CountUp,
@@ -101,6 +111,47 @@ export default function Dashboard() {
   const [serviceModal, setServiceModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [filter, setFilter] = useState<"todas" | BookingStatus>("todas");
   const [proFilter, setProFilter] = useState<string>("todos");
+  const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const checkout = getHashParam("checkout");
+      if (checkout === "crece" || checkout === "escala" || checkout === "semilla") {
+        setCheckoutPlan(checkout);
+      }
+
+      const preapprovalId = getPreapprovalIdFromUrl();
+      if (!preapprovalId) return;
+      const result = await confirmMercadoPago(preapprovalId);
+      if (cancelled) return;
+      if (result.authorized) {
+        const plan = result.plan || readPendingCheckout()?.plan || "crece";
+        store.setPlan(plan);
+        clearPendingCheckout();
+        store.toast(`Pago confirmado. Ya estás en el plan ${PLAN_META[plan].name} ✓`);
+      } else if (result.error) {
+        store.toast(result.error, "warn");
+      } else {
+        store.toast("MercadoPago todavía no autorizó el pago. Si ya pagaste, recargá en un momento.", "warn");
+      }
+      if (window.location.search.includes("preapproval")) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("preapproval_id");
+        url.searchParams.delete("preapprovalId");
+        url.searchParams.delete("preapproval");
+        window.history.replaceState({}, "", url.pathname + url.hash.split("?")[0]);
+      }
+    };
+    void run();
+    const onCheckout = (e: Event) => {
+      const plan = (e as CustomEvent<Plan>).detail;
+      if (plan === "semilla" || plan === "crece" || plan === "escala") setCheckoutPlan(plan);
+    };
+    window.addEventListener("cupito-checkout", onCheckout);
+    return () => { cancelled = true; window.removeEventListener("cupito-checkout", onCheckout); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const today = dateKey(new Date());
   const week = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(new Date(), weekStart + i)), [weekStart]);
@@ -242,6 +293,8 @@ export default function Dashboard() {
                 </button>
               )}
             </div>
+
+            {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} />}
 
             {pendingClaims > 0 && (
               <div className="pop-in mt-6 flex items-center gap-3 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3">
@@ -441,7 +494,7 @@ export default function Dashboard() {
                 {!isPaid(user) ? (
                   <LockedFeature icon={<IconBag className="h-7 w-7" />} title="La tienda es parte del plan Crece"
                     desc="Tus clientes ven tus productos justo cuando reservan: el momento de mayor intención de compra. En promedio, un 20% agrega algo al turno."
-                    onUpgrade={() => { store.setPlan("crece"); toast("¡Plan Crece activado! Tu tienda ya está en línea 🛍️"); }} />
+                    onUpgrade={() => setCheckoutPlan("crece")} />
                 ) : (
                   <ShopAdmin />
                 )}
@@ -496,12 +549,12 @@ export default function Dashboard() {
 
             {/* ============ SUSCRIPCIÓN ============ */}
             {view === "suscripcion" && (
-              <SubscriptionView current={user.plan} onChange={(p) => { store.setPlan(p); toast(`Plan actualizado a ${PLAN_META[p].name} ✓`); }} />
+              <SubscriptionView current={user.plan} onSelect={(p) => setCheckoutPlan(p)} />
             )}
 
             {/* ============ AJUSTES ============ */}
             {view === "ajustes" && (
-              <SettingsView user={user} settings={data.settings} onSaveProfile={(b, n) => { saveProfile(b, n); toast("Perfil actualizado ✓"); }} />
+              <SettingsView user={user} settings={data.settings} onSaveProfile={(b, n) => { saveProfile(b, n); toast("Perfil actualizado ✓"); }} onSelectPlan={(p) => setCheckoutPlan(p)} />
             )}
           </main>
         </div>
@@ -509,6 +562,7 @@ export default function Dashboard() {
 
       {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} onClose={() => setShowNew(false)} />}
       {serviceModal.open && <ServiceModal service={serviceModal.id ? data.services.find((s) => s.id === serviceModal.id) : undefined} onClose={() => setServiceModal({ open: false })} />}
+      {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => setCheckoutPlan(null)} />}
     </div>
   );
 }
@@ -534,6 +588,55 @@ function EmptyState({ text, sub, action }: { text: string; sub: string; action?:
       <p className="mt-4 font-display text-xl font-extrabold text-ink">{text}</p>
       <p className="mt-1 max-w-sm text-sm text-inkmute">{sub}</p>
       {action && <div className="mt-5">{action}</div>}
+    </div>
+  );
+}
+
+function SetupGuide({ onGo, onCheckout }: { onGo: (v: View) => void; onCheckout: (p: Plan) => void }) {
+  const { user, data, updateSettings } = useStore();
+  if (!user || !data || data.settings.setupDismissed) return null;
+
+  const steps: { id: string; done: boolean; title: string; hint: string; go: () => void }[] = [
+    { id: "servicio", done: data.services.length > 0, title: "Cargá tu primer servicio", hint: "Nombre, precio y duración. Es lo que ven tus clientes.", go: () => onGo("servicios") },
+    { id: "horarios", done: JSON.stringify(data.settings.hours) !== JSON.stringify(defaultHours()), title: "Confirmá días y horarios", hint: "Los turnos se arman solos con esto. Hoy tenés un horario de ejemplo.", go: () => onGo("ajustes") },
+    { id: "pagina", done: !!(data.settings.whatsapp || data.settings.description || data.settings.address), title: "Completá tu página", hint: "WhatsApp, dirección o una descripción corta.", go: () => onGo("ajustes") },
+    { id: "plan", done: user.plan !== "semilla", title: "Elegí un plan", hint: user.plan === "semilla" ? "Estás en Semilla (gratis). Crece se paga con MercadoPago." : `Ya estás en ${PLAN_META[user.plan].name}.`, go: () => onCheckout("crece") },
+  ];
+  const done = steps.filter((s) => s.done).length;
+  if (done === steps.length) return null;
+
+  return (
+    <div className="pop-in mt-8 overflow-hidden rounded-[22px] border-2 border-evergreen bg-evergreen text-paper shadow-block">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-6">
+        <div>
+          <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-lime">Primeros pasos</p>
+          <h2 className="mt-1 font-display text-2xl font-extrabold">Tu local está vacío. Arranquemos.</h2>
+          <p className="mt-1 text-sm text-paper/70">En unos minutos: servicios, horarios y tu link listo para compartir.</p>
+        </div>
+        <button type="button" onClick={() => updateSettings({ setupDismissed: true })} className="text-xs font-bold text-paper/50 underline-offset-4 hover:text-lime hover:underline">Ocultar</button>
+      </div>
+      <div className="mt-2 px-6 pb-2">
+        <div className="h-1.5 overflow-hidden rounded-full bg-paper/15">
+          <div className="h-full rounded-full bg-lime transition-all" style={{ width: `${(done / steps.length) * 100}%` }} />
+        </div>
+        <p className="mt-2 text-xs font-bold text-paper/55">{done} de {steps.length} listos</p>
+      </div>
+      <ul className="divide-y divide-paper/10">
+        {steps.map((s, i) => (
+          <li key={s.id}>
+            <button type="button" onClick={s.go} className="flex w-full items-center gap-4 px-6 py-4 text-left transition-colors hover:bg-paper/8">
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${s.done ? "bg-lime text-ink" : "bg-paper/10 text-paper"}`}>
+                {s.done ? <IconCheck className="h-4 w-4" /> : i + 1}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={`block font-display text-sm font-bold ${s.done ? "text-paper/50 line-through" : "text-paper"}`}>{s.title}</span>
+                <span className="block text-xs text-paper/55">{s.hint}</span>
+              </span>
+              {!s.done && <IconArrow className="h-4 w-4 shrink-0 text-lime" />}
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -928,7 +1031,7 @@ function TeamView() {
         </button>
       </div>
       {data.professionals.length >= limit && (
-        <p className="mt-4 text-sm text-inkmute">Necesitás más lugar? <button onClick={() => { useStore().setPlan(user.plan === "semilla" ? "crece" : "escala"); toast("Plan actualizado ✓"); }} className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-4">Subí de plan</button> para sumar profesionales.</p>
+        <p className="mt-4 text-sm text-inkmute">Necesitás más lugar? <button onClick={() => requestCheckout(user.plan === "semilla" ? "crece" : "escala")} className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-4">Subí de plan</button> para sumar profesionales. Te llevamos a MercadoPago.</p>
       )}
       {modal && <ProModal onClose={() => setModal(false)} onSave={(n, r) => { const err = addProfessional(n, r); if (err) return err; toast(`${n} se sumó al equipo 🎉`); return null; }} />}
     </div>
@@ -1028,7 +1131,7 @@ function ProductModal({ product, onClose }: { product?: Product; onClose: () => 
 
 /* ============ CUPONES ============ */
 function PromosView({ slug }: { slug: string }) {
-  const { user, data, updateCoupon, removeCoupon, setPlan, toast } = useStore();
+  const { user, data, updateCoupon, removeCoupon, toast } = useStore();
   const [modal, setModal] = useState(false);
   if (!user || !data) return null;
 
@@ -1037,7 +1140,7 @@ function PromosView({ slug }: { slug: string }) {
       <div className="pop-in mt-8">
         <LockedFeature icon={<IconTicket className="h-7 w-7" />} title="Los cupones son parte del plan Crece"
           desc="Creá códigos de descuento y compartilos en tus historias o por WhatsApp. Tus clientes los aplican al reservar y el descuento se calcula solo, incluso en la seña."
-          onUpgrade={() => { setPlan("crece"); toast("¡Plan Crece activado! Ya podés crear cupones 🎟️"); }} />
+          onUpgrade={() => requestCheckout("crece")} />
       </div>
     );
   }
@@ -1096,7 +1199,7 @@ function CouponModal({ onClose }: { onClose: () => void }) {
 }
 
 /* ============ SUSCRIPCIÓN ============ */
-function SubscriptionView({ current, onChange }: { current: Plan; onChange: (p: Plan) => void }) {
+function SubscriptionView({ current, onSelect }: { current: Plan; onSelect: (p: Plan) => void }) {
   const plans: Plan[] = ["semilla", "crece", "escala"];
   const desc: Record<Plan, string> = {
     semilla: "1 calendario · 25 reservas/mes · link propio · recordatorios por email",
@@ -1119,13 +1222,15 @@ function SubscriptionView({ current, onChange }: { current: Plan; onChange: (p: 
             <div className="flex items-center gap-4">
               <p className="font-display text-2xl font-extrabold text-fern">{PLAN_META[p].price}</p>
               {!active && (
-                <button onClick={() => onChange(p)} className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Cambiar a {PLAN_META[p].name}</button>
+                <button onClick={() => onSelect(p)} className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">
+                  {p === "semilla" ? "Bajar a Semilla" : `Pagar ${PLAN_META[p].name}`}
+                </button>
               )}
             </div>
           </div>
         );
       })}
-      <p className="text-sm text-inkmute">💳 En producción, el cambio de plan se hace con MercadoPago (suscripción mensual o anual). Acá es instantáneo porque es la demo.</p>
+      <p className="text-sm text-inkmute">Los planes pagos se activan con MercadoPago (mensual o anual). Hasta que el pago quede autorizado, seguís en tu plan actual.</p>
     </div>
   );
 }
@@ -1165,7 +1270,7 @@ function LockedFeature({ icon, title, desc, onUpgrade }: { icon: ReactNode; titl
 /* ============ AJUSTES (con pestañas) ============ */
 type SettingsTab = "negocio" | "pagina" | "pagos" | "horarios" | "plan" | "cuenta";
 
-function SettingsView({ user, settings, onSaveProfile }: { user: NonNullable<ReturnType<typeof useStore>["user"]>; settings: BizSettings; onSaveProfile: (b: string, n: string) => void }) {
+function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: NonNullable<ReturnType<typeof useStore>["user"]>; settings: BizSettings; onSaveProfile: (b: string, n: string) => void; onSelectPlan: (p: Plan) => void }) {
   const [tab, setTab] = useState<SettingsTab>("negocio");
   const tabs: { id: SettingsTab; label: string; icon: ReactNode }[] = [
     { id: "negocio", label: "Negocio", icon: <IconWallet className="h-4 w-4" /> },
@@ -1193,7 +1298,7 @@ function SettingsView({ user, settings, onSaveProfile }: { user: NonNullable<Ret
         {tab === "pagina" && <PersonalizationCard settings={settings} onSave={(patch) => useStore().updateSettings(patch)} />}
         {tab === "pagos" && <DepositCard settings={settings} paid={isPaid(user)} onChange={(patch) => useStore().updateSettings(patch)} />}
         {tab === "horarios" && <HoursCard hours={settings.hours} onChange={(hours) => useStore().updateSettings({ hours })} />}
-        {tab === "plan" && <PlanTab current={user.plan} onChange={(p) => { useStore().setPlan(p); useStore().toast(`Ahora estás en el plan ${PLAN_META[p].name} ✓`); }} />}
+        {tab === "plan" && <PlanTab current={user.plan} onSelect={onSelectPlan} />}
         {tab === "cuenta" && <AccountTab />}
       </div>
     </div>
@@ -1266,14 +1371,14 @@ function PersonalizationCard({ settings, onSave }: { settings: BizSettings; onSa
 }
 
 function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid: boolean; onChange: (patch: Partial<BizSettings>) => void }) {
-  const { setPlan, toast } = useStore();
+  const { toast } = useStore();
   const [f, setF] = useState({ alias: settings.transferAlias, cbu: settings.transferCBU, holder: settings.transferHolder });
 
   if (!paid) {
     return (
       <LockedFeature icon={<IconTicket className="h-7 w-7" />} title="La seña es parte del plan Crece"
         desc="Cobrá un anticipo al reservar y bajá las ausencias hasta 68%. Vos elegís el porcentaje y tus datos de transferencia."
-        onUpgrade={() => { setPlan("crece"); toast("¡Plan Crece activado! Ya podés cobrar señas 💪"); }} />
+        onUpgrade={() => requestCheckout("crece")} />
     );
   }
 
@@ -1361,7 +1466,7 @@ function HoursCard({ hours, onChange }: { hours: DayHours[]; onChange: (hours: D
   );
 }
 
-function PlanTab({ current, onChange }: { current: Plan; onChange: (p: Plan) => void }) {
+function PlanTab({ current, onSelect }: { current: Plan; onSelect: (p: Plan) => void }) {
   const plans: Plan[] = ["semilla", "crece", "escala"];
   return (
     <div className="space-y-3">
@@ -1369,14 +1474,18 @@ function PlanTab({ current, onChange }: { current: Plan; onChange: (p: Plan) => 
         <div key={p} className={`card flex items-center justify-between gap-3 p-5 ${current === p ? "!border-limedeep !bg-lime/20" : ""}`}>
           <div>
             <p className="font-display text-lg font-extrabold text-ink">{PLAN_META[p].name} <span className="ml-2 text-sm font-bold text-fern">{PLAN_META[p].price}</span></p>
+            <p className="mt-1 text-xs text-inkmute">{p === "semilla" ? "Gratis · sin tarjeta" : "Se paga con MercadoPago"}</p>
           </div>
           {current === p ? (
             <span className="rounded-full bg-evergreen px-4 py-2 text-xs font-bold uppercase tracking-wider text-lime">Actual</span>
           ) : (
-            <button onClick={() => onChange(p)} className="rounded-full border-2 border-ink/15 px-4 py-2 font-display text-xs font-bold text-ink transition-all hover:border-evergreen hover:bg-evergreen hover:text-lime">Cambiar</button>
+            <button type="button" onClick={() => onSelect(p)} className="rounded-full border-2 border-ink/15 px-4 py-2 font-display text-xs font-bold text-ink transition-all hover:border-evergreen hover:bg-evergreen hover:text-lime">
+              {p === "semilla" ? "Bajar" : "Pagar"}
+            </button>
           )}
         </div>
       ))}
+      <p className="text-xs text-inkmute">Al tocar Pagar se abre MercadoPago. El plan no cambia hasta que el cobro quede autorizado.</p>
     </div>
   );
 }
