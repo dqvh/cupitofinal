@@ -3,7 +3,10 @@ import {
   useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
   THEMES, type User, type BizData, type BizSettings, type Coupon, type ColorTheme,
 } from "../lib/store";
-import { IconCheck, IconCalendar, IconChevron, IconBag, IconTicket, IconPlus, IconUsers, IconWhatsApp, LogoMark } from "./kit";
+import {
+  IconCheck, IconCalendar, IconChevron, IconBag, IconTicket, IconPlus, IconUsers,
+  IconWhatsApp, LogoMark, IconSun, IconMoon, CopyButton, ConfettiBurst, Badge,
+} from "./kit";
 
 /* ---------- helpers .ics / Google Calendar ---------- */
 function toLocalStamp(dt: Date) {
@@ -277,10 +280,52 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
               <p className="text-xs font-bold uppercase tracking-wider text-inkmute">{stepNum} · Elegí el día</p>
               <button onClick={() => setStep(hasPros ? 1 : 0)} className="rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-ink">← {hasPros ? "Profesional" : "Servicio"}</button>
             </div>
-            <MonthPicker cursor={cursor} setCursor={setCursor} selected={selectedDate}
-              onSelect={(key) => { setSelectedDate(key); setTime(null); setWlDone(false); setShowWlForm(false); setStep(3); }}
-              isClosed={isClosed}
-              theme={theme} />
+
+            {/* Atajos rápidos de fecha */}
+            <div className="mb-4">
+              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-inkmute">⚡ Atajos rápidos</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Hoy", date: dateKey(new Date()) },
+                  { label: "Mañana", date: dateKey(addDays(new Date(), 1)) },
+                  { label: "Pasado mañana", date: dateKey(addDays(new Date(), 2)) },
+                ].map((s) => {
+                  const closed = isClosed(s.date);
+                  return (
+                    <button
+                      key={s.label}
+                      type="button"
+                      disabled={closed}
+                      onClick={() => {
+                        setSelectedDate(s.date);
+                        setTime(null);
+                        setWlDone(false);
+                        setShowWlForm(false);
+                        setStep(3);
+                      }}
+                      className={`btn-press flex flex-col items-center justify-center rounded-xl border-2 p-2.5 text-center transition-all ${
+                        closed
+                          ? "opacity-35 cursor-not-allowed border-ink/10 bg-ink/5 text-inkmute"
+                          : selectedDate === s.date
+                          ? theme.activeSlot
+                          : "border-ink/12 bg-white/70 hover:border-ink/50 hover:bg-white hover:shadow-sm"
+                      }`}
+                    >
+                      <span className="font-display text-xs font-bold leading-tight">{s.label}</span>
+                      <span className="mt-0.5 text-[10px] text-inkmute">{closed ? "Cerrado" : s.date.slice(8) + "/" + s.date.slice(5, 7)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-dashed border-ink/10">
+              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-inkmute">📅 O elegí en el calendario</p>
+              <MonthPicker cursor={cursor} setCursor={setCursor} selected={selectedDate}
+                onSelect={(key) => { setSelectedDate(key); setTime(null); setWlDone(false); setShowWlForm(false); setStep(3); }}
+                isClosed={isClosed}
+                theme={theme} />
+            </div>
           </div>
         )}
 
@@ -303,7 +348,14 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                 {hasBreak && breakInfo ? (
                   <div className="space-y-3">
                     <div>
-                      <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-widest text-inkmute">☀ Mañana · hasta el corte</p>
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-inkmute">
+                          <IconSun className="h-3.5 w-3.5 text-amber-500" /> Mañana · hasta el corte
+                        </span>
+                        <span className="text-[10px] font-bold text-inkmute">
+                          {slots.filter((t) => t < (breakInfo.to ?? "99:99") && !takenTimes(selectedDate ?? "").includes(t)).length} disponibles
+                        </span>
+                      </div>
                       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
                         {slots.filter((t) => t < (breakInfo.to ?? "99:99")).map((t) => slotBtn(t))}
                       </div>
@@ -314,14 +366,29 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                       <span className="h-px flex-1 bg-coral/40" />
                     </p>
                     <div>
-                      <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-widest text-inkmute">🌙 Tarde · después del corte</p>
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-inkmute">
+                          <IconMoon className="h-3.5 w-3.5 text-indigo-500" /> Tarde · después del corte
+                        </span>
+                        <span className="text-[10px] font-bold text-inkmute">
+                          {slots.filter((t) => t >= (breakInfo.to ?? "99:99") && !takenTimes(selectedDate ?? "").includes(t)).length} disponibles
+                        </span>
+                      </div>
                       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
                         {slots.filter((t) => t >= (breakInfo.to ?? "99:99")).map((t) => slotBtn(t))}
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">{slots.map((t) => slotBtn(t))}</div>
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-widest text-inkmute">Horarios disponibles</span>
+                      <span className="text-[10px] font-bold text-inkmute">
+                        {slots.filter((t) => !takenTimes(selectedDate ?? "").includes(t)).length} libres
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">{slots.map((t) => slotBtn(t))}</div>
+                  </div>
                 )}
               </>
             )}
@@ -451,12 +518,13 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
 
         {/* éxito */}
         {done && selectedDate && time && service && (
-          <div className="pop-in py-2 text-center">
+          <div className="pop-in relative py-2 text-center">
+            <ConfettiBurst />
             <svg viewBox="0 0 56 56" className="mx-auto h-14 w-14">
               <circle cx="28" cy="28" r="25" fill="none" stroke="currentColor" strokeWidth="4" className={`circle-draw ${theme.accentText}`} strokeLinecap="round" transform="rotate(-90 28 28)" />
               <path d="M18 29l7 7 13-14" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" className={`check-draw ${theme.accentText}`} />
             </svg>
-            <h4 className="mt-2 font-display text-xl font-extrabold text-ink">
+            <h4 className="mt-2 font-display text-2xl font-extrabold text-ink">
               {claimed ? "¡Turno reservado!" : "¡Tu cupito está asegurado!"}
             </h4>
             <p className="mt-1 text-sm text-inkmute">
@@ -464,9 +532,40 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
               {pro && ` · con ${pro.name.split(" ")[0]}`}
               {itemCount > 0 && ` · ${itemCount} producto${itemCount === 1 ? "" : "s"} agregado${itemCount === 1 ? "" : "s"}`}
             </p>
+
+            {/* Tarjeta de comprobante limpio con botón de copia */}
+            <div className="mt-4 rounded-2xl border-2 border-dashed border-ink/15 bg-white/80 p-4 text-left shadow-sm">
+              <div className="flex items-center justify-between border-b border-ink/10 pb-2.5">
+                <span className="font-display text-xs font-extrabold uppercase tracking-wider text-inkmute">Comprobante de turno</span>
+                <CopyButton
+                  text={`Turno en ${user.business}: ${service.name} para ${client} el ${fmtLong(selectedDate)} a las ${time}.`}
+                  label="Copiar datos"
+                  copiedLabel="¡Datos copiados!"
+                />
+              </div>
+              <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-inkmute block">Negocio</span>
+                  <span className="font-bold text-ink">{user.business}</span>
+                </div>
+                <div>
+                  <span className="text-inkmute block">Cliente</span>
+                  <span className="font-bold text-ink">{client}</span>
+                </div>
+                <div>
+                  <span className="text-inkmute block">Fecha y Hora</span>
+                  <span className="font-bold text-ink">{selectedDate} · {time} hs</span>
+                </div>
+                <div>
+                  <span className="text-inkmute block">Total del servicio</span>
+                  <span className="font-bold text-ink">{fmtMoney(total)}</span>
+                </div>
+              </div>
+            </div>
+
             {claimed && (
-              <p className="mx-auto mt-2 max-w-sm rounded-xl border-2 border-ink/15 bg-ink/5 px-3 py-2 text-xs font-semibold text-ink/80">
-                Tu comprobante ya está con {user.business}. Apenas verifique la transferencia, tu turno queda confirmado y te avisamos.
+              <p className="mx-auto mt-3 max-w-sm rounded-xl border-2 border-amber-500/30 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                Tu comprobante ya está con {user.business}. Apenas verifique la transferencia, tu turno queda confirmado y te avisamos por WhatsApp.
               </p>
             )}
 
@@ -478,7 +577,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                   downloadIcs(icsContent({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration, desc: `Turno en ${user.business}, reservado con Cupito.` }));
                   toast("Archivo de calendario (.ics) descargado — tocalo para sumarlo a tu celu 📅");
                 }}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl ${theme.primaryBtn} py-3 font-display text-[15px] font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-sm active:translate-y-0`}
+                className={`btn-press flex w-full items-center justify-center gap-2 rounded-xl ${theme.primaryBtn} py-3 font-display text-[15px] font-bold shadow-sm active:translate-y-0`}
               >
                 <IconCalendar className="h-4 w-4" /> Agregar a Apple Calendar / Celular (.ics)
               </button>
@@ -488,7 +587,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                 href={gcalUrl({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration })}
                 target="_blank"
                 rel="noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink/15 bg-white/70 py-2.5 text-sm font-bold text-ink transition-all hover:border-ink/40 hover:bg-white"
+                className="btn-press flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink/15 bg-white/70 py-2.5 text-sm font-bold text-ink transition-all hover:border-ink/40 hover:bg-white"
               >
                 📅 Abrir en Google Calendar ↗
               </a>
@@ -507,9 +606,9 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                   href={`https://wa.me/54${settings.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola! Soy ${client}. Acabo de reservar ${service.name} para el ${fmtLong(selectedDate)} a las ${time} 🙌`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-600/30 bg-emerald-50 py-2.5 text-sm font-bold text-emerald-800 transition-all hover:-translate-y-0.5 hover:bg-emerald-100"
+                  className="btn-press flex w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-600/30 bg-emerald-50 py-2.5 text-sm font-bold text-emerald-800 transition-all hover:bg-emerald-100"
                 >
-                  <IconWhatsApp className="h-4 w-4 text-emerald-600" /> Avisar por WhatsApp (opcional)
+                  <IconWhatsApp className="h-4 w-4 text-emerald-600" /> Avisar al negocio por WhatsApp (opcional)
                 </a>
               )}
 

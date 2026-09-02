@@ -58,6 +58,10 @@ import {
   IconLogout,
   IconCheck,
   IconArrow,
+  CopyButton,
+  IconSearch,
+  IconCopy,
+  Badge,
 } from "./kit";
 
 type View = "hoy" | "reservas" | "lista" | "stats" | "servicios" | "equipo" | "tienda" | "promos" | "pagina" | "suscripcion" | "ajustes";
@@ -116,6 +120,7 @@ export default function Dashboard() {
   const [proFilter, setProFilter] = useState<string>("todos");
   const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -188,8 +193,14 @@ export default function Dashboard() {
   const occupancy = Math.min(100, Math.round((dayBookings.filter((b) => b.status !== "cancelada").length / Math.max(1, daySlots.length)) * 100));
 
   const upcoming = data.bookings
-    .filter((b) => b.date >= today && (filter === "todas" || b.status === filter))
-    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    .filter((b) => (filter === "todas" || b.status === filter))
+    .filter((b) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      const svc = data.services.find((s) => s.id === b.serviceId)?.name.toLowerCase() || "";
+      return b.client.toLowerCase().includes(q) || b.phone.includes(q) || svc.includes(q);
+    })
+    .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
 
   const pendingClaims = data.bookings.filter((b) => b.depositClaim && !b.paidDeposit && b.status !== "cancelada").length;
 
@@ -289,18 +300,36 @@ export default function Dashboard() {
           </div>
 
           <main className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-ink/10 pb-6">
               <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-ink/35">Panel · {sectionOf(view)}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-ink/35">Panel · {sectionOf(view)}</p>
+                  <CopyButton
+                    text={`https://cupito.app/#/b/${user.slug}`}
+                    label="Copiar mi link"
+                    copiedLabel="¡Link copiado!"
+                    className="border border-ink/15 shadow-none hover:border-ink/40"
+                  />
+                </div>
                 <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">{title[view][0]}</h1>
-                <p className="mt-1 text-inkmute">{title[view][1]}</p>
+                <p className="mt-1 text-sm text-inkmute">{title[view][1]}</p>
               </div>
-              {(view === "hoy" || view === "reservas") && (
-                <button onClick={() => { setPrefill(null); setShowNew(true); }}
-                  className="group inline-flex items-center gap-2 rounded-full bg-coral px-6 py-3 font-display text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)] active:translate-y-0">
+              <div className="flex items-center gap-2">
+                <a
+                  href={`#/b/${user.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border-2 border-ink/15 bg-white/70 px-4 py-2 font-display text-xs font-bold text-ink hover:bg-white hover:border-ink/40"
+                >
+                  <IconLink className="h-3.5 w-3.5" /> Ver mi página ↗
+                </a>
+                <button
+                  onClick={() => { setPrefill(null); setShowNew(true); }}
+                  className="btn-press group inline-flex items-center gap-2 rounded-full bg-coral px-5 py-2.5 font-display text-sm font-bold text-white shadow-block-coral hover:bg-coral/90 active:translate-y-0"
+                >
                   <IconPlus className="h-4 w-4" /> Nueva reserva
                 </button>
-              )}
+              </div>
             </div>
 
             {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} onOpenOnboarding={() => setShowOnboarding(true)} />}
@@ -364,7 +393,7 @@ export default function Dashboard() {
                 ) : (
                   <div className="mt-4 space-y-3">
                     {dayBookings.map((b) => (
-                      <BookingRow key={b.id} b={b} service={serviceOf(b.serviceId)} pro={data.professionals.find((p) => p.id === b.proId)} products={data.products}
+                      <BookingRow key={b.id} b={b} service={serviceOf(b.serviceId)} pro={data.professionals.find((p) => p.id === b.proId)} products={data.products} businessName={user.business}
                         onStatus={(id, s) => {
                           setStatus(id, s);
                           if (s === "atendida") { requestReview(id); toast("Turno atendido · le enviamos el link de reseña a su email 💌"); }
@@ -396,16 +425,41 @@ export default function Dashboard() {
             {/* ============ RESERVAS ============ */}
             {view === "reservas" && (
               <div className="pop-in mt-8">
-                <div className="flex flex-wrap gap-2">
-                  {(["todas", "pendiente", "confirmada", "atendida", "cancelada"] as const).map((f) => (
-                    <button key={f} onClick={() => setFilter(f)}
-                      className={`rounded-full border-2 px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${filter === f ? "border-evergreen bg-evergreen text-lime" : "border-ink/12 bg-card text-inkmute hover:border-evergreen"}`}>
-                      {f === "todas" ? "Todas" : STATUS[f].label + "s"}
-                    </button>
-                  ))}
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                  <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
+                    {(["todas", "pendiente", "confirmada", "atendida", "cancelada"] as const).map((f) => {
+                      const count = f === "todas" ? data.bookings.length : data.bookings.filter((b) => b.status === f).length;
+                      return (
+                        <button key={f} onClick={() => setFilter(f)}
+                          className={`btn-press whitespace-nowrap rounded-full border-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${filter === f ? "border-evergreen bg-evergreen text-lime" : "border-ink/12 bg-card text-inkmute hover:border-evergreen"}`}>
+                          {f === "todas" ? "Todas" : STATUS[f].label} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="relative min-w-[220px]">
+                    <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-inkmute" />
+                    <input
+                      className="field !py-2 !pl-9 !pr-7 !text-xs !rounded-full"
+                      placeholder="Buscar por cliente o teléfono..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-inkmute hover:text-ink"
+                        title="Borrar búsqueda"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
+
                 {upcoming.length === 0 ? (
-                  <EmptyState text="No hay reservas con ese filtro." sub="Probá con otro estado o creá una nueva."
+                  <EmptyState text={searchQuery ? "No hay reservas que coincidan con la búsqueda." : "No hay reservas con ese filtro."} sub={searchQuery ? "Probá con otro término o limpiá el buscador." : "Probá con otro estado o creá una nueva."}
                     action={<button onClick={() => { setPrefill(null); setShowNew(true); }} className="inline-flex items-center gap-2 rounded-full bg-evergreen px-5 py-2.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5"><IconPlus className="h-4 w-4" /> Nueva reserva</button>} />
                 ) : (
                   <div className="mt-6 space-y-6">
@@ -417,7 +471,7 @@ export default function Dashboard() {
                         </p>
                         <div className="mt-3 space-y-3">
                           {list.map((b) => (
-                            <BookingRow key={b.id} b={b} service={serviceOf(b.serviceId)} pro={data.professionals.find((p) => p.id === b.proId)} products={data.products}
+                            <BookingRow key={b.id} b={b} service={serviceOf(b.serviceId)} pro={data.professionals.find((p) => p.id === b.proId)} products={data.products} businessName={user.business}
                               onStatus={(id, s) => { setStatus(id, s); if (s === "atendida") { requestReview(id); toast("Turno atendido · link de reseña enviado 💌"); } else toast("Estado actualizado."); }}
                               onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
                               onVerify={(id) => { store.markDepositPaid(id, "transferencia"); toast("Seña acreditada ✓"); }}
@@ -963,11 +1017,12 @@ function StatusPill({ on, label, sub }: { on: boolean; label: string; sub: strin
   );
 }
 
-function BookingRow({ b, service, pro, products, onStatus, onDelete, onVerify, onReject }: {
+function BookingRow({ b, service, pro, products, businessName, onStatus, onDelete, onVerify, onReject }: {
   b: Booking;
   service?: Service;
   pro?: { id: string; name: string; color: string };
   products: Product[];
+  businessName?: string;
   onStatus: (id: string, s: BookingStatus) => void;
   onDelete: (id: string) => void;
   onVerify: (id: string) => void;
@@ -1002,16 +1057,28 @@ function BookingRow({ b, service, pro, products, onStatus, onDelete, onVerify, o
         <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${st.cls}`}>{st.label}</span>
       </span>
       <span className="flex items-center gap-1.5">
+        {b.phone && (
+          <a
+            href={`https://wa.me/54${b.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName || "nuestro negocio"} para recordarte tu turno de ${service?.name || "atención"} el ${fmtLong(b.date)} a las ${b.time} hs. ¡Te esperamos!`)}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Enviar recordatorio por WhatsApp"
+            className="btn-press flex h-8 items-center gap-1 rounded-full border border-emerald-600/30 bg-emerald-50 px-2.5 text-xs font-bold text-emerald-800 transition-all hover:bg-emerald-100"
+          >
+            <IconWhatsApp className="h-3.5 w-3.5 text-emerald-600" />
+            <span className="hidden sm:inline">WhatsApp</span>
+          </a>
+        )}
         {claimPending && (
           <>
-            <button onClick={() => onVerify(b.id)} className="rounded-full bg-fern px-3.5 py-2 text-xs font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-evergreen">Acreditar</button>
-            <button onClick={() => onReject(b.id)} className="rounded-full border-2 border-coral/40 px-3.5 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">Rechazar</button>
+            <button onClick={() => onVerify(b.id)} className="btn-press rounded-full bg-fern px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-evergreen">Acreditar</button>
+            <button onClick={() => onReject(b.id)} className="btn-press rounded-full border-2 border-coral/40 px-3.5 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">Rechazar</button>
           </>
         )}
-        {b.status === "pendiente" && !claimPending && <button onClick={() => onStatus(b.id, "confirmada")} className="rounded-full bg-evergreen px-3.5 py-2 text-xs font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Confirmar</button>}
-        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "atendida")} className="rounded-full bg-fern px-3.5 py-2 text-xs font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-evergreen">Atendida ✓</button>}
-        {(b.status === "atendida" || b.status === "cancelada") && <button onClick={() => onStatus(b.id, "pendiente")} className="rounded-full border-2 border-ink/15 px-3.5 py-2 text-xs font-bold text-inkmute transition-colors hover:border-evergreen hover:text-evergreen">Restaurar</button>}
-        {!cancelled && <button onClick={() => onStatus(b.id, "cancelada")} className="rounded-full border-2 border-coral/40 px-3.5 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">Cancelar</button>}
+        {b.status === "pendiente" && !claimPending && <button onClick={() => onStatus(b.id, "confirmada")} className="btn-press rounded-full bg-evergreen px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-pine">Confirmar</button>}
+        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "atendida")} className="btn-press rounded-full bg-fern px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-evergreen">Atendida ✓</button>}
+        {(b.status === "atendida" || b.status === "cancelada") && <button onClick={() => onStatus(b.id, "pendiente")} className="btn-press rounded-full border-2 border-ink/15 px-3.5 py-2 text-xs font-bold text-inkmute transition-colors hover:border-evergreen hover:text-evergreen">Restaurar</button>}
+        {!cancelled && <button onClick={() => onStatus(b.id, "cancelada")} className="btn-press rounded-full border-2 border-coral/40 px-3.5 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">Cancelar</button>}
         <button onClick={() => onDelete(b.id)} aria-label="Eliminar reserva" className="flex h-8 w-8 items-center justify-center rounded-full text-ink/35 transition-colors hover:bg-coral/10 hover:text-coral"><IconTrash className="h-4 w-4" /></button>
       </span>
     </div>

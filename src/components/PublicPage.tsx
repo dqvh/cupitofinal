@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { usePublicPage, useStore, fmtLong, fmtMoney, isPaid, THEMES, dateKey, type BizData } from "../lib/store";
 import PublicBooking from "./PublicBooking";
-import { Reveal, LogoMark, IconCheck, IconClock, IconCalendar, IconBag, IconStar, IconWhatsApp, IconChat, IconChevron, IconBell } from "./kit";
+import { Reveal, LogoMark, IconCheck, IconClock, IconCalendar, IconBag, IconStar, IconWhatsApp, IconChat, IconChevron, IconBell, CopyButton } from "./kit";
 
 /* Página pública de reservas: cupito.app/{slug} — la ve cualquier cliente */
 export default function PublicPage({ slug }: { slug: string }) {
@@ -84,6 +84,12 @@ export default function PublicPage({ slug }: { slug: string }) {
                 📍 Cómo llegar
               </a>
             )}
+            <CopyButton
+              text={typeof window !== "undefined" ? window.location.href : `https://cupito.app/#/b/${user.slug}`}
+              label="Compartir link"
+              copiedLabel="¡Link copiado!"
+              className="border-2 border-white/30 !bg-white/10 !text-white hover:!bg-white/25 px-5 py-2.5 font-display text-sm font-bold"
+            />
           </div>
         </div>
       </section>

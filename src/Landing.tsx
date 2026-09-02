@@ -34,6 +34,7 @@ export default function Landing() {
         <Hero />
         <Problem />
         <Solution />
+        <RoiCalculator />
         <Features />
         <Testimonials />
         <Pricing />
@@ -589,6 +590,127 @@ function Solution() {
               </div>
             </Reveal>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ============ CALCULADORA INTERACTIVA ROI ============ */
+function RoiCalculator() {
+  const [weeklyBookings, setWeeklyBookings] = useState(35);
+  const [ticketPrice, setTicketPrice] = useState(15000);
+
+  const monthlyBookings = weeklyBookings * 4.2;
+  const savedHoursMonth = Math.round((monthlyBookings * 7) / 60);
+  const noShowsAvoided = Math.round(monthlyBookings * 0.15);
+  const recoveredMoney = noShowsAvoided * ticketPrice;
+
+  return (
+    <section className="relative overflow-hidden bg-pine py-20 text-paper">
+      <div className="gridlines absolute inset-0 opacity-20" aria-hidden="true" />
+      <div className="relative mx-auto max-w-5xl px-5 sm:px-8">
+        <Reveal className="text-center">
+          <p className="inline-flex items-center gap-2 rounded-full border border-lime/30 bg-lime/10 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-lime">
+            Calculadora interactiva
+          </p>
+          <h2 className="mt-4 font-display text-[clamp(2rem,4vw,3.2rem)] font-extrabold leading-tight">
+            ¿Cuánto tiempo y dinero te <span className="text-lime">ahorrás</span> por mes?
+          </h2>
+          <p className="mt-3 text-paper/70">
+            Ajustá los números a la realidad de tu negocio y mirá el impacto directo.
+          </p>
+        </Reveal>
+
+        <div className="mt-12 grid items-center gap-8 rounded-3xl border-2 border-lime/20 bg-evergreen/90 p-6 sm:p-10 lg:grid-cols-2">
+          {/* Sliders */}
+          <div className="space-y-6">
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="font-display text-sm font-bold text-paper/90">
+                  Turnos que atendés por semana
+                </label>
+                <span className="font-display text-lg font-extrabold text-lime">
+                  {weeklyBookings} turnos
+                </span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="120"
+                step="5"
+                value={weeklyBookings}
+                onChange={(e) => setWeeklyBookings(Number(e.target.value))}
+                className="h-2.5 w-full cursor-pointer appearance-none rounded-full bg-paper/20 accent-lime"
+              />
+              <div className="flex justify-between text-[11px] text-paper/50 mt-1">
+                <span>10 turnos</span>
+                <span>60 turnos</span>
+                <span>120 turnos</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="font-display text-sm font-bold text-paper/90">
+                  Precio promedio de tu servicio
+                </label>
+                <span className="font-display text-lg font-extrabold text-lime">
+                  ${ticketPrice.toLocaleString("es-AR")}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="5000"
+                max="50000"
+                step="2500"
+                value={ticketPrice}
+                onChange={(e) => setTicketPrice(Number(e.target.value))}
+                className="h-2.5 w-full cursor-pointer appearance-none rounded-full bg-paper/20 accent-lime"
+              />
+              <div className="flex justify-between text-[11px] text-paper/50 mt-1">
+                <span>$5.000</span>
+                <span>$25.000</span>
+                <span>$50.000</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-paper/60 leading-relaxed border-t border-paper/10 pt-4">
+              * Basado en un promedio de 7 minutos de coordinación por turno vía WhatsApp y una tasa del 15% de ausencias reducidas mediante seña previa.
+            </p>
+          </div>
+
+          {/* Metric cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="rounded-2xl border border-lime/30 bg-lime/10 p-5">
+              <span className="block text-xs font-bold uppercase tracking-wider text-lime">Tiempo recuperado</span>
+              <p className="mt-1 font-display text-3xl font-extrabold text-paper sm:text-4xl">
+                ≈ {savedHoursMonth} horas <span className="text-base text-paper/60 font-sans">/ mes</span>
+              </p>
+              <p className="mt-1 text-xs text-paper/70">
+                Es casi <strong>{Math.round(savedHoursMonth / 8)} días enteros de trabajo</strong> que dejás de gastar pegado al celular respondiendo mensajes.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-coral/30 bg-coral/10 p-5">
+              <span className="block text-xs font-bold uppercase tracking-wider text-coral">Dinero asegurado en señas</span>
+              <p className="mt-1 font-display text-3xl font-extrabold text-paper sm:text-4xl">
+                +${recoveredMoney.toLocaleString("es-AR")} <span className="text-base text-paper/60 font-sans">/ mes</span>
+              </p>
+              <p className="mt-1 text-xs text-paper/70">
+                Turnos cobrados por adelantado que antes se perdían por ausencias sin aviso.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 text-center">
+          <a
+            href="#precios"
+            className="btn-press inline-flex items-center gap-2 rounded-full bg-lime px-7 py-3.5 font-display text-base font-bold text-ink hover:bg-limedeep shadow-lg"
+          >
+            Empezá a ahorrar tiempo hoy →
+          </a>
         </div>
       </div>
     </section>

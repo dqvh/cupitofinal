@@ -126,6 +126,132 @@ export const IconMoon = ({ className }: IconProps) => (
     <path d="M20 14.5A8.5 8.5 0 119.5 4a7 7 0 0010.5 10.5z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" fill="none" />
   </svg>
 );
+export const IconSun = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" fill="none" />
+    <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+export const IconSearch = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" fill="none" />
+    <path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+export const IconCopy = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+  </svg>
+);
+export const IconFilter = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <path d="M3 4h18l-7 8.5V19l-4 2v-8.5L3 4z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+  </svg>
+);
+
+/* ---------- botón para copiar texto con feedback visual ---------- */
+export function CopyButton({ text, label = "Copiar link", copiedLabel = "¡Copiado!", className = "" }: { text: string; label?: string; copiedLabel?: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback si no hay permisos de portapapeles
+      const input = document.createElement("input");
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className={`btn-press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
+        copied
+          ? "bg-emerald-600 text-white shadow-sm"
+          : "bg-white/80 text-ink hover:bg-white hover:shadow-sm"
+      } ${className}`}
+      title="Copiar al portapapeles"
+    >
+      {copied ? <IconCheck className="h-3.5 w-3.5" /> : <IconCopy className="h-3.5 w-3.5 text-ink/70" />}
+      <span>{copied ? copiedLabel : label}</span>
+    </button>
+  );
+}
+
+/* ---------- badge pill estilizado ---------- */
+export function Badge({
+  children,
+  variant = "neutral",
+  size = "md",
+  className = "",
+}: {
+  children: ReactNode;
+  variant?: "success" | "warning" | "danger" | "info" | "neutral" | "lime";
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const variantStyles = {
+    success: "bg-emerald-50 text-emerald-800 border-emerald-200",
+    warning: "bg-amber-50 text-amber-900 border-amber-200",
+    danger: "bg-rose-50 text-rose-800 border-rose-200",
+    info: "bg-sky-50 text-sky-800 border-sky-200",
+    neutral: "bg-ink/5 text-ink/70 border-ink/10",
+    lime: "bg-lime text-ink border-limedeep/60",
+  };
+  const sizeStyles = {
+    sm: "px-2 py-0.5 text-[10px]",
+    md: "px-2.5 py-1 text-xs",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border font-bold uppercase tracking-wider ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/* ---------- confeti ligero de celebración ---------- */
+export function ConfettiBurst() {
+  const particles = [
+    { color: "#cdf463", x: -40, y: -50, delay: 0 },
+    { color: "#ff7a59", x: 40, y: -45, delay: 50 },
+    { color: "#1e5c49", x: -60, y: -20, delay: 80 },
+    { color: "#93e6c3", x: 60, y: -25, delay: 120 },
+    { color: "#ffd166", x: -25, y: -70, delay: 60 },
+    { color: "#06d6a0", x: 25, y: -65, delay: 100 },
+  ];
+
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" aria-hidden="true">
+      {particles.map((p, i) => (
+        <span
+          key={i}
+          className="absolute h-2.5 w-2.5 rounded-full pop-in"
+          style={{
+            backgroundColor: p.color,
+            transform: `translate(${p.x}px, ${p.y}px)`,
+            animationDuration: "0.6s",
+            animationDelay: `${p.delay}ms`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 /* ---------- scroll reveal ---------- */
 export function Reveal({ children, className = "", delay = 0, style }: { children: ReactNode; className?: string; delay?: number; style?: CSSProperties }) {

@@ -134,10 +134,52 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ---------- sombras duras ---------- */
+/* ---------- sombras duras y suaves ---------- */
 .shadow-block { box-shadow: 10px 12px 0 rgba(205, 244, 99, 0.28); }
 .shadow-block-coral { box-shadow: 8px 10px 0 rgba(255, 122, 89, 0.25); }
 .shadow-block-ink { box-shadow: 10px 12px 0 rgba(12, 36, 28, 0.12); }
+.shadow-subtle { box-shadow: 0 8px 24px -4px rgba(12, 36, 28, 0.08), 0 2px 6px -1px rgba(12, 36, 28, 0.04); }
+
+/* ---------- glassmorphism & cards ---------- */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+}
+.glass-panel-dark {
+  background: rgba(8, 43, 34, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+}
+
+/* ---------- micro-interacciones táctiles ---------- */
+.btn-press {
+  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.15s ease, filter 0.15s ease;
+}
+.btn-press:active {
+  transform: scale(0.96);
+}
+
+/* ---------- skeleton loading ---------- */
+@keyframes skeletonShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, rgba(12, 36, 28, 0.06) 25%, rgba(12, 36, 28, 0.12) 50%, rgba(12, 36, 28, 0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.8s infinite;
+  border-radius: 8px;
+}
+
+/* ---------- pulse suave ---------- */
+@keyframes pulseSubtle {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.03); opacity: 0.92; }
+}
+.pulse-subtle { animation: pulseSubtle 3s ease-in-out infinite; }
 
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
