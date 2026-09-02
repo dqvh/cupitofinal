@@ -47,6 +47,96 @@ export interface DayHours {
   to2?: string;
 }
 
+export type ThemeId = "evergreen" | "midnight" | "coral" | "rose" | "obsidian" | "ocean";
+
+export interface ColorTheme {
+  id: ThemeId;
+  name: string;
+  headerBg: string; // Tailwind background for header/hero
+  headerText: string;
+  accentText: string;
+  accentBg: string;
+  badgeBg: string;
+  badgeText: string;
+  borderAccent: string;
+  sampleGradient: string;
+}
+
+export const THEMES: Record<ThemeId, ColorTheme> = {
+  evergreen: {
+    id: "evergreen",
+    name: "Verde Bosque & Lima",
+    headerBg: "bg-[#082b22]",
+    headerText: "text-[#fbf9f4]",
+    accentText: "text-[#cdf463]",
+    accentBg: "bg-[#cdf463]",
+    badgeBg: "bg-[#cdf463]",
+    badgeText: "text-[#082b22]",
+    borderAccent: "border-[#cdf463]",
+    sampleGradient: "from-[#082b22] to-[#cdf463]",
+  },
+  midnight: {
+    id: "midnight",
+    name: "Azul Medianoche & Celeste",
+    headerBg: "bg-[#0f172a]",
+    headerText: "text-[#f8fafc]",
+    accentText: "text-[#38bdf8]",
+    accentBg: "bg-[#38bdf8]",
+    badgeBg: "bg-[#38bdf8]",
+    badgeText: "text-[#0f172a]",
+    borderAccent: "border-[#38bdf8]",
+    sampleGradient: "from-[#0f172a] to-[#38bdf8]",
+  },
+  coral: {
+    id: "coral",
+    name: "Sunset Coral & Carbón",
+    headerBg: "bg-[#27171a]",
+    headerText: "text-[#fff5f5]",
+    accentText: "text-[#ff7a59]",
+    accentBg: "bg-[#ff7a59]",
+    badgeBg: "bg-[#ff7a59]",
+    badgeText: "text-white",
+    borderAccent: "border-[#ff7a59]",
+    sampleGradient: "from-[#27171a] to-[#ff7a59]",
+  },
+  rose: {
+    id: "rose",
+    name: "Rosa Estética & Violeta",
+    headerBg: "bg-[#3b0764]",
+    headerText: "text-[#fdf2f8]",
+    accentText: "text-[#f472b6]",
+    accentBg: "bg-[#f472b6]",
+    badgeBg: "bg-[#f472b6]",
+    badgeText: "text-[#3b0764]",
+    borderAccent: "border-[#f472b6]",
+    sampleGradient: "from-[#3b0764] to-[#f472b6]",
+  },
+  obsidian: {
+    id: "obsidian",
+    name: "Obsidiana & Oro",
+    headerBg: "bg-[#18181b]",
+    headerText: "text-[#fafaf9]",
+    accentText: "text-[#fbbf24]",
+    accentBg: "bg-[#fbbf24]",
+    badgeBg: "bg-[#fbbf24]",
+    badgeText: "text-[#18181b]",
+    borderAccent: "border-[#fbbf24]",
+    sampleGradient: "from-[#18181b] to-[#fbbf24]",
+  },
+  ocean: {
+    id: "ocean",
+    name: "Océano Calmo & Esmeralda",
+    headerBg: "bg-[#064e3b]",
+    headerText: "text-[#ecfdf5]",
+    accentText: "text-[#34d399]",
+    accentBg: "bg-[#34d399]",
+    badgeBg: "bg-[#34d399]",
+    badgeText: "text-[#064e3b]",
+    borderAccent: "border-[#34d399]",
+    sampleGradient: "from-[#064e3b] to-[#34d399]",
+  },
+};
+
 export interface BizSettings {
   depositEnabled: boolean;
   depositPct: number;
@@ -60,6 +150,7 @@ export interface BizSettings {
   transferCBU: string;
   transferHolder: string;
   setupDismissed: boolean;
+  theme?: ThemeId;
 }
 
 export interface BizData {
@@ -73,6 +164,14 @@ export interface BizData {
   settings: BizSettings;
 }
 
+export interface UserSubscription {
+  billing: "mensual" | "anual";
+  activeSince: number;
+  nextRenewal: number;
+  autoRenew: boolean;
+  status: "activa" | "cancelada";
+}
+
 export interface User {
   id: string;
   name: string;
@@ -82,6 +181,7 @@ export interface User {
   slug: string;
   plan: Plan;
   createdAt: number;
+  subscription?: UserSubscription;
 }
 
 export const PLAN_META: Record<Plan, { name: string; price: string }> = {
@@ -151,6 +251,16 @@ export function fmtLong(key: string): string {
   const s = new Date(y, m - 1, d).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+export function fmtDateHuman(isoOrDate: string | number | Date | undefined): string {
+  if (!isoOrDate) return "";
+  try {
+    const d = typeof isoOrDate === "string" || typeof isoOrDate === "number" ? new Date(isoOrDate) : isoOrDate;
+    if (isNaN(d.getTime())) return String(isoOrDate);
+    return d.toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" });
+  } catch {
+    return String(isoOrDate);
+  }
+}
 export function fmtMoney(n: number): string {
   return "$" + n.toLocaleString("es-AR");
 }
@@ -203,6 +313,7 @@ export function defaultSettings(): BizSettings {
     transferCBU: "",
     transferHolder: "",
     setupDismissed: false,
+    theme: "evergreen",
   };
 }
 
@@ -304,6 +415,7 @@ function seedDemoExtras(userId: string) {
       transferAlias: "STUDIONAILS.CBU",
       transferCBU: "0110012330001234567890",
       transferHolder: "Carolina Méndez",
+      theme: "evergreen",
     };
     changed = true;
   }
@@ -337,6 +449,7 @@ function normalizeData(p: Partial<BizData>): BizData {
       transferCBU: typeof s.transferCBU === "string" ? s.transferCBU : "",
       transferHolder: typeof s.transferHolder === "string" ? s.transferHolder : "",
       setupDismissed: typeof s.setupDismissed === "boolean" ? s.setupDismissed : false,
+      theme: (s.theme && THEMES[s.theme as ThemeId] ? s.theme : "evergreen") as ThemeId,
     },
   };
 }
@@ -404,6 +517,8 @@ interface StoreApi {
   removeProduct(id: string): void;
   updateSettings(patch: Partial<BizSettings>): void;
   setPlan(plan: Plan): void;
+  cancelSubscription(): void;
+  resumeSubscription(): void;
   addReview(r: Omit<Review, "id">): void;
   addCoupon(c: { code: string; pct: number }): string | null;
   updateCoupon(id: string, patch: Partial<Omit<Coupon, "id">>): void;
@@ -586,7 +701,56 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   setPlan(plan) {
     if (!sessionUserId) return;
-    saveUsers(users.map((u) => (u.id === sessionUserId ? { ...u, plan } : u)));
+    saveUsers(users.map((u) => {
+      if (u.id !== sessionUserId) return u;
+      return {
+        ...u,
+        plan,
+        subscription: plan === "semilla" ? undefined : {
+          billing: "mensual",
+          activeSince: Date.now(),
+          nextRenewal: Date.now() + 30 * 24 * 3600 * 1000,
+          autoRenew: true,
+          status: "activa",
+        },
+      };
+    }));
+    emit();
+  },
+  cancelSubscription() {
+    if (!sessionUserId) return;
+    saveUsers(users.map((u) => {
+      if (u.id !== sessionUserId) return u;
+      const sub = u.subscription || {
+        billing: "mensual",
+        activeSince: u.createdAt,
+        nextRenewal: Date.now() + 30 * 24 * 3600 * 1000,
+        autoRenew: true,
+        status: "activa",
+      };
+      return {
+        ...u,
+        subscription: { ...sub, autoRenew: false, status: "cancelada" },
+      };
+    }));
+    emit();
+  },
+  resumeSubscription() {
+    if (!sessionUserId) return;
+    saveUsers(users.map((u) => {
+      if (u.id !== sessionUserId) return u;
+      const sub = u.subscription || {
+        billing: "mensual",
+        activeSince: u.createdAt,
+        nextRenewal: Date.now() + 30 * 24 * 3600 * 1000,
+        autoRenew: false,
+        status: "cancelada",
+      };
+      return {
+        ...u,
+        subscription: { ...sub, autoRenew: true, status: "activa" },
+      };
+    }));
     emit();
   },
   addReview(r) {

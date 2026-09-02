@@ -1,4 +1,4 @@
-import { usePublicPage, fmtLong, fmtMoney, isPaid, type BizData } from "../lib/store";
+import { usePublicPage, fmtLong, fmtMoney, isPaid, THEMES, type BizData } from "../lib/store";
 import PublicBooking from "./PublicBooking";
 import { Reveal, LogoMark, IconCheck, IconClock, IconCalendar, IconBag, IconStar, IconWhatsApp, IconChat, IconChevron, IconBell } from "./kit";
 
@@ -21,68 +21,65 @@ export default function PublicPage({ slug }: { slug: string }) {
   const { user } = page;
   const biz: BizData = page.data;
   const s = biz.settings;
+  const theme = THEMES[s.theme ?? "evergreen"] ?? THEMES.evergreen;
   const paid = isPaid(user);
   const avg = biz.reviews.length > 0 ? biz.reviews.reduce((a, r) => a + r.rating, 0) / biz.reviews.length : null;
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="border-b-2 border-ink/10 bg-evergreen text-paper">
+      <header className={`border-b-2 border-ink/10 ${theme.headerBg} ${theme.headerText}`}>
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3.5 sm:px-8">
           <a href="#/" className="group flex items-center gap-2">
-            <LogoMark className="h-8 w-8 text-fern transition-transform duration-300 group-hover:-rotate-6" />
-            <span className="font-display text-xl font-bold tracking-tight">cupito<span className="text-lime">.</span></span>
+            <LogoMark className={`h-8 w-8 ${theme.accentText} transition-transform duration-300 group-hover:-rotate-6`} />
+            <span className="font-display text-xl font-bold tracking-tight">cupito<span className={theme.accentText}>.</span></span>
           </a>
-          <span className="rounded-full bg-paper/10 px-3.5 py-1.5 text-xs font-bold text-paper/80">cupito.app/{user.slug}</span>
+          <span className="rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-bold opacity-80">cupito.app/{user.slug}</span>
         </div>
       </header>
 
       {/* hero del negocio */}
-      <section className="relative overflow-hidden bg-evergreen pb-16 pt-12 text-paper">
-        <div className="gridlines absolute inset-0" aria-hidden="true" />
-        <div className="absolute -top-24 left-1/2 h-72 w-[560px] -translate-x-1/2 rounded-full opacity-20 blur-3xl" style={{ background: "radial-gradient(circle, #cdf463 0%, transparent 65%)" }} aria-hidden="true" />
+      <section className={`relative overflow-hidden ${theme.headerBg} pb-16 pt-12 ${theme.headerText}`}>
+        <div className="gridlines absolute inset-0 opacity-40" aria-hidden="true" />
+        <div className="absolute -top-24 left-1/2 h-72 w-[560px] -translate-x-1/2 rounded-full opacity-20 blur-3xl bg-gradient-to-tr" style={{ background: "radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 65%)" }} aria-hidden="true" />
         <div className="relative mx-auto max-w-3xl px-5 text-center sm:px-8">
           <h1 className="mx-auto max-w-2xl font-display text-[clamp(2.4rem,6vw,4rem)] font-extrabold leading-[1.02] tracking-[-0.02em]">{user.business}</h1>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-paper/70">
+          <p className="mx-auto mt-4 max-w-xl text-lg opacity-80">
             {s.description || "Reservá tu cupito en menos de un minuto. Sin llamadas, sin apps, sin esperar respuesta."}
           </p>
 
           {avg !== null && (
-            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-lime/30 bg-lime/10 px-4 py-1.5">
-              <span className="flex gap-0.5 text-lime">
+            <div className={`mt-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5`}>
+              <span className={`flex gap-0.5 ${theme.accentText}`}>
                 {[...Array(5)].map((_, i) => <IconStar key={i} className={`h-3.5 w-3.5 ${i < Math.round(avg) ? "" : "opacity-25"}`} />)}
               </span>
-              <span className="text-sm font-bold text-paper">{avg.toFixed(1)} · {biz.reviews.length} reseña{biz.reviews.length === 1 ? "" : "s"}</span>
+              <span className="text-sm font-bold">{avg.toFixed(1)} · {biz.reviews.length} reseña{biz.reviews.length === 1 ? "" : "s"}</span>
             </div>
           )}
 
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-paper/60">
-            <span className="inline-flex items-center gap-2"><IconClock className="h-4 w-4 text-lime" /> Abierto 24/7 para reservar</span>
-            <span className="inline-flex items-center gap-2"><IconCalendar className="h-4 w-4 text-lime" /> Confirmación al instante</span>
-            {s.address && <span className="inline-flex items-center gap-2"><IconCalendar className="h-4 w-4 text-lime" /> {s.address}</span>}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm opacity-70">
+            <span className="inline-flex items-center gap-2"><IconClock className={`h-4 w-4 ${theme.accentText}`} /> Abierto 24/7 para reservar</span>
+            <span className="inline-flex items-center gap-2"><IconCalendar className={`h-4 w-4 ${theme.accentText}`} /> Confirmación al instante</span>
+            {s.address && <span className="inline-flex items-center gap-2"><IconCalendar className={`h-4 w-4 ${theme.accentText}`} /> {s.address}</span>}
           </div>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
             {s.whatsapp && (
               <a href={`https://wa.me/54${s.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-lime px-5 py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">
+                className={`inline-flex items-center gap-2 rounded-full ${theme.accentBg} ${theme.badgeText} px-5 py-2.5 font-display text-sm font-bold transition-all hover:-translate-y-0.5 shadow-sm`}>
                 <IconWhatsApp className="h-4 w-4" /> Escribinos por WhatsApp
               </a>
             )}
             {s.instagram && (
               <a href={`https://instagram.com/${s.instagram}`} target="_blank" rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border-2 border-paper/25 px-5 py-2.5 font-display text-sm font-bold text-paper transition-all hover:border-lime hover:text-lime">
+                className={`inline-flex items-center gap-2 rounded-full border-2 border-white/30 px-5 py-2.5 font-display text-sm font-bold transition-all hover:border-white hover:${theme.accentText}`}>
                 <IconChat className="h-4 w-4" /> @{s.instagram}
               </a>
             )}
             {s.mapsUrl && (
               <>
                 <a href={s.mapsUrl} target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full border-2 border-paper/25 px-5 py-2.5 font-display text-sm font-bold text-paper transition-all hover:border-lime hover:text-lime">
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-white/30 px-5 py-2.5 font-display text-sm font-bold transition-all hover:border-white">
                   📍 Cómo llegar
-                </a>
-                <a href={s.mapsUrl} target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full border-2 border-paper/25 px-5 py-2.5 font-display text-sm font-bold text-paper transition-all hover:border-lime hover:text-lime">
-                  <IconStar className="h-4 w-4 text-lime" /> Dejanos tu opinión en Google
                 </a>
               </>
             )}

@@ -8,10 +8,13 @@ import {
   dayOfWeek,
   fmtMoney,
   fmtLong,
+  fmtDateHuman,
   isPaid,
   PLAN_META,
   PRO_LIMIT,
   defaultHours,
+  THEMES,
+  type ThemeId,
   type Booking,
   type BookingStatus,
   type Service,
@@ -555,7 +558,7 @@ export default function Dashboard() {
 
             {/* ============ SUSCRIPCIÓN ============ */}
             {view === "suscripcion" && (
-              <SubscriptionView current={user.plan} onSelect={(p) => setCheckoutPlan(p)} />
+              <SubscriptionView current={user.plan} user={user} onSelect={(p) => setCheckoutPlan(p)} />
             )}
 
             {/* ============ AJUSTES ============ */}
@@ -1153,9 +1156,10 @@ function ServiceModal({ service, onClose }: { service?: Service; onClose: () => 
 
 /* ============ ESTADÍSTICAS ============ */
 function StatsView({ db }: { db: BizData }) {
-  const { addReview, toast } = useStore();
+  const { user, addReview, toast } = useStore();
   const today = new Date();
   const monthKey = dateKey(today).slice(0, 7);
+  const isEscala = user?.plan === "escala";
 
   const active = (b: Booking) => b.status !== "cancelada";
   const monthBookings = db.bookings.filter((b) => b.date.startsWith(monthKey) && active(b));
@@ -1172,11 +1176,39 @@ function StatsView({ db }: { db: BizData }) {
   const maxDay = Math.max(1, ...perDay.map((d) => d.count));
 
   const svcCount = db.services
-    .map((s) => ({ s, count: db.bookings.filter((b) => b.serviceId === s.id && active(b)).length }))
+    .map((s) => ({
+      s,
+      count: db.bookings.filter((b) => b.serviceId === s.id && active(b)).length,
+      revenue: db.bookings.filter((b) => b.serviceId === s.id && active(b)).length * s.price,
+    }))
     .filter((x) => x.count > 0)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 4);
+    .sort((a, b) => b.count - a.count);
   const maxSvc = Math.max(1, ...svcCount.map((x) => x.count));
+
+  // Clientes recurrentes
+  const clientMap: Record<string, number> = {};
+  db.bookings.forEach((b) => {
+    if (active(b)) {
+      const key = b.phone.replace(/\D/g, "") || b.client.toLowerCase();
+      clientMap[key] = (clientMap[key] || 0) + 1;
+    }
+  });
+  const totalUniqueClients = Object.keys(clientMap).length;
+  const repeatClients = Object.values(clientMap).filter((c) => c > 1).length;
+  const retentionRate = totalUniqueClients > 0 ? Math.round((repeatClients / totalUniqueClients) * 100) : 0;
+
+  // Franjas horarias más concurridas
+  const timeSlots = [
+    { label: "Mañana (09:00 - 12:00)", filter: (t: string) => t >= "09:00" && t < "12:00" },
+    { label: "Mediodía (12:00 - 15:00)", filter: (t: string) => t >= "12:00" && t < "15:00" },
+    { label: "Tarde (15:00 - 18:00)", filter: (t: string) => t >= "15:00" && t < "18:00" },
+    { label: "Vespertino (18:00 - 21:00)", filter: (t: string) => t >= "18:00" && t <= "21:00" },
+  ];
+  const peakHours = timeSlots.map((ts) => ({
+    label: ts.label,
+    count: db.bookings.filter((b) => active(b) && ts.filter(b.time)).length,
+  }));
+  const maxPeak = Math.max(1, ...peakHours.map((p) => p.count));
 
   const reviews = db.reviews;
   const avgRating = reviews.length ? reviews.reduce((a, r) => a + r.rating, 0) / reviews.length : 0;
@@ -1192,8 +1224,51 @@ function StatsView({ db }: { db: BizData }) {
     { label: "Ticket promedio", value: avgTicket, prefix: "$", icon: <IconChart className="h-5 w-5" />, accent: false, delta: null as number | null },
   ];
 
+  const exportCSV = () => {
+    const headers = ["Fecha", "Hora", "Cliente", "Telefono", "Servicio", "Precio", "Estado", "Origen"];
+    const rows = db.bookings.map((b) => {
+      const svc = db.services.find((s) => s.id === b.serviceId);
+      return [
+        b.date,
+        b.time,
+        `"${b.client.replace(/"/g, '""')}"`,
+        `"${b.phone}"`,
+        `"${(svc?.name ?? "Servicio").replace(/"/g, '""')}"`,
+        svc?.price ?? 0,
+        b.status,
+        b.source,
+      ].join(",");
+    });
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `reporte-reservas-${user?.slug || "cupito"}-${dateKey(new Date())}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast("Reporte CSV descargado correctamente ✓");
+  };
+
   return (
     <div className="pop-in mt-8 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="font-display text-2xl font-extrabold text-ink">Estadísticas y Rendimiento</h2>
+          <p className="text-sm text-inkmute">Métricas en tiempo real sobre tu facturación, turnos y clientes.</p>
+        </div>
+        {isEscala && (
+          <button
+            onClick={exportCSV}
+            className="inline-flex items-center gap-2 rounded-full border-2 border-evergreen bg-evergreen/10 px-5 py-2.5 font-display text-xs font-bold text-evergreen transition-all hover:bg-evergreen hover:text-lime"
+          >
+            📊 Exportar reservas a Excel (CSV)
+          </button>
+        )}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((k) => (
           <div key={k.label} className={`card card-hover p-5 ${k.accent ? "!border-limedeep/70 !bg-lime/25" : ""}`}>
@@ -1258,7 +1333,7 @@ function StatsView({ db }: { db: BizData }) {
           <h3 className="font-display text-lg font-extrabold text-ink">Servicios más pedidos</h3>
           <div className="mt-5 space-y-4">
             {svcCount.length === 0 && <p className="text-sm text-inkmute">Todavía no hay reservas para graficar.</p>}
-            {svcCount.map((x, i) => (
+            {svcCount.slice(0, 4).map((x, i) => (
               <div key={x.s.id}>
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-display font-bold text-ink">{i + 1}. {x.s.name}</span>
@@ -1272,6 +1347,75 @@ function StatsView({ db }: { db: BizData }) {
           </div>
         </Reveal>
       </div>
+
+      {/* ============ SECCIÓN AVANZADA (PLAN ESCALA O PREVIEW) ============ */}
+      {isEscala ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Reveal className="card p-6 border-2 border-evergreen/30 bg-card">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-display text-lg font-extrabold text-ink">⏰ Horarios más concurridos</h3>
+              <span className="rounded-full bg-evergreen/10 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-evergreen">Escala</span>
+            </div>
+            <p className="mt-1 text-xs text-inkmute">Distribución de turnos por franja del día para optimizar tu personal.</p>
+            <div className="mt-5 space-y-3">
+              {peakHours.map((ph) => (
+                <div key={ph.label}>
+                  <div className="flex justify-between text-xs font-bold text-ink">
+                    <span>{ph.label}</span>
+                    <span className="text-fern">{ph.count} turnos</span>
+                  </div>
+                  <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-ink/8">
+                    <div className="h-full rounded-full bg-limedeep transition-all" style={{ width: `${(ph.count / maxPeak) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Reveal>
+
+          <Reveal delay={100} className="card p-6 border-2 border-evergreen/30 bg-card">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-display text-lg font-extrabold text-ink">👥 Fidelidad y Retención</h3>
+              <span className="rounded-full bg-evergreen/10 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-evergreen">Escala</span>
+            </div>
+            <p className="mt-1 text-xs text-inkmute">Porcentaje de clientes que volvieron a reservar en tu negocio.</p>
+            <div className="mt-6 flex items-center gap-6">
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-4 border-limedeep bg-lime/20 font-display text-2xl font-extrabold text-ink">
+                {retentionRate}%
+              </div>
+              <div className="space-y-1 text-xs text-inkmute">
+                <p><strong className="text-ink">{totalUniqueClients}</strong> clientes únicos registrados.</p>
+                <p><strong className="text-fern">{repeatClients}</strong> clientes reservaron 2 o más veces.</p>
+                <p className="text-[11px] text-ink/60">Tener más de 40% de retención indica alta satisfacción de tus clientes.</p>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      ) : (
+        <Reveal delay={120}>
+          <div className="card relative overflow-hidden border-2 border-evergreen/25 bg-gradient-to-br from-card via-lime/5 to-card p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-5">
+              <div className="max-w-xl">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-evergreen px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-lime">
+                  ⭐ Exclusivo Plan Escala
+                </span>
+                <h3 className="mt-2 font-display text-xl font-extrabold text-ink">
+                  Estadísticas avanzadas, retención y exportación
+                </h3>
+                <p className="mt-1 text-xs sm:text-sm text-inkmute leading-relaxed">
+                  Conocé las franjas horarias pico, descubrí qué porcentaje de clientes vuelve a reservar, analizá la facturación por cada servicio y descargá reportes completos a Excel / CSV.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => requestCheckout("escala")}
+                className="inline-flex items-center gap-2 rounded-full bg-evergreen px-6 py-3 font-display text-xs font-bold text-lime shadow-block-ink transition-all hover:-translate-y-0.5 hover:bg-pine"
+              >
+                Desbloquear con Plan Escala <IconArrow className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </Reveal>
+      )}
 
       <Reveal delay={150} className="card p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1504,16 +1648,90 @@ function CouponModal({ onClose }: { onClose: () => void }) {
 }
 
 /* ============ SUSCRIPCIÓN ============ */
-function SubscriptionView({ current, onSelect }: { current: Plan; onSelect: (p: Plan) => void }) {
+function SubscriptionView({ current, user, onSelect }: { current: Plan; user: NonNullable<ReturnType<typeof useStore>["user"]>; onSelect: (p: Plan) => void }) {
+  const { cancelSubscription, resumeSubscription, toast } = useStore();
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const sub = user.subscription;
+
   const plans: Plan[] = ["semilla", "crece", "escala"];
   const desc: Record<Plan, string[]> = {
     semilla: ["1 profesional", "25 reservas al mes", "Link web propio", "Recordatorios por email", "Horarios configurables"],
     crece: ["Reservas ilimitadas", "Hasta 3 profesionales", "Cobro de seña (Mercado Pago / Transferencia)", "Tienda de productos y cupones", "Horarios por día con corte"],
-    escala: ["Todo lo de Crece", "Profesionales y equipos ilimitados", "Lista de espera avanzada", "Estadísticas completas", "Soporte prioritario"],
+    escala: ["Todo lo de Crece", "Profesionales y equipos ilimitados", "Estadísticas avanzadas y exportación", "Paletas de colores exclusivas", "Soporte prioritario"],
   };
+
+  const nextDateStr = fmtDateHuman(sub?.nextRenewal || new Date(Date.now() + 30 * 86400000).toISOString());
 
   return (
     <div className="pop-in mt-8 space-y-6">
+      {/* Detalle de la suscripción actual si es de pago */}
+      {current !== "semilla" && (
+        <div className="card border-2 border-evergreen/30 bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-display text-xl font-extrabold text-ink">
+                  Suscripción {PLAN_META[current].name}
+                </span>
+                <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${sub?.status === "cancelada" ? "bg-coral/15 text-coral" : "bg-evergreen text-lime"}`}>
+                  {sub?.status === "cancelada" ? "Cancelada (Vence pronto)" : "Activa con Mercado Pago ✓"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs sm:text-sm text-inkmute">
+                {sub?.status === "cancelada"
+                  ? `Tu suscripción no se renovará. Vas a mantener los beneficios de ${PLAN_META[current].name} hasta el ${nextDateStr}.`
+                  : `Próxima renovación automática: ${nextDateStr} · ${PLAN_META[current].price}`}
+              </p>
+            </div>
+
+            <div>
+              {sub?.status === "cancelada" ? (
+                <button
+                  type="button"
+                  onClick={() => { resumeSubscription(); toast("Suscripción automática reactivada ✓"); }}
+                  className="rounded-full bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime shadow-sm transition-all hover:bg-pine"
+                >
+                  Reactivar renovación automática
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancel(true)}
+                  className="rounded-full border-2 border-coral/40 px-5 py-2.5 font-display text-xs font-bold text-coral transition-all hover:bg-coral hover:text-white"
+                >
+                  Cancelar suscripción
+                </button>
+              )}
+            </div>
+          </div>
+
+          {confirmCancel && (
+            <div className="pop-in mt-5 rounded-2xl border-2 border-coral/30 bg-coral/5 p-4">
+              <p className="font-display text-sm font-extrabold text-ink">¿Querés cancelar la renovación automática?</p>
+              <p className="mt-1 text-xs text-inkmute leading-relaxed">
+                Vas a poder seguir usando todas las funciones de tu plan <strong>{PLAN_META[current].name}</strong> hasta el <strong>{nextDateStr}</strong>. Llegada esa fecha, tu cuenta pasará automáticamente al plan gratuito Semilla.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => { cancelSubscription(); setConfirmCancel(false); toast("Suscripción cancelada. Estará activa hasta el vencimiento.", "warn"); }}
+                  className="rounded-full bg-coral px-4 py-2 font-display text-xs font-bold text-white transition-all hover:bg-coral/90"
+                >
+                  Sí, cancelar renovación
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancel(false)}
+                  className="rounded-full border-2 border-ink/20 px-4 py-2 font-display text-xs font-bold text-ink transition-colors hover:bg-ink/5"
+                >
+                  Mantener suscripción
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-5 md:grid-cols-3">
         {plans.map((p) => {
           const active = current === p;
@@ -1574,7 +1792,7 @@ function SubscriptionView({ current, onSelect }: { current: Plan; onSelect: (p: 
       <div className="rounded-2xl border-2 border-ink/10 bg-card p-5 text-sm text-inkmute">
         <p className="font-bold text-ink">💳 ¿Cómo funciona el cambio de plan?</p>
         <p className="mt-1 text-xs sm:text-sm leading-relaxed">
-          Al tocar en <strong>Pagar con Mercado Pago</strong>, se abre la ventana de suscripción donde podés elegir pago mensual o anual con descuento. Una vez autorizado el pago en Mercado Pago, tu cuenta se actualiza automáticamente con todos los beneficios. Podés cancelar o cambiar tu plan en cualquier momento.
+          Al tocar en <strong>Pagar con Mercado Pago</strong>, se abre la ventana de suscripción donde podés elegir pago mensual o anual con descuento. Una vez autorizado el pago en Mercado Pago, tu cuenta se actualiza automáticamente con todos los beneficios. Podés cancelar la suscripción automática en cualquier momento desde esta misma pestaña.
         </p>
       </div>
     </div>
@@ -1613,11 +1831,13 @@ function LockedFeature({ icon, title, desc, onUpgrade }: { icon: ReactNode; titl
   );
 }
 
-/* ============ AJUSTES (con pestañas) ============ */
+/* ============ AJUSTES ============ */
 type SettingsTab = "negocio" | "pagina" | "pagos" | "horarios" | "plan" | "cuenta";
 
 function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: NonNullable<ReturnType<typeof useStore>["user"]>; settings: BizSettings; onSaveProfile: (b: string, n: string) => void; onSelectPlan: (p: Plan) => void }) {
   const [tab, setTab] = useState<SettingsTab>("negocio");
+  const { updateSettings, cancelSubscription, resumeSubscription } = useStore();
+
   const tabs: { id: SettingsTab; label: string; icon: ReactNode }[] = [
     { id: "negocio", label: "Negocio", icon: <IconWallet className="h-4 w-4" /> },
     { id: "pagina", label: "Mi página", icon: <IconLink className="h-4 w-4" /> },
@@ -1641,10 +1861,18 @@ function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: N
 
       <div className="pop-in mt-6 max-w-2xl" key={tab}>
         {tab === "negocio" && <BusinessTab user={user} onSave={onSaveProfile} />}
-        {tab === "pagina" && <PersonalizationCard settings={settings} onSave={(patch) => useStore().updateSettings(patch)} />}
-        {tab === "pagos" && <DepositCard settings={settings} paid={isPaid(user)} onChange={(patch) => useStore().updateSettings(patch)} />}
-        {tab === "horarios" && <HoursCard hours={settings.hours} onChange={(hours) => useStore().updateSettings({ hours })} />}
-        {tab === "plan" && <PlanTab current={user.plan} onSelect={onSelectPlan} />}
+        {tab === "pagina" && <PersonalizationCard settings={settings} onSave={(patch) => updateSettings(patch)} />}
+        {tab === "pagos" && <DepositCard settings={settings} paid={isPaid(user)} onChange={(patch) => updateSettings(patch)} />}
+        {tab === "horarios" && <HoursCard hours={settings.hours} onChange={(hours) => updateSettings({ hours })} />}
+        {tab === "plan" && (
+          <PlanTab
+            current={user.plan}
+            user={user}
+            onSelect={onSelectPlan}
+            onCancelSub={cancelSubscription}
+            onResumeSub={resumeSubscription}
+          />
+        )}
         {tab === "cuenta" && <AccountTab />}
       </div>
     </div>
@@ -1654,6 +1882,12 @@ function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: N
 function BusinessTab({ user, onSave }: { user: { business: string; name: string; email: string }; onSave: (b: string, n: string) => void }) {
   const [business, setBusiness] = useState(user.business);
   const [name, setName] = useState(user.name);
+
+  useEffect(() => {
+    setBusiness(user.business);
+    setName(user.name);
+  }, [user]);
+
   return (
     <div className="card p-6">
       <h3 className="font-display text-lg font-extrabold text-ink">Tu negocio</h3>
@@ -1678,9 +1912,40 @@ function BusinessTab({ user, onSave }: { user: { business: string; name: string;
 
 function PersonalizationCard({ settings, onSave }: { settings: BizSettings; onSave: (patch: Partial<BizSettings>) => void }) {
   const { toast } = useStore();
-  const [f, setF] = useState({ description: settings.description, address: settings.address, whatsapp: settings.whatsapp, instagram: settings.instagram, mapsUrl: settings.mapsUrl });
+  const [f, setF] = useState({
+    description: settings.description || "",
+    address: settings.address || "",
+    whatsapp: settings.whatsapp || "",
+    instagram: settings.instagram || "",
+    mapsUrl: settings.mapsUrl || "",
+    theme: (settings.theme || "evergreen") as ThemeId,
+  });
+
+  useEffect(() => {
+    setF({
+      description: settings.description || "",
+      address: settings.address || "",
+      whatsapp: settings.whatsapp || "",
+      instagram: settings.instagram || "",
+      mapsUrl: settings.mapsUrl || "",
+      theme: (settings.theme || "evergreen") as ThemeId,
+    });
+  }, [settings]);
+
+  const handleSave = () => {
+    onSave({
+      description: f.description.trim(),
+      address: f.address.trim(),
+      whatsapp: f.whatsapp.replace(/\D/g, ""),
+      instagram: f.instagram.trim().replace(/^@/, ""),
+      mapsUrl: f.mapsUrl.trim(),
+      theme: f.theme,
+    });
+    toast("Tu página se actualizó ✓");
+  };
+
   return (
-    <div className="card p-6">
+    <div className="card p-6 space-y-6">
       <div className="flex items-center gap-3">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime/30 text-fern"><IconSpark className="h-5 w-5" /></span>
         <div>
@@ -1688,7 +1953,38 @@ function PersonalizationCard({ settings, onSave }: { settings: BizSettings; onSa
           <p className="text-sm text-inkmute">Esto es lo que ven tus clientes en tu link público.</p>
         </div>
       </div>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+
+      {/* Paleta de colores */}
+      <div>
+        <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-inkmute">
+          🎨 Paleta de colores de tu página
+        </label>
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+          {(Object.keys(THEMES) as ThemeId[]).map((tid) => {
+            const th = THEMES[tid];
+            const isSel = f.theme === tid;
+            return (
+              <button
+                key={tid}
+                type="button"
+                onClick={() => setF({ ...f, theme: tid })}
+                className={`flex items-center gap-2.5 rounded-xl border-2 p-3 text-left transition-all ${
+                  isSel ? "!border-evergreen !bg-evergreen/5 shadow-sm" : "border-ink/10 bg-white hover:border-ink/30"
+                }`}
+              >
+                <span className={`h-6 w-6 shrink-0 rounded-full bg-gradient-to-tr ${th.sampleGradient} shadow-inner flex items-center justify-center`}>
+                  {isSel && <span className="h-2 w-2 rounded-full bg-white shadow" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-bold text-ink">{th.name}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Descripción</label>
           <textarea className="field min-h-20 resize-none" placeholder="Ej: Manicura y nail art con productos de primera." value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
@@ -1710,15 +2006,32 @@ function PersonalizationCard({ settings, onSave }: { settings: BizSettings; onSa
           <input className="field" placeholder="https://maps.app.goo.gl/..." value={f.mapsUrl} onChange={(e) => setF({ ...f, mapsUrl: e.target.value })} />
         </div>
       </div>
-      <button onClick={() => { onSave({ description: f.description.trim(), address: f.address.trim(), whatsapp: f.whatsapp.replace(/\D/g, ""), instagram: f.instagram.trim().replace(/^@/, ""), mapsUrl: f.mapsUrl.trim() }); toast("Tu página se actualizó ✓"); }}
-        className="mt-5 rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Guardar mi página</button>
+      <button
+        type="button"
+        onClick={handleSave}
+        className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine"
+      >
+        Guardar mi página
+      </button>
     </div>
   );
 }
 
 function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid: boolean; onChange: (patch: Partial<BizSettings>) => void }) {
   const { toast } = useStore();
-  const [f, setF] = useState({ alias: settings.transferAlias, cbu: settings.transferCBU, holder: settings.transferHolder });
+  const [f, setF] = useState({
+    alias: settings.transferAlias || "",
+    cbu: settings.transferCBU || "",
+    holder: settings.transferHolder || "",
+  });
+
+  useEffect(() => {
+    setF({
+      alias: settings.transferAlias || "",
+      cbu: settings.transferCBU || "",
+      holder: settings.transferHolder || "",
+    });
+  }, [settings]);
 
   if (!paid) {
     return (
@@ -1727,6 +2040,15 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
         onUpgrade={() => requestCheckout("crece")} />
     );
   }
+
+  const handleSave = () => {
+    onChange({
+      transferAlias: f.alias.trim(),
+      transferCBU: f.cbu.replace(/\D/g, ""),
+      transferHolder: f.holder.trim(),
+    });
+    toast("Datos de cobro guardados ✓");
+  };
 
   return (
     <div className="card p-6">
@@ -1758,8 +2080,13 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
               <input className="field" placeholder="Nombre y apellido" value={f.holder} onChange={(e) => setF({ ...f, holder: e.target.value })} />
             </div>
           </div>
-          <button onClick={() => { onChange({ transferAlias: f.alias.trim(), transferCBU: f.cbu.replace(/\D/g, ""), transferHolder: f.holder.trim() }); toast("Datos de transferencia guardados ✓"); }}
-            className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Guardar datos de cobro</button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine"
+          >
+            Guardar datos de cobro
+          </button>
         </div>
       )}
     </div>
@@ -1767,9 +2094,11 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
 }
 
 function HoursCard({ hours, onChange }: { hours: DayHours[]; onChange: (hours: DayHours[]) => void }) {
+  const { toast } = useStore();
   const set = (i: number, patch: Partial<DayHours>) => {
     const next = hours.map((h, idx) => (idx === i ? { ...h, ...patch } : h));
     onChange(next);
+    toast("Horarios actualizados ✓");
   };
   const order = [1, 2, 3, 4, 5, 6, 0];
   return (
@@ -1792,7 +2121,7 @@ function HoursCard({ hours, onChange }: { hours: DayHours[]; onChange: (hours: D
                   </span>
                 )}
                 {h.open && !h.from2 && (
-                  <button onClick={() => set(i, { from2: "15:00", to2: "20:00" })} className="ml-auto rounded-full border-2 border-coral/40 px-3 py-1.5 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">+ Corte al mediodía</button>
+                  <button type="button" onClick={() => set(i, { from2: "15:00", to2: "20:00" })} className="ml-auto rounded-full border-2 border-coral/40 px-3 py-1.5 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">+ Corte al mediodía</button>
                 )}
               </div>
               {h.open && h.from2 && (
@@ -1801,7 +2130,7 @@ function HoursCard({ hours, onChange }: { hours: DayHours[]; onChange: (hours: D
                   <input type="time" className="field !w-auto" value={h.from2} onChange={(e) => set(i, { from2: e.target.value })} />
                   <span className="text-inkmute">a</span>
                   <input type="time" className="field !w-auto" value={h.to2 ?? "20:00"} onChange={(e) => set(i, { to2: e.target.value })} />
-                  <button onClick={() => set(i, { from2: undefined, to2: undefined })} className="ml-auto text-xs font-bold text-inkmute underline-offset-4 hover:text-coral hover:underline">Quitar corte</button>
+                  <button type="button" onClick={() => set(i, { from2: undefined, to2: undefined })} className="ml-auto text-xs font-bold text-inkmute underline-offset-4 hover:text-coral hover:underline">Quitar corte</button>
                 </div>
               )}
             </div>
@@ -1812,8 +2141,24 @@ function HoursCard({ hours, onChange }: { hours: DayHours[]; onChange: (hours: D
   );
 }
 
-function PlanTab({ current, onSelect }: { current: Plan; onSelect: (p: Plan) => void }) {
+function PlanTab({
+  current,
+  user,
+  onSelect,
+  onCancelSub,
+  onResumeSub,
+}: {
+  current: Plan;
+  user: NonNullable<ReturnType<typeof useStore>["user"]>;
+  onSelect: (p: Plan) => void;
+  onCancelSub: () => void;
+  onResumeSub: () => void;
+}) {
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const sub = user.subscription;
   const plans: Plan[] = ["semilla", "crece", "escala"];
+  const nextDateStr = fmtDateHuman(sub?.nextRenewal || new Date(Date.now() + 30 * 86400000).toISOString());
+
   return (
     <div className="card p-6 space-y-5">
       <div>
@@ -1822,6 +2167,62 @@ function PlanTab({ current, onSelect }: { current: Plan; onSelect: (p: Plan) => 
           Tu plan determina la cantidad de profesionales, reservas simultáneas y herramientas de cobro de seña.
         </p>
       </div>
+
+      {current !== "semilla" && (
+        <div className="rounded-2xl border-2 border-evergreen/30 bg-evergreen/5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-display text-sm font-extrabold text-ink">
+                Suscripción {PLAN_META[current].name} {sub?.status === "cancelada" ? "(Cancelada)" : "(Activa)"}
+              </p>
+              <p className="text-xs text-inkmute">
+                {sub?.status === "cancelada"
+                  ? `Vence el ${nextDateStr}. No se realizarán más cobros.`
+                  : `Próxima renovación automática: ${nextDateStr}`}
+              </p>
+            </div>
+            {sub?.status === "cancelada" ? (
+              <button
+                type="button"
+                onClick={onResumeSub}
+                className="rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime hover:bg-pine"
+              >
+                Reactivar renovación
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmCancel(true)}
+                className="rounded-full border-2 border-coral/40 px-4 py-2 font-display text-xs font-bold text-coral hover:bg-coral hover:text-white"
+              >
+                Cancelar renovación
+              </button>
+            )}
+          </div>
+
+          {confirmCancel && (
+            <div className="pop-in mt-3 border-t border-coral/20 pt-3">
+              <p className="text-xs text-ink font-bold">¿Confirmás cancelar la renovación automática?</p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { onCancelSub(); setConfirmCancel(false); }}
+                  className="rounded-full bg-coral px-3.5 py-1.5 font-display text-xs font-bold text-white hover:bg-coral/90"
+                >
+                  Sí, cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancel(false)}
+                  className="rounded-full border border-ink/20 px-3.5 py-1.5 font-display text-xs font-bold text-ink hover:bg-ink/5"
+                >
+                  Volver
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-3">
         {plans.map((p) => {
@@ -1888,7 +2289,7 @@ function AccountTab() {
 
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <button onClick={() => onChange(!on)} aria-label={label} aria-pressed={on}
+    <button type="button" onClick={() => onChange(!on)} aria-label={label} aria-pressed={on}
       className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ${on ? "bg-fern" : "bg-ink/20"}`}>
       <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all duration-200 ${on ? "left-6" : "left-1"}`} />
     </button>

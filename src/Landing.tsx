@@ -782,8 +782,13 @@ const PLANS: PlanDef[] = [
   {
     id: "escala", name: "Escala", tagline: "Para estudios, clínicas y equipos grandes.", monthly: 23000, yearly: 18400, cta: "Suscribirme", highlight: false,
     features: [
-      { t: "Todo lo de Crece" }, { t: "Profesionales ilimitados" }, { t: "Estadísticas avanzadas" },
-      { t: "Recordatorios automáticos por WhatsApp", soon: true }, { t: "Múltiples sucursales", soon: true }, { t: "API + integraciones (Zapier)", soon: true }, { t: "Soporte prioritario en español" },
+      { t: "Todo lo de Crece" },
+      { t: "Profesionales y equipos ilimitados" },
+      { t: "Estadísticas avanzadas con análisis de retención e ingresos" },
+      { t: "Exportación de datos y reportes a Excel / CSV" },
+      { t: "Paletas de colores exclusivas para tu página" },
+      { t: "Lista de espera inteligente con aviso prioritario" },
+      { t: "Soporte prioritario" },
     ],
   },
 ];
@@ -806,16 +811,31 @@ function Pricing() {
             </h2>
             <p className="mt-5 text-lg text-inkmute">Un solo turno recuperado al mes paga todo el plan. Precios en pesos argentinos, pensados para negocios de barrio.</p>
           </Reveal>
-          <Reveal delay={120} className="mt-8">
-            <div className="relative inline-flex rounded-full border-2 border-ink/15 bg-card p-1.5">
-              <span className={`absolute bottom-1.5 top-1.5 w-[calc(50%-6px)] rounded-full bg-evergreen transition-transform duration-300 ease-out ${billing === "mensual" ? "translate-x-0" : "translate-x-full"}`} style={{ left: 6 }} aria-hidden="true" />
-              {(["mensual", "anual"] as const).map((b) => (
-                <button key={b} onClick={() => setBilling(b)}
-                  className={`relative z-10 flex items-center gap-2 rounded-full px-6 py-2.5 font-display text-sm font-bold uppercase tracking-wider transition-colors duration-300 sm:px-8 ${billing === b ? "text-lime" : "text-ink/50 hover:text-ink"}`}>
-                  {b}
-                  {b === "anual" && <span className={`rounded-full px-2 py-0.5 text-[10px] ${billing === "anual" ? "bg-lime text-ink" : "bg-lime/60 text-ink"}`}>2 meses gratis</span>}
-                </button>
-              ))}
+          <Reveal delay={120} className="mt-8 flex justify-center">
+            <div className="inline-flex items-center rounded-full border-2 border-ink/15 bg-card p-1.5 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setBilling("mensual")}
+                className={`rounded-full px-6 py-2.5 font-display text-sm font-bold uppercase tracking-wider transition-all duration-200 sm:px-8 ${
+                  billing === "mensual" ? "bg-evergreen text-lime shadow-sm" : "text-ink/50 hover:text-ink"
+                }`}
+              >
+                Mensual
+              </button>
+              <button
+                type="button"
+                onClick={() => setBilling("anual")}
+                className={`flex items-center gap-2 rounded-full px-6 py-2.5 font-display text-sm font-bold uppercase tracking-wider transition-all duration-200 sm:px-8 ${
+                  billing === "anual" ? "bg-evergreen text-lime shadow-sm" : "text-ink/50 hover:text-ink"
+                }`}
+              >
+                <span>Anual</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold transition-colors ${
+                  billing === "anual" ? "bg-lime text-ink" : "bg-fern/15 text-fern"
+                }`}>
+                  2 meses gratis
+                </span>
+              </button>
             </div>
           </Reveal>
         </div>
