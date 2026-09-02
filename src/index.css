@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-evergreen: #082b22;
+  --color-pine: #0d3a2e;
+  --color-moss: #16493a;
+  --color-fern: #1e5c49;
+  --color-ink: #0c241c;
+  --color-inkmute: #49604f;
+  --color-paper: #eef1e6;
+  --color-card: #f9faf3;
+  --color-lime: #cdf463;
+  --color-limedeep: #b7e33f;
+  --color-coral: #ff7a59;
+  --color-mint: #93e6c3;
+}
+
+html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--color-lime); color: var(--color-ink); }
+
+/* ---------- texturas ---------- */
+.noise {
+  position: fixed; inset: 0; z-index: 70; pointer-events: none; opacity: 0.05; mix-blend-mode: overlay;
+  background-image: url("image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='0.7'/></svg>");
+}
+.gridlines {
+  background-image: linear-gradient(to right, rgba(205,244,99,0.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(205,244,99,0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.gridlines-dark {
+  background-image: linear-gradient(to right, rgba(12,36,28,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(12,36,28,0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.app-bg { background: linear-gradient(180deg, #edf0e4 0%, #e9edde 100%); }
+
+/* ---------- cards ---------- */
+.card {
+  background: var(--color-card);
+  border: 1.5px solid rgba(12, 36, 28, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(12, 36, 28, 0.04);
+}
+.card-hover { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 30px rgba(12, 36, 28, 0.1);
+  border-color: rgba(30, 92, 73, 0.35);
+}
+
+/* ---------- reveal on scroll ---------- */
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.2, 0.65, 0.2, 1); }
+.reveal.is-in { opacity: 1; transform: none; }
+
+/* ---------- hero line-mask ---------- */
+.mask-line { display: block; overflow: hidden; padding-bottom: 0.08em; }
+.mask-line > span { display: block; transform: translateY(118%); animation: rise 0.9s cubic-bezier(0.19, 0.7, 0.16, 1) forwards; }
+@keyframes rise { to { transform: translateY(0); } }
+
+.squiggle path { stroke-dasharray: 220; stroke-dashoffset: 220; animation: draw 0.7s 0.9s ease forwards; }
+.check-draw { stroke-dasharray: 60; stroke-dashoffset: 60; animation: draw 0.55s 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.circle-draw { stroke-dasharray: 320; stroke-dashoffset: 320; animation: draw 0.8s ease forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+/* ---------- marquee ---------- */
+.marquee-track { display: flex; width: max-content; animation: marquee 30s linear infinite; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+@keyframes marquee { to { transform: translateX(-50%); } }
+
+/* ---------- vida ---------- */
+@keyframes floaty {
+  0%, 100% { transform: translateY(0) rotate(var(--tilt, 0deg)); }
+  50% { transform: translateY(-9px) rotate(var(--tilt, 0deg)); }
+}
+.floaty { animation: floaty 5s ease-in-out infinite; }
+
+@keyframes blinkdot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.72); }
+}
+.blinkdot { animation: blinkdot 1.6s ease-in-out infinite; }
+
+@keyframes popin { from { opacity: 0; transform: translateY(14px) scale(0.97); } to { opacity: 1; transform: none; } }
+.pop-in { animation: popin 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes toastin { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+.toast-in { animation: toastin 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes pricepop {
+  0% { opacity: 0; transform: translateY(8px) scale(0.85); }
+  60% { transform: translateY(-2px) scale(1.04); }
+  100% { opacity: 1; transform: none; }
+}
+.price-pop { animation: pricepop 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.anim-bar-v { transform-origin: bottom; animation: growY 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.anim-bar-h { transform-origin: left; animation: growX 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+/* ---------- formularios ---------- */
+.field {
+  width: 100%;
+  border-radius: 12px;
+  border: 2px solid rgba(12, 36, 28, 0.14);
+  background: rgba(255, 255, 255, 0.65);
+  padding: 10px 14px;
+  font-size: 15px;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.field:focus { border-color: var(--color-fern); background: #fff; box-shadow: 4px 4px 0 rgba(205, 244, 99, 0.5); }
+.field::placeholder { color: rgba(73, 96, 79, 0.55); }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+.shake { animation: shake 0.45s ease both; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ---------- sombras duras ---------- */
+.shadow-block { box-shadow: 10px 12px 0 rgba(205, 244, 99, 0.28); }
+.shadow-block-coral { box-shadow: 8px 10px 0 rgba(255, 122, 89, 0.25); }
+.shadow-block-ink { box-shadow: 10px 12px 0 rgba(12, 36, 28, 0.12); }
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .mask-line > span { transform: none; animation: none; }
+  .reveal { opacity: 1; transform: none; }
+  .squiggle path, .check-draw, .circle-draw { stroke-dashoffset: 0; animation: none; }
+  .marquee-track { animation: none; }
+}

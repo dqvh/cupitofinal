@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cupito — Reservas online para tu negocio</title>
+    <meta name="description" content="Cupito: reservas online con seña, recordatorios automáticos y página propia para barberías, estética, clínicas y más." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>html{background:#eef1e6}</style>
+    <script>
+      /* watchdog: si la app no arranca (p. ej. chunks viejos tras un redeploy), recarga sola una vez */
+      window.__cupito_booted = false;
+      window.addEventListener("error", function (e) {
+        if (e && e.message && /Loading chunk|Failed to fetch dynamically imported/i.test(e.message)) {
+          if (!sessionStorage.getItem("cupito_reload_once")) {
+            sessionStorage.setItem("cupito_reload_once", "1");
+            location.reload();
+          }
+        }
+      }, true);
+      setTimeout(function () {
+        if (!window.__cupito_booted) {
+          var r = document.getElementById("root");
+          if (r && r.children.length === 0 && !sessionStorage.getItem("cupito_nap")) {
+            sessionStorage.setItem("cupito_nap", "1");
+            location.reload();
+          } else if (r && r.children.length === 0) {
+            r.innerHTML = '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#eef1e6;font-family:system-ui;padding:24px;text-align:center"><p style="font-size:28px;font-weight:800;color:#0c241c">Cupito no pudo cargar 😴</p><p style="color:#49604f;max-width:380px">El entorno de vista previa recicló la app. Probá recargar sin caché.</p><button onclick="sessionStorage.clear();location.reload()" style="background:#cdf463;border:2px solid #0c241c;border-radius:999px;padding:12px 28px;font-weight:800;font-size:16px;cursor:pointer">Recargar Cupito</button></div>';
+          }
+        }
+      }, 4000);
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
