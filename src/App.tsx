@@ -53,13 +53,39 @@ function ScrollProgress() {
   return <div className="fixed inset-x-0 top-0 z-[95] h-1 bg-lime transition-[width] duration-150" style={{ width: `${p}%` }} aria-hidden="true" />;
 }
 
+export const RESERVED_PATHS = new Set([
+  "",
+  "admin",
+  "central",
+  "auth",
+  "login",
+  "registro",
+  "app",
+  "dashboard",
+  "precios",
+  "problema",
+  "solucion",
+  "faq",
+  "terms",
+  "privacy",
+  "terminos",
+  "privacidad",
+  "api",
+  "assets",
+  "static",
+  "favicon",
+  "robots.txt",
+  "sitemap.xml",
+]);
+
 function parseRoute(): { name: "landing" | "auth" | "app" | "b" | "admin"; query: string; slug?: string } {
   const h = window.location.hash || "";
   const p = window.location.pathname || "/";
 
-  // Usar hash si existe (ej. #/b/slug), o pathname limpio (ej. /b/slug)
+  // Usar hash si existe (ej. #/studio-nails), o pathname limpio (ej. /studio-nails)
   const raw = h.startsWith("#/") ? h.slice(2) : p.startsWith("/") ? p.slice(1) : p;
-  const path = raw.split("?")[0].split("#")[0].toLowerCase();
+  const clean = raw.split("?")[0].split("#")[0].trim();
+  const path = clean.toLowerCase();
   const query = h || window.location.search;
 
   if (path === "admin" || path === "central" || path.startsWith("admin/") || path.startsWith("central/")) {
@@ -71,9 +97,17 @@ function parseRoute(): { name: "landing" | "auth" | "app" | "b" | "admin"; query
   if (path === "app" || path === "dashboard" || path.startsWith("app/")) {
     return { name: "app", query };
   }
+
+  // Compatibilidad hacia atrás: si tiene el prefijo legacy /b/slug
   if (path.startsWith("b/")) {
-    const slug = raw.slice(2).split("?")[0].split("#")[0].trim();
+    const slug = clean.slice(2).trim();
     return { name: "b", query, slug };
+  }
+
+  // Si es un slug de negocio directo en la raíz (ej: cupito.app/studio-nails)
+  const rootSlug = clean.split("/")[0].trim();
+  if (rootSlug && !RESERVED_PATHS.has(rootSlug.toLowerCase())) {
+    return { name: "b", query, slug: rootSlug };
   }
 
   return { name: "landing", query };

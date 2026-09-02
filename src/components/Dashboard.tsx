@@ -287,7 +287,7 @@ export default function Dashboard() {
                 <LogoMark className="h-8 w-8 text-fern" />
                 <span className="font-display text-xl font-bold">cupito<span className="text-lime">.</span></span>
               </a>
-              <a href={`#/b/${user.slug}`} className="rounded-full bg-lime px-4 py-1.5 font-display text-xs font-bold text-ink">Mi página</a>
+              <a href={`/${user.slug}`} className="rounded-full bg-lime px-4 py-1.5 font-display text-xs font-bold text-ink">Mi página</a>
             </div>
             <div className="no-scrollbar flex gap-2 overflow-x-auto px-5 pb-3">
               {SECTIONS.flatMap((s) => s.items).map((n) => (
@@ -306,7 +306,7 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-ink/35">Panel · {sectionOf(view)}</p>
                   <CopyButton
-                    text={`https://cupito.app/b/${user.slug}`}
+                    text={`https://cupito.app/${user.slug}`}
                     label="Copiar mi link"
                     copiedLabel="¡Link copiado!"
                     className="border border-ink/15 shadow-none hover:border-ink/40"
@@ -317,7 +317,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={`#/b/${user.slug}`}
+                  href={`/${user.slug}`}
                   target="_blank"
                   rel="noreferrer"
                   className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border-2 border-ink/15 bg-white/70 px-4 py-2 font-display text-xs font-bold text-ink hover:bg-white hover:border-ink/40"

@@ -320,8 +320,18 @@ export function fmtDateHuman(isoOrDate: string | number | Date | undefined): str
 export function fmtMoney(n: number): string {
   return "$" + n.toLocaleString("es-AR");
 }
+export const RESERVED_SLUGS = new Set([
+  "admin", "central", "auth", "login", "registro", "app", "dashboard",
+  "precios", "problema", "solucion", "faq", "terms", "privacy", "terminos",
+  "privacidad", "api", "assets", "static", "favicon", "robots", "sitemap"
+]);
+
 export function slugify(s: string): string {
-  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "mi-negocio";
+  const base = s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "mi-negocio";
+  if (RESERVED_SLUGS.has(base)) {
+    return `${base}-negocio`;
+  }
+  return base;
 }
 
 /* Horarios según configuración del día (intervalos 45 min), con corte opcional */

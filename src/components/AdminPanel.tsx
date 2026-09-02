@@ -42,21 +42,57 @@ function Gate({ hasCode }: { hasCode: boolean }) {
   const [shakeKey, setShakeKey] = useState(0);
   const [busy, setBusy] = useState(false);
 
+  const [attempts, setAttempts] = useState(() => {
+    try {
+      return Number(sessionStorage.getItem("cupito_admin_fails") || "0");
+    } catch { return 0; }
+  });
+  const [lockoutUntil, setLockoutUntil] = useState(() => {
+    try {
+      return Number(sessionStorage.getItem("cupito_admin_locked_until") || "0");
+    } catch { return 0; }
+  });
+
+  const isLocked = lockoutUntil > Date.now();
+  const minutesLeft = Math.ceil((lockoutUntil - Date.now()) / (1000 * 60));
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isLocked) {
+      setError(`Acceso bloqueado por seguridad. Esperá ${minutesLeft} minuto${minutesLeft === 1 ? "" : "s"}.`);
+      setShakeKey((k) => k + 1);
+      return;
+    }
     setBusy(true);
     setError(null);
+
     if (hasCode) {
       const ok = await adminLogin(code);
       setBusy(false);
       if (!ok) {
-        setError("Llave incorrecta. Probá de nuevo.");
+        const nextAttempts = attempts + 1;
+        setAttempts(nextAttempts);
+        try { sessionStorage.setItem("cupito_admin_fails", String(nextAttempts)); } catch {}
+
+        if (nextAttempts >= 5) {
+          const lockTime = Date.now() + 5 * 60 * 1000;
+          setLockoutUntil(lockTime);
+          try { sessionStorage.setItem("cupito_admin_locked_until", String(lockTime)); } catch {}
+          setError("Demasiados intentos incorrectos. El acceso está bloqueado por 5 minutos.");
+        } else {
+          setError(`Llave incorrecta. Te quedan ${5 - nextAttempts} intento${5 - nextAttempts === 1 ? "" : "s"}.`);
+        }
         setShakeKey((k) => k + 1);
         return;
       }
+      try {
+        sessionStorage.removeItem("cupito_admin_fails");
+        sessionStorage.removeItem("cupito_admin_locked_until");
+      } catch {}
       toast("Bienvenido a la Central 🔑");
       return;
     }
+
     if (code.length < 4) {
       setBusy(false);
       setError("La llave necesita al menos 4 caracteres.");
@@ -86,10 +122,27 @@ function Gate({ hasCode }: { hasCode: boolean }) {
             <p className="text-xs text-paper/60">Panel Super-Admin</p>
           </div>
         </div>
+
+        {isLocked && (
+          <div className="mt-4 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-center text-xs font-semibold text-rose-300">
+            🛡️ Acceso suspendido temporalmente por seguridad. Podrás intentar de nuevo en {minutesLeft} minuto{minutesLeft === 1 ? "" : "s"}.
+          </div>
+        )}
+
         <form onSubmit={submit} className="mt-6 space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-paper/60">{hasCode ? "Llave maestra de acceso" : "Creá tu llave maestra (mín. 4 caracteres)"}</label>
-            <input type="password" className="field !bg-evergreen/80 !text-paper !border-paper/20" value={code} onChange={(e) => setCode(e.target.value)} autoFocus placeholder="••••••••" />
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-paper/60">
+              {hasCode ? "Llave maestra de acceso" : "Creá tu llave maestra (mín. 4 caracteres)"}
+            </label>
+            <input
+              type="password"
+              disabled={isLocked}
+              className="field !bg-evergreen/80 !text-paper !border-paper/20 disabled:opacity-40"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoFocus
+              placeholder="••••••••"
+            />
           </div>
           {!hasCode && (
             <div>
@@ -98,12 +151,12 @@ function Gate({ hasCode }: { hasCode: boolean }) {
             </div>
           )}
           {error && <p className="rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-          <button type="submit" disabled={busy} className="btn-press w-full rounded-full bg-lime py-3.5 font-display text-base font-bold text-ink hover:bg-limedeep shadow-lg disabled:opacity-60">
-            {busy ? "Verificando…" : hasCode ? "Entrar a la Central →" : "Crear llave y entrar →"}
+          <button type="submit" disabled={busy || isLocked} className="btn-press w-full rounded-full bg-lime py-3.5 font-display text-base font-bold text-ink hover:bg-limedeep shadow-lg disabled:opacity-60">
+            {busy ? "Verificando…" : isLocked ? "Bloqueado temporalmente" : hasCode ? "Entrar a la Central →" : "Crear llave y entrar →"}
           </button>
         </form>
         <p className="mt-5 text-center text-[11px] leading-snug text-paper/50">
-          Acceso exclusivo para el administrador de la plataforma. La sesión se cierra al cerrar la pestaña.
+          Protegido con SHA-256 y bloqueo automático anti-ataques. La sesión se destruye al cerrar la pestaña.
         </p>
         <a href="#/" className="mt-4 block text-center text-xs font-bold text-paper/60 underline-offset-4 transition-colors hover:text-lime hover:underline">← Volver al sitio principal</a>
       </div>
@@ -325,14 +378,14 @@ function Console() {
                           <span className="inline-flex items-center gap-1 text-inkmute">
                             <span>Link público:</span>
                             <a
-                              href={`#/b/${u.slug}`}
+                              href={`/${u.slug}`}
                               target="_blank"
                               rel="noreferrer"
                               className="font-bold text-fern hover:underline"
                             >
-                              cupito.app/b/{u.slug}
+                              cupito.app/{u.slug}
                             </a>
-                            <CopyButton text={`https://cupito.app/b/${u.slug}`} label="" copiedLabel="✓" className="!p-1 !bg-transparent" />
+                            <CopyButton text={`https://cupito.app/${u.slug}`} label="" copiedLabel="✓" className="!p-1 !bg-transparent" />
                           </span>
 
                           {sub?.nextRenewal && (
@@ -369,7 +422,7 @@ function Console() {
                       </button>
 
                       <a
-                        href={`#/b/${u.slug}`}
+                        href={`/${u.slug}`}
                         target="_blank"
                         rel="noreferrer"
                         className="btn-press rounded-full border-2 border-ink/15 px-3.5 py-2 font-display text-xs font-bold text-ink hover:border-evergreen hover:text-evergreen"
@@ -526,7 +579,7 @@ function EditBusinessModal({ user, onClose }: { user: User; onClose: () => void 
           <div>
             <label className="mb-1 block text-xs font-bold text-inkmute uppercase">Slug de la Página (URL)</label>
             <div className="flex items-center gap-1">
-              <span className="text-xs text-inkmute font-mono">cupito.app/b/</span>
+              <span className="text-xs text-inkmute font-mono">cupito.app/</span>
               <input className="field !py-2 font-mono text-xs" value={slug} onChange={(e) => setSlug(e.target.value)} required />
             </div>
           </div>

@@ -85,7 +85,7 @@ export default function PublicPage({ slug }: { slug: string }) {
               </a>
             )}
             <CopyButton
-              text={typeof window !== "undefined" ? window.location.href.replace("/#/", "/") : `https://cupito.app/b/${user.slug}`}
+              text={typeof window !== "undefined" ? window.location.origin + "/" + user.slug : `https://cupito.app/${user.slug}`}
               label="Compartir link"
               copiedLabel="¡Link copiado!"
               className="border-2 border-white/30 !bg-white/10 !text-white hover:!bg-white/25 px-5 py-2.5 font-display text-sm font-bold"
