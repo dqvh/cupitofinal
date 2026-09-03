@@ -9,6 +9,7 @@ import {
 } from "./kit";
 import { normalizeArgentinaPhone, cleanPhoneDigits, createWhatsAppUrl } from "../lib/phone";
 import { sound } from "../lib/audio";
+import { sendBookingConfirmationEmail } from "../lib/email";
 
 /* ---------- helpers .ics / Google Calendar ---------- */
 function toLocalStamp(dt: Date) {
@@ -252,6 +253,30 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
     setCancelFeedback(null);
     setDone(true);
     sound.playSuccess();
+
+    if (email.trim()) {
+      const gcal = gcalUrl({
+        title: `${service?.name || "Turno"} en ${user.business}`,
+        date: selectedDate,
+        time,
+        duration: service?.duration ?? 30,
+      });
+      sendBookingConfirmationEmail({
+        toEmail: email.trim(),
+        clientName: client.trim(),
+        businessName: user.business,
+        serviceName: service?.name || "Servicio",
+        dateStr: fmtLong(selectedDate),
+        timeStr: time,
+        proName: pro?.name,
+        priceStr: fmtMoney(total),
+        depositStr: depositOn ? fmtMoney(deposit) : undefined,
+        address: settings.address,
+        slug: user.slug,
+        gCalUrl: gcal,
+      }).catch(() => {});
+    }
+
     if (owner === undefined)
       toast(opts.claimTx ? `Nueva reserva de ${client.trim()} — seña pendiente de verificación 💸` : `¡Nueva reserva de ${client.trim()}! Ya está en tu agenda 🎉`);
   };

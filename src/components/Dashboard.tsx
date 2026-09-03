@@ -28,6 +28,7 @@ import {
 } from "../lib/store";
 import { createWhatsAppUrl, formatArgentinaPhone, cleanPhoneDigits } from "../lib/phone";
 import { sound } from "../lib/audio";
+import { sendSubscriptionWelcomeEmail } from "../lib/email";
 import PublicBooking from "./PublicBooking";
 import { PlanCheckout } from "./PlanCheckout";
 import {
@@ -173,6 +174,16 @@ export default function Dashboard() {
         store.setPlan(plan);
         clearPendingCheckout();
         store.toast(`Pago confirmado. Ya estás en el plan ${PLAN_META[plan].name} ✓`);
+        if (user.email) {
+          sendSubscriptionWelcomeEmail({
+            toEmail: user.email,
+            ownerName: user.name,
+            businessName: user.business,
+            planName: PLAN_META[plan].name,
+            planPrice: PLAN_META[plan].price,
+            slug: user.slug,
+          }).catch(() => {});
+        }
       } else if (result.error) {
         store.toast(result.error, "warn");
       } else {

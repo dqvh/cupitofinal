@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PLAN_META, type Plan, useStore } from "../lib/store";
+import { sendSubscriptionWelcomeEmail } from "../lib/email";
 import {
   PLAN_AMOUNTS,
   createMercadoPagoCheckout,
@@ -114,6 +115,16 @@ export function PlanCheckout({
                   onClick={() => {
                     setPlan(plan);
                     toast(`Plan ${PLAN_META[plan].name} activado en modo demo ✓`);
+                    if (user?.email) {
+                      sendSubscriptionWelcomeEmail({
+                        toEmail: user.email,
+                        ownerName: user.name,
+                        businessName: user.business,
+                        planName: PLAN_META[plan].name,
+                        planPrice: PLAN_META[plan].price,
+                        slug: user.slug,
+                      }).catch(() => {});
+                    }
                     onClose();
                   }}
                   className="mt-2 rounded-lg bg-coral/20 px-3 py-1.5 font-bold text-coral transition-colors hover:bg-coral hover:text-white"
