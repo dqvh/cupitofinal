@@ -17,31 +17,52 @@ export interface PhoneValidation {
 export function cleanPhoneDigits(input: string): string {
   let digits = input.replace(/\D/g, "");
 
-  // Si empieza con 549, quitar el 549 inicial para analizar los 10 dígitos locales
+  // 1. Quitar prefijo internacional si lo pegaron (+54 9 o +54)
   if (digits.startsWith("549")) {
     digits = digits.slice(3);
   } else if (digits.startsWith("54")) {
     digits = digits.slice(2);
   }
 
-  // Si empieza con 0 (prefijo interurbano como 011), quitarlo
-  if (digits.startsWith("0")) {
+  // 2. Quitar el 0 inicial (ej: 011 -> 11, 0351 -> 351)
+  while (digits.startsWith("0")) {
     digits = digits.slice(1);
   }
 
-  // Si tiene '15' después del código de área:
-  // Casos comunes: 1115xxxxxxxx (10 dígitos con 15) -> quitar 15
-  if (digits.startsWith("1115") && digits.length >= 10) {
+  // 3. Si pusieron 15 directo (ej: 15 4567 8901 - 10 dígitos arrancando en 15),
+  // se trata de un número de AMBA/CABA donde omitieron el 11:
+  if (digits.startsWith("15") && digits.length === 10) {
+    digits = "11" + digits.slice(2);
+  }
+
+  // 4. Quitar el '15' móvil después del código de área (ej: 11 15 4567 8901)
+  if (digits.startsWith("1115")) {
     digits = "11" + digits.slice(4);
-  } else if (digits.length === 12 && digits.slice(2, 4) === "15") {
-    // ej 11 15 1234 5678 (12 dígitos) -> quitar 15
-    digits = digits.slice(0, 2) + digits.slice(4);
-  } else if (digits.length === 12 && digits.slice(3, 5) === "15") {
-    // ej 351 15 123 4567 (código de área de 3 dígitos)
-    digits = digits.slice(0, 3) + digits.slice(5);
-  } else if (digits.length === 12 && digits.slice(4, 6) === "15") {
-    // ej 2202 15 12 3456 (código de área de 4 dígitos)
-    digits = digits.slice(0, 4) + digits.slice(6);
+  }
+
+  // Códigos de área más comunes de 3 dígitos con 15 (ej: 351 15 456 7890)
+  const area3List = ["351", "341", "223", "261", "381", "299", "387", "342", "379", "370", "383", "385", "388", "264", "266", "291", "280", "294", "296"];
+  for (const a3 of area3List) {
+    if (digits.startsWith(a3 + "15")) {
+      digits = a3 + digits.slice(5);
+      break;
+    }
+  }
+
+  // Limpieza general de 15 si se ingresaron 11 o 12 dígitos
+  if (digits.length >= 11) {
+    if (digits.slice(2, 4) === "15") {
+      digits = digits.slice(0, 2) + digits.slice(4);
+    } else if (digits.slice(3, 5) === "15") {
+      digits = digits.slice(0, 3) + digits.slice(5);
+    } else if (digits.slice(4, 6) === "15") {
+      digits = digits.slice(0, 4) + digits.slice(6);
+    }
+  }
+
+  // Los celulares en Argentina tienen exactamente 10 dígitos
+  if (digits.length > 10) {
+    digits = digits.slice(0, 10);
   }
 
   return digits;
@@ -86,8 +107,21 @@ export function normalizeArgentinaPhone(input: string): PhoneValidation {
       formatted: "",
       waNumber: "",
       waLink: "",
-      hint: "Ingresá tu código de área (ej. 11) y celular sin el 15.",
+      hint: "Ingresá tu código de área (ej. 11) y celular (sin 0 ni 15).",
       badgeType: "empty",
+    };
+  }
+
+  // Alerta si empezó escribiendo 15 directamente
+  if (digits.startsWith("15") && digits.length < 10) {
+    return {
+      isValid: false,
+      cleanDigits: digits,
+      formatted: digits,
+      waNumber: `549${digits}`,
+      waLink: `https://wa.me/549${digits}`,
+      hint: "Ojo: ingresá primero el código de área (ej: 11 para Bs As, 351 para Cba) sin el 15.",
+      badgeType: "warning",
     };
   }
 
@@ -101,7 +135,7 @@ export function normalizeArgentinaPhone(input: string): PhoneValidation {
       formatted,
       waNumber,
       waLink: `https://wa.me/${waNumber}`,
-      hint: "Celular argentino válido ✓",
+      hint: "Celular argentino listo ✓ (sin 0 ni 15)",
       badgeType: "valid",
     };
   }
@@ -114,7 +148,7 @@ export function normalizeArgentinaPhone(input: string): PhoneValidation {
       formatted: formatArgentinaPhone(digits),
       waNumber: `549${digits}`,
       waLink: `https://wa.me/549${digits}`,
-      hint: `Faltan ${remaining} dígito${remaining === 1 ? "" : "s"} (código de área sin 0 y número sin 15)`,
+      hint: `Faltan ${remaining} dígito${remaining === 1 ? "" : "s"} · ej: 11 4567-8901 (sin 0 ni 15)`,
       badgeType: "warning",
     };
   }
@@ -128,7 +162,7 @@ export function normalizeArgentinaPhone(input: string): PhoneValidation {
     formatted,
     waNumber,
     waLink: `https://wa.me/${waNumber}`,
-    hint: "Celular argentino válido ✓",
+    hint: "Celular argentino listo ✓ (sin 0 ni 15)",
     badgeType: "valid",
   };
 }

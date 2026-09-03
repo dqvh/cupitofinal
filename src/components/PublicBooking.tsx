@@ -533,7 +533,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                       className="field !pl-16 font-mono text-sm font-semibold"
                       type="tel"
                       inputMode="numeric"
-                      placeholder="11 5555-0000 *"
+                      placeholder="11 5555-0000 (sin 0 ni 15) *"
                       value={wlPhoneVal.formatted || wlPhone}
                       onChange={(e) => setWlPhone(cleanPhoneDigits(e.target.value))}
                     />
@@ -560,7 +560,9 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                 </div>
                 <div>
                   <div className="mb-1 flex items-center justify-between">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-inkmute">Teléfono celular *</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-inkmute">
+                      Teléfono celular <span className="normal-case font-semibold text-ink/60">(sin 0 ni 15)</span> *
+                    </label>
                     {phoneVal.badgeType === "valid" ? (
                       <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
                         WhatsApp listo ✓
@@ -588,7 +590,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                     />
                   </div>
                   <p className="mt-1 text-[11px] text-inkmute">
-                    {phoneVal.badgeType === "empty" ? "Ingresá tu código de área (ej. 11) y celular sin el 15." : phoneVal.hint}
+                    {phoneVal.badgeType === "empty" ? "Ingresá tu código de área sin 0 (ej. 11 para Bs As, 351 para Córdoba) y celular sin 15." : phoneVal.hint}
                   </p>
                 </div>
                 <div>
@@ -1090,7 +1092,7 @@ function LookupBookingsModal({
         <div className="mt-4 space-y-4">
           <div>
             <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">
-              Ingresá tu número de celular
+              Ingresá tu número de celular <span className="normal-case font-semibold text-ink/60">(sin 0 ni 15)</span>
             </label>
             <div className="relative">
               <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-ink/40">
@@ -1107,7 +1109,7 @@ function LookupBookingsModal({
               />
             </div>
             <p className="mt-1 text-[11px] text-inkmute">
-              {phoneVal.cleanDigits.length < 6 ? "Ingresá al menos tu número para buscar tus turnos." : phoneVal.hint}
+              {phoneVal.cleanDigits.length < 6 ? "Ingresá al menos tu número (ej: 11 4567-8901) para buscar tus turnos." : phoneVal.hint}
             </p>
           </div>
 
