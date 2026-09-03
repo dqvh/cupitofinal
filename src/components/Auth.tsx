@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { PLAN_META, type Plan, useStore } from "../lib/store";
+import { PLAN_META, type Plan, useStore, getSessionUser } from "../lib/store";
 import { LogoMark, IconCheck, IconArrow, LegalModal, TERMS_DOC, PRIVACY_DOC } from "./kit";
 import { sendWelcomeAccountEmail } from "../lib/email";
 
@@ -45,13 +45,18 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const info = (msg: string) => { setNotice(msg); setError(null); setShakeKey((k) => k + 1); setLoading(false); };
 
   const goApp = (plan: Plan) => {
+    // En login los campos pueden estar vacíos: usar la sesión como respaldo
+    const su = getSessionUser();
+    const oName = name.trim() || su?.name || "";
+    const oBiz = business.trim() || su?.business || "";
+    const oEmail = email.trim() || su?.email || "";
     toast("¡Cuenta creada! Tu agenda ya está lista 🎉");
-    if (email.trim()) {
-      const slug = business.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "mi-negocio";
+    if (oEmail) {
+      const slug = oBiz.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || su?.slug || "mi-negocio";
       sendWelcomeAccountEmail({
-        toEmail: email.trim(),
-        ownerName: name,
-        businessName: business,
+        toEmail: oEmail,
+        ownerName: oName,
+        businessName: oBiz,
         slug,
       }).catch(() => {});
     }
@@ -74,8 +79,12 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
         setLoading(false);
         return fail("No pudimos conectar con la nube. Revisá tu internet e intentá de nuevo.");
       }
-      toast("¡Listo! Tu negocio quedó vinculado ✓");
-      window.location.hash = "#/app?onboarding=1";
+      setNeedsSetup(false);
+      if (presetPlan) {
+        goApp(presetPlan);
+        return;
+      }
+      setPickPlan(true);
     }, 400);
   };
 
@@ -101,6 +110,15 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
           : await loginAsync(email, password);
         setLoading(false);
         if (err) {
+          // Cuenta recién creada entrando por primera vez: mostrar elegir plan
+          if (err === "FRESH_PICK_PLAN") {
+            if (presetPlan) {
+              goApp(presetPlan);
+              return;
+            }
+            setPickPlan(true);
+            return;
+          }
           // Login válido pero sin negocio (confirmó el email en otro lado):
           // pedir los datos para crearlo en vez de trabarse.
           if (err === "NEEDS_SETUP") {
@@ -118,6 +136,10 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
       }
       if (mode === "login") {
         toast("¡Hola de nuevo!");
+        if (presetPlan) {
+          goApp(presetPlan);
+          return;
+        }
         window.location.hash = "#/app";
         return;
       }

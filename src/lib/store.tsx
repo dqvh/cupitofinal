@@ -724,6 +724,26 @@ function saveSession(id: string | null) {
   if (id) safeSet(SESSION_KEY, id); else safeRemove(SESSION_KEY);
 }
 
+/* Marca que la cuenta se creó recién (para mostrarle elegir plan al entrar).
+   Se consume una sola vez. */
+const FRESH_KEY = "cupito_fresh_signup";
+export function setFreshSignup() {
+  safeSet(FRESH_KEY, "1");
+}
+export function consumeFreshSignup(): boolean {
+  try {
+    if (safeGet(FRESH_KEY) === "1") {
+      safeRemove(FRESH_KEY);
+      return true;
+    }
+  } catch { /* noop */ }
+  return false;
+}
+
+export function getSessionUser(): User | null {
+  return users.find((u) => u.id === sessionUserId) ?? null;
+}
+
 /* Clave de la Central para operar la nube (queda en sessionStorage del navegador) */
 const ADMIN_KEY_KEY = "cupito_admin_key";
 export function getAdminKey(): string {
@@ -895,6 +915,7 @@ async function completeBizSetupCore(name: string, business: string): Promise<str
     saveSession(user.id);
     saveData(user.id, defaultData());
     clearPendingBiz();
+    setFreshSignup();
     emit();
     return null;
   } catch {
@@ -921,6 +942,7 @@ async function createBizRowFromPending(pending: PendingBiz): Promise<boolean> {
     saveSession(user.id);
     saveData(user.id, defaultData());
     clearPendingBiz();
+    setFreshSignup();
     emit();
     return true;
   } catch {
@@ -1312,7 +1334,10 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       const s = await sbSignIn(em, password).catch(() => ({ ok: false, reason: "error", error: "No pudimos conectar." }) as const);
       if (s.ok) {
         const err = await adoptAuthAccount(s.authId);
-        return err;
+        if (err) return err;
+        // Cuenta recién creada (confirmó el email y entra por primera vez): elegir plan
+        if (consumeFreshSignup()) return "FRESH_PICK_PLAN";
+        return null;
       }
       if (s.reason === "confirm") {
         return "Tu email todavía no está confirmado. Revisá tu bandeja (y spam) y después entrá.";
@@ -1348,6 +1373,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       if (s.reason === "confirm") {
         // Sin sesión todavía: guardar el negocio pendiente y crearlo al primer login
         if (s.authId) savePendingBiz({ authId: s.authId, name: name.trim(), business: business.trim(), email: em });
+        setFreshSignup();
         return "Te enviamos un email de confirmación. Abrilo para activar tu cuenta y después entrá.";
       }
       return s.error;
@@ -1370,6 +1396,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveSession(user.id);
     const fresh = defaultData();
     saveData(user.id, fresh);
+    setFreshSignup();
     emit();
     return null;
   },
