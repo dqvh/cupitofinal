@@ -6,22 +6,28 @@ import { Reveal, LogoMark, IconCheck, IconClock, IconCalendar, IconBag, IconStar
 /* Página pública de reservas: cupito.app/{slug} — la ve cualquier cliente */
 export default function PublicPage({ slug }: { slug: string }) {
   const page = usePublicPage(slug);
-  const { addReviewFor, toast, fetchPageRemote } = useStore();
+  const { addReviewFor, toast, fetchPageRemote, sessionUserId } = useStore();
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [loadingRemote, setLoadingRemote] = useState(!page);
-  const [triedRemote, setTriedRemote] = useState(false);
 
   useEffect(() => {
-    if (!page && !triedRemote) {
-      setLoadingRemote(true);
-      fetchPageRemote(slug).then(() => {
-        setLoadingRemote(false);
-        setTriedRemote(true);
-      });
-    } else if (page) {
+    // Si estoy viendo mi propia página logueado, lo local ya es lo más fresco.
+    if (page && sessionUserId && page.user.id === sessionUserId) {
       setLoadingRemote(false);
+      return;
     }
-  }, [slug, page, triedRemote, fetchPageRemote]);
+    // En cualquier otro caso (ej: cliente desde el celu), refrescar de la nube
+    // aunque haya algo en local: lo local puede ser un duplicado vacío y viejo.
+    let cancelled = false;
+    if (!page) setLoadingRemote(true);
+    fetchPageRemote(slug).catch(() => {}).finally(() => {
+      if (!cancelled) {
+        setLoadingRemote(false);
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
 
   if (loadingRemote) {
     return (

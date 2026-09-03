@@ -145,6 +145,7 @@ export default function Dashboard() {
   const [proFilter, setProFilter] = useState<string>("todos");
   const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [pendingOnboarding, setPendingOnboarding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [reservasMode, setReservasMode] = useState<"lista" | "grilla">("lista");
   const [gridDate, setGridDate] = useState(dateKey(new Date()));
@@ -157,13 +158,28 @@ export default function Dashboard() {
     let cancelled = false;
     const run = async () => {
       const checkout = getHashParam("checkout");
+      const paidCheckout = checkout === "crece" || checkout === "escala";
       if (checkout === "crece" || checkout === "escala" || checkout === "semilla") {
         setCheckoutPlan(checkout);
       }
 
       const onboardingParam = getHashParam("onboarding") || getHashParam("setup");
       if (onboardingParam === "1" || (data && data.services.length === 0 && !data.settings.setupDismissed)) {
-        setShowOnboarding(true);
+        // Si viene a pagar un plan, el checkout va PRIMERO y el onboarding después.
+        // Antes el onboarding (z-85) tapaba el checkout y parecía que nunca iba a Mercado Pago.
+        if (paidCheckout) {
+          setPendingOnboarding(true);
+        } else {
+          setShowOnboarding(true);
+        }
+      }
+
+      // Limpiar los params del hash para que el checkout no se reabra solo
+      // (ej: al volver de Mercado Pago ya pagado).
+      if (checkout || onboardingParam) {
+        try {
+          window.history.replaceState({}, "", "#/app");
+        } catch { /* noop */ }
       }
 
       const preapprovalId = getPreapprovalIdFromUrl();
@@ -862,7 +878,14 @@ export default function Dashboard() {
 
       {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} waitlistId={prefill?.waitlistId} onClose={() => { setShowNew(false); setPrefill(null); }} />}
       {serviceModal.open && <ServiceModal service={serviceModal.id ? data.services.find((s) => s.id === serviceModal.id) : undefined} onClose={() => setServiceModal({ open: false })} />}
-      {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => setCheckoutPlan(null)} />}
+      {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => {
+        setCheckoutPlan(null);
+        // El onboarding que habíamos diferido aparece recién ahora.
+        if (pendingOnboarding) {
+          setPendingOnboarding(false);
+          setShowOnboarding(true);
+        }
+      }} />}
       {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} onGoToPlan={(p) => { setShowOnboarding(false); setCheckoutPlan(p); }} />}
       {rescheduling && (
         <RescheduleModal
@@ -1268,7 +1291,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-display text-sm font-bold text-ink">Plan actual: <span className="text-fern">{PLAN_META[user.plan].name}</span></p>
-                  <p className="text-xs text-inkmute">¿Querés reservas ilimitadas y cobrar seña?</p>
+                  <p className="text-xs text-inkmute">{user.plan === "semilla" ? "El plan pago se activa solo cuando completes el pago en Mercado Pago." : "¿Querés reservas ilimitadas y cobrar seña?"}</p>
                 </div>
                 {user.plan === "semilla" && (
                   <button

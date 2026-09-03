@@ -655,20 +655,47 @@ const remoteSaveQueue = new Map<string, Promise<unknown>>();
 // Sincronización automática inicial desde Supabase para traer negocios creados en otros dispositivos
 if (typeof window !== "undefined" && isSupabaseConfigured) {
   fetchAllRemoteUsers().then((remoteUsers) => {
-    if (remoteUsers && remoteUsers.length > 0) {
-      const deleted = getDeletedUserIds();
-      const map = new Map<string, User>();
-      users.forEach((u) => {
-        if (!deleted.has(u.id)) map.set(u.id, u);
-      });
-      remoteUsers.forEach((u) => {
-        if (!deleted.has(u.id)) map.set(u.id, u);
-      });
-      const combined = Array.from(map.values());
-      users = combined;
-      safeSet(USERS_KEY, JSON.stringify(combined));
-      emit();
+    const deleted = getDeletedUserIds();
+    const prevUsers = users;
+    const prevSession = sessionUserId;
+    const remoteByEmail = new Map<string, User>();
+    (remoteUsers || []).forEach((u) => {
+      if (!deleted.has(u.id)) remoteByEmail.set(u.email, u);
+    });
+    const map = new Map<string, User>();
+    prevUsers.forEach((u) => {
+      if (!deleted.has(u.id)) map.set(u.id, u);
+    });
+    // Si el mismo email existe local (vacío, creado sin conexión) y en la nube,
+    // gana la versión de la nube y se descarta el duplicado local.
+    Array.from(map.keys()).forEach((id) => {
+      const u = map.get(id);
+      const r = u ? remoteByEmail.get(u.email) : undefined;
+      if (u && r && r.id !== id) map.delete(id);
+    });
+    (remoteUsers || []).forEach((u) => {
+      if (!deleted.has(u.id)) map.set(u.id, u);
+    });
+    const combined = Array.from(map.values());
+    const remoteIds = new Set((remoteUsers || []).map((u) => u.id));
+    users = combined;
+    safeSet(USERS_KEY, JSON.stringify(combined));
+    // Si la sesión apuntaba a un duplicado descartado, moverla a la cuenta real
+    if (prevSession && !map.has(prevSession)) {
+      const old = prevUsers.find((u) => u.id === prevSession);
+      const real = old ? remoteByEmail.get(old.email) : undefined;
+      saveSession(real ? real.id : null);
     }
+    emit();
+    // Subir a la nube las cuentas creadas en este dispositivo cuando no había
+    // conexión (si no, la compu nunca aparece en el celu y viceversa).
+    combined.forEach((u) => {
+      if (!remoteIds.has(u.id) && !deleted.has(u.id)) {
+        try {
+          syncUserToRemote(u, loadData(u.id)).catch(() => {});
+        } catch { /* noop */ }
+      }
+    });
   }).catch((e) => console.warn("[Cupito] Error en sync inicial de Supabase:", e));
 }
 
@@ -748,19 +775,45 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (!isSupabaseConfigured) return false;
     const remote = await fetchRemoteUserBySlug(slug);
     if (!remote) return false;
-    const currentUsers = users.filter((u) => u.id !== remote.user.id);
+    // Si hay un duplicado local con el mismo email, lo reemplaza la nube.
+    const currentUsers = users.filter((u) => u.id !== remote.user.id && u.email !== remote.user.email);
     users = [...currentUsers, remote.user];
     safeSet(USERS_KEY, JSON.stringify(users));
     if (remote.data) {
-      safeSet(dataKey(remote.user.id), JSON.stringify(remote.data));
+      const local = loadData(remote.user.id);
+      const localHasStuff = (local.services?.length || 0) + (local.bookings?.length || 0) > 0;
+      const remoteHasStuff = ((remote.data.services?.length || 0) + (remote.data.bookings?.length || 0)) > 0;
+      if (remoteHasStuff || !localHasStuff) {
+        safeSet(dataKey(remote.user.id), JSON.stringify(remote.data));
+      } else {
+        // La nube está vacía y este dispositivo tiene los datos posta: subir, no pisar.
+        syncUserToRemote(remote.user, local).catch(() => {});
+      }
     }
     emit();
+    await api.syncUserDataFromCloud(remote.user.id).catch(() => {});
     return true;
   },
   async syncUserDataFromCloud(userId: string) {
     if (!isSupabaseConfigured) return false;
     const remoteData = await fetchRemoteBizData(userId);
-    if (!remoteData) return false;
+    if (!remoteData) {
+      // La nube no tiene fila para este negocio (cuenta creada sin conexión):
+      // subir lo local en vez de rendirse.
+      try {
+        const local = loadData(userId);
+        const hasStuff =
+          (local.services || []).length > 0 ||
+          (local.bookings || []).length > 0 ||
+          (local.waitlist || []).length > 0;
+        const owner = users.find((u) => u.id === userId);
+        if (owner && hasStuff) {
+          await syncUserToRemote(owner, local).catch(() => {});
+          return true;
+        }
+      } catch { /* noop */ }
+      return false;
+    }
 
     const tombWait = getTombstones(TOMBSTONE_WAITLIST_KEY);
     const tombBook = getTombstones(TOMBSTONE_BOOKING_KEY);
@@ -799,18 +852,56 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
 
     safeSet(dataKey(userId), JSON.stringify(finalMerged));
     emit();
+
+    // Subir a la nube lo que este dispositivo tiene y la nube no (servicios
+    // cargados en la compu, reservas locales, etc.). Solo AGREGA, nunca borra:
+    // los borrados se propagan por deleteRemoteWaitlist/deleteRemoteBooking.
+    try {
+      const remoteBookingIds = new Set((remoteData.bookings || []).map((b) => b.id));
+      const remoteWaitlistIds = new Set((remoteData.waitlist || []).map((w) => w.id));
+      const remoteReviewIds = new Set((remoteData.reviews || []).map((r) => r.id));
+      const missingBookings = (localData.bookings || []).filter((b) => !remoteBookingIds.has(b.id));
+      const missingWaitlist = (localData.waitlist || []).filter((w) => !remoteWaitlistIds.has(w.id));
+      const missingReviews = (localData.reviews || []).filter((r) => !remoteReviewIds.has(r.id));
+      const needServices = (remoteData.services || []).length === 0 && (localData.services || []).length > 0;
+      const needPros = (remoteData.professionals || []).length === 0 && (localData.professionals || []).length > 0;
+      const needProducts = (remoteData.products || []).length === 0 && (localData.products || []).length > 0;
+      const needCoupons = (remoteData.coupons || []).length === 0 && (localData.coupons || []).length > 0;
+      if (missingBookings.length > 0 || missingWaitlist.length > 0 || missingReviews.length > 0 || needServices || needPros || needProducts || needCoupons) {
+        const pushed: BizData = {
+          ...remoteData,
+          services: needServices ? localData.services : remoteData.services,
+          bookings: [...(remoteData.bookings || []), ...missingBookings],
+          products: needProducts ? localData.products : remoteData.products,
+          reviews: [...(remoteData.reviews || []), ...missingReviews],
+          coupons: needCoupons ? localData.coupons : remoteData.coupons,
+          professionals: needPros ? localData.professionals : remoteData.professionals,
+          waitlist: [...(remoteData.waitlist || []), ...missingWaitlist],
+          blockedSlots: remoteData.blockedSlots ?? localData.blockedSlots ?? [],
+          settings: remoteData.settings ?? localData.settings,
+        };
+        const owner = users.find((u) => u.id === userId);
+        if (owner) syncUserToRemote(owner, pushed).catch(() => {});
+      }
+    } catch { /* noop */ }
     return true;
   },
   register({ name, business, email, password }) {
     const em = email.trim().toLowerCase();
     if (users.some((u) => u.email === em)) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+    // Slug único: dos negocios con el mismo nombre no pueden compartir link
+    // (si no, la página pública muestra los datos del equivocado).
+    let slug = slugify(business);
+    const base = slug;
+    let i = 1;
+    while (users.some((u) => u.slug === slug)) slug = `${base}-${i++}`;
     const user: User = {
       id: uid(),
       name: name.trim(),
       business: business.trim(),
       email: em,
       password,
-      slug: slugify(business),
+      slug,
       plan: "semilla",
       createdAt: Date.now(),
     };
