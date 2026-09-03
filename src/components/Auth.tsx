@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { PLAN_META, type Plan, useStore, getSessionUser } from "../lib/store";
+import { sbResendConfirmation } from "../lib/supabase";
 import { LogoMark, IconCheck, IconArrow, LegalModal, TERMS_DOC, PRIVACY_DOC } from "./kit";
 import { sendWelcomeAccountEmail } from "../lib/email";
 
@@ -37,11 +38,11 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const [loading, setLoading] = useState(false);
   const [pickPlan, setPickPlan] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [resending, setResending] = useState(false);
   const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   const [chosen, setChosen] = useState<Plan>(presetPlan ?? "crece");
 
-  const switchMode = (m: Mode) => { setMode(m); setError(null); setNotice(null); setPickPlan(false); setNeedsSetup(false); };
-  const fail = (msg: string) => { setError(msg); setNotice(null); setShakeKey((k) => k + 1); setLoading(false); };
+  const switchMode = (m: Mode) => { setMode(m); setError(null); setNotice(null); setPickPlan(false); setNeedsSetup(false); };  const fail = (msg: string) => { setError(msg); setNotice(null); setShakeKey((k) => k + 1); setLoading(false); };
   const info = (msg: string) => { setNotice(msg); setError(null); setShakeKey((k) => k + 1); setLoading(false); };
 
   const goApp = (plan: Plan) => {
@@ -86,6 +87,17 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
       }
       setPickPlan(true);
     }, 400);
+  };
+
+  const resendEmail = () => {
+    if (!email.trim() || resending) return;
+    setResending(true);
+    setTimeout(async () => {
+      const ok = await sbResendConfirmation(email);
+      setResending(false);
+      if (ok) info("Te reenviamos el email de confirmación 📩 Revisá bandeja y spam.");
+      else fail("No pudimos reenviarlo. Revisá tu conexión e intentá de nuevo.");
+    }, 300);
   };
 
   const submit = (e: FormEvent) => {
@@ -198,6 +210,12 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
                 <p className="mt-1 text-sm text-inkmute">Tu login ya funciona. Completá estos datos y entras a tu panel.</p>
                 {error && <div key={shakeKey} className="shake mt-5 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">{error}</div>}
                 {notice && <div key={shakeKey} className="mt-5 rounded-xl border-2 border-fern/40 bg-fern/10 px-4 py-3 text-sm font-semibold text-fern">{notice}</div>}
+                {notice && /confirmaci|confirmado/i.test(notice) && (
+                  <button type="button" onClick={resendEmail} disabled={resending}
+                    className="mt-3 w-full rounded-full border-2 border-ink/15 py-3 font-display text-sm font-bold text-ink transition-all hover:border-evergreen hover:text-evergreen disabled:opacity-60">
+                    {resending ? "Reenviando…" : "📩 No me llegó: reenviar email"}
+                  </button>
+                )}
                 <form onSubmit={submitSetup} className="mt-6 space-y-4">
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Tu nombre</label>

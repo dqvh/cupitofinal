@@ -502,8 +502,7 @@ export async function sbSignIn(email: string, password: string): Promise<SbSignU
   }
 }
 
-export async function sbSignOut(): Promise<void> {
-  const s = typeof window !== "undefined" ? sbLoadSession() : null;
+export async function sbSignOut(): Promise<void> {  const s = typeof window !== "undefined" ? sbLoadSession() : null;
   sbClearSession();
   if (!isSupabaseConfigured || !s) return;
   try {
@@ -511,8 +510,24 @@ export async function sbSignOut(): Promise<void> {
   } catch { /* noop */ }
 }
 
-/** Valida la sesión contra el servidor (para el arranque). */
-export async function sbValidateSession(): Promise<{ authId: string; email: string } | null> {
+/** Reenvía el email de confirmación (ej: el primer link vino con Site URL roto). */
+export async function sbResendConfirmation(email: string): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  try {
+    const captcha = await getCaptchaToken();
+    await authFetch(
+      "/resend",
+      { type: "signup", email: email.toLowerCase().trim() },
+      captcha ? { captcha } : undefined
+    );
+    return true;
+  } catch (e) {
+    console.warn("[Cupito] resend falló:", String((e as Error).message || ""));
+    return false;
+  }
+}
+
+/** Valida la sesión contra el servidor (para el arranque). */export async function sbValidateSession(): Promise<{ authId: string; email: string } | null> {
   const token = await sbGetAccessToken();
   if (!token) return null;
   try {
