@@ -1036,7 +1036,7 @@ const PLANS: PlanDef[] = [
     features: [{ t: "1 calendario y 1 profesional" }, { t: "25 reservas al mes" }, { t: "Tu link propio cupito.app/tu-negocio" }, { t: "Confirmación y recordatorio por email" }, { t: "Lista de espera" }, { t: "Guía de configuración paso a paso" }, { t: "Estadísticas básicas" }],
   },
   {
-    id: "crece", name: "Crece", tagline: "El favorito de los que viven de sus turnos.", monthly: 9900, yearly: 9400, cta: "Suscribirme", highlight: true, badge: "Más elegido",
+    id: "crece", name: "Crece", tagline: "El favorito de los que viven de sus turnos.", monthly: 9500, yearly: 7900, cta: "Suscribirme", highlight: true, badge: "Más elegido",
     features: [
       { t: "Reservas ilimitadas" }, { t: "Hasta 3 profesionales" }, { t: "Cobro de seña configurable por transferencia" },
       { t: "Paletas de colores exclusivas para tu página" }, { t: "Tienda de productos: vendé en cada reserva" },
@@ -1044,7 +1044,7 @@ const PLANS: PlanDef[] = [
     ],
   },
   {
-    id: "escala", name: "Escala", tagline: "Para estudios, clínicas y equipos grandes.", monthly: 23000, yearly: 18400, cta: "Suscribirme", highlight: false,
+    id: "escala", name: "Escala", tagline: "Para estudios, clínicas y equipos grandes.", monthly: 22000, yearly: 18300, cta: "Suscribirme", highlight: false,
     features: [
       { t: "Todo lo de Crece" },
       { t: "Profesionales y colaboradores ilimitados" },

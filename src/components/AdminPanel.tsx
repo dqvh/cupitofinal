@@ -214,8 +214,8 @@ function Console() {
     }
     const paidCount = users.filter((u) => u.plan !== "semilla").length;
     const estimatedMonthly = users.reduce((acc, u) => {
-      if (u.plan === "crece") return acc + 9900;
-      if (u.plan === "escala") return acc + 23000;
+      if (u.plan === "crece") return acc + 9500;
+      if (u.plan === "escala") return acc + 22000;
       return acc;
     }, 0);
 
@@ -613,8 +613,8 @@ function EditBusinessModal({ user, onClose }: { user: User; onClose: () => void 
                 <label className="mb-1 block text-[11px] font-bold text-inkmute uppercase">Plan Asignado</label>
                 <select className="field !py-2" value={plan} onChange={(e) => setPlan(e.target.value as Plan)}>
                   <option value="semilla">Semilla (Gratis)</option>
-                  <option value="crece">Crece ($9.900/mes)</option>
-                  <option value="escala">Escala ($23.000/mes)</option>
+                  <option value="crece">Crece ($9.500/mes)</option>
+                  <option value="escala">Escala ($22.000/mes)</option>
                 </select>
               </div>
               <div>

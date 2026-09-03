@@ -34,7 +34,7 @@ export interface Coupon { id: string; code: string; pct: number; active: boolean
 export interface Professional { id: string; name: string; role: string; color: string }
 export interface WaitlistEntry { id: string; date: string; serviceId: string; client: string; phone: string; createdAt: number }
 
-export type BookingStatus = "pendiente" | "confirmada" | "atendida" | "cancelada";
+export type BookingStatus = "pendiente" | "confirmada" | "atendida" | "cancelada" | "ausente";
 export interface Booking {
   id: string;
   serviceId: string;
@@ -256,6 +256,7 @@ export interface UserSubscription {
   nextRenewal: number;
   autoRenew: boolean;
   status: "activa" | "cancelada";
+  mpPreapprovalId?: string; // id de la suscripción en Mercado Pago (para cancelarla de verdad)
 }
 
 export interface User {
@@ -272,8 +273,8 @@ export interface User {
 
 export const PLAN_META: Record<Plan, { name: string; price: string }> = {
   semilla: { name: "Semilla", price: "$0" },
-  crece: { name: "Crece", price: "$9.900/mes" },
-  escala: { name: "Escala", price: "$23.000/mes" },
+  crece: { name: "Crece", price: "$9.500/mes" },
+  escala: { name: "Escala", price: "$22.000/mes" },
 };
 /* Límite del plan gratuito: reservas activas por mes calendario */
 export const SEMILLA_MONTHLY_LIMIT = 25;
@@ -780,7 +781,9 @@ interface StoreApi {
   removeProduct(id: string): void;
   updateSettings(patch: Partial<BizSettings>): void;
   setPlan(plan: Plan): void;
+  saveMpPreapprovalId(id: string): void;
   cancelSubscription(): void;
+  cancelSubscriptionAsync(): Promise<{ ok: true } | { ok: false; error: string }>;
   resumeSubscription(): void;
   addReview(r: Omit<Review, "id">): void;
   removeReview(id: string): void;
@@ -1238,6 +1241,21 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     }));
     emit();
   },
+  saveMpPreapprovalId(id: string) {
+    if (!sessionUserId) return;
+    saveUsers(users.map((u) => {
+      if (u.id !== sessionUserId) return u;
+      const sub = u.subscription || {
+        billing: "mensual" as const,
+        activeSince: u.createdAt,
+        nextRenewal: Date.now() + 30 * 24 * 3600 * 1000,
+        autoRenew: true,
+        status: "activa" as const,
+      };
+      return { ...u, subscription: { ...sub, mpPreapprovalId: id } };
+    }));
+    emit();
+  },
   cancelSubscription() {
     if (!sessionUserId) return;
     saveUsers(users.map((u) => {
@@ -1255,6 +1273,27 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       };
     }));
     emit();
+  },
+  async cancelSubscriptionAsync() {
+    if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta." } as const;
+    const me = users.find((u) => u.id === sessionUserId);
+    if (!me) return { ok: false, error: "Necesitás una cuenta." } as const;
+    try {
+      const res = await fetch("/api/cancel-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: me.subscription?.mpPreapprovalId, email: me.email }),
+      });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok || r.error || !r.ok) {
+        return { ok: false, error: String(r.error || "Mercado Pago no confirmó la cancelación.") } as const;
+      }
+    } catch {
+      return { ok: false, error: "No pudimos conectar con Mercado Pago. Probá de nuevo." } as const;
+    }
+    // Cancelada de verdad en MP: recién ahí la marcamos local.
+    api.cancelSubscription();
+    return { ok: true } as const;
   },
   resumeSubscription() {
     if (!sessionUserId) return;
@@ -1546,6 +1585,16 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const data = loadData(ownerId);
     const target = data.bookings.find((b) => b.id === bookingId);
     if (!target) return { ok: false, error: "No se encontró el turno." };
+    // Política 24 h: dentro de las 24 h previas el cliente no puede cancelar solo
+    // (la seña no se devuelve y el hueco ya no se repone). Tiene que hablar con el local.
+    try {
+      const [y, m, d] = target.date.split("-").map(Number);
+      const [hh, mm] = target.time.split(":").map(Number);
+      const appt = new Date(y, m - 1, d, hh, mm).getTime();
+      if (appt - Date.now() < 24 * 3600 * 1000) {
+        return { ok: false, error: "FALTA_MENOS_24H" };
+      }
+    } catch { /* si no se puede calcular, se permite cancelar */ }
     data.bookings = data.bookings.map((b) =>
       b.id === bookingId
         ? { ...b, status: "cancelada" as BookingStatus, cancelReason: reason || "Cancelado por el cliente" }

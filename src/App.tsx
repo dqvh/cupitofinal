@@ -1,11 +1,23 @@
-import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, Suspense, lazy, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
 import { StoreProvider, useStore } from "./lib/store";
-import Landing from "./Landing";
-import Auth from "./components/Auth";
-import Dashboard from "./components/Dashboard";
-import PublicPage from "./components/PublicPage";
-import AdminPanel from "./components/AdminPanel";
 import { LogoMark } from "./components/kit";
+
+/* Code splitting por ruta: cada pantalla se descarga solo cuando se visita.
+   Antes todo (panel + landing + librerías pesadas) iba en un solo JS de ~800KB. */
+const Landing = lazy(() => import("./Landing"));
+const Auth = lazy(() => import("./components/Auth"));
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const PublicPage = lazy(() => import("./components/PublicPage"));
+const AdminPanel = lazy(() => import("./components/AdminPanel"));
+
+function RouteLoader() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-evergreen px-6 text-center text-paper">
+      <LogoMark className="h-14 w-14 animate-pulse text-lime" />
+      <p className="font-display text-xl font-extrabold">Cargando Cupito…</p>
+    </div>
+  );
+}
 
 /* Si algo explota en tiempo de ejecución, mostramos esto en vez de pantalla en blanco */
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -141,16 +153,42 @@ function Router() {
 
   if (route.name === "auth") {
     const mode = route.query.includes("modo=login") ? "login" : "registro";
-    return <Auth initialMode={mode} />;
+    return (
+      <Suspense fallback={<RouteLoader />}>
+        <Auth initialMode={mode} />
+      </Suspense>
+    );
   }
 
-  if (route.name === "admin") return <AdminPanel />;
+  if (route.name === "admin") {
+    return (
+      <Suspense fallback={<RouteLoader />}>
+        <AdminPanel />
+      </Suspense>
+    );
+  }
 
-  if (route.name === "b") return <PublicPage slug={route.slug || "studio-nails"} />;
+  if (route.name === "b") {
+    return (
+      <Suspense fallback={<RouteLoader />}>
+        <PublicPage slug={route.slug || "studio-nails"} />
+      </Suspense>
+    );
+  }
 
-  if (route.name === "app") return <Dashboard />;
+  if (route.name === "app") {
+    return (
+      <Suspense fallback={<RouteLoader />}>
+        <Dashboard />
+      </Suspense>
+    );
+  }
 
-  return <Landing />;
+  return (
+    <Suspense fallback={<RouteLoader />}>
+      <Landing />
+    </Suspense>
+  );
 }
 
 export default function App() {

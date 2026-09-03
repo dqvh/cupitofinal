@@ -131,6 +131,7 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
   const [showAllSlots, setShowAllSlots] = useState(false);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
   const [cancelFeedback, setCancelFeedback] = useState<string | null>(null);
+  const [cancelBlocked, setCancelBlocked] = useState(false);
   const [showLookupModal, setShowLookupModal] = useState(!!initialLookupOpen);
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupFeedback, setLookupFeedback] = useState<string | null>(null);
@@ -254,6 +255,7 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
     setClaimed(!!opts.claimTx);
     setConfirmedId(res.id);
     setCancelFeedback(null);
+    setCancelBlocked(false);
     setDone(true);
     sound.playSuccess();
 
@@ -287,6 +289,7 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
   const reset = () => {
     setStep(0); setServiceId(null); setProId(null); setSelectedDate(null); setTime(null);
     setClient(""); setPhone(""); setEmail(""); setItems({}); setError(null); setDone(false);
+    setConfirmedId(null); setCancelFeedback(null); setCancelBlocked(false);
     setCouponInput(""); setCoupon(null); setCouponMsg(null); setShowPay(false); setClaimed(false);
     setWlClient(""); setWlPhone(""); setWlDone(false); setWlError(null); setShowWlForm(false);
     setShowAllSlots(false);
@@ -889,19 +892,37 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
                   onClick={() => {
                     if (window.confirm("¿Seguro que deseás cancelar este turno? Liberaremos el horario para otra persona.")) {
                       if (confirmedId) {
-                        cancelBookingByClient(user.id, confirmedId, "Cancelado por el cliente desde el comprobante");
-                        setCancelFeedback("Tu turno ha sido cancelado con éxito. ¡Gracias por avisar con tiempo!");
-                        toast("Turno cancelado ✓");
+                        const r = cancelBookingByClient(user.id, confirmedId, "Cancelado por el cliente desde el comprobante");
+                        if (r.ok) {
+                          setCancelFeedback("Tu turno ha sido cancelado con éxito. ¡Gracias por avisar con tiempo!");
+                          toast("Turno cancelado ✓");
+                        } else if (r.error === "FALTA_MENOS_24H") {
+                          setCancelBlocked(true);
+                        } else {
+                          setError(r.error || "No se pudo cancelar. Probá de nuevo.");
+                        }
                       }
                     }
                   }}
                   className="block w-full pt-1 text-center text-xs font-bold text-coral/80 hover:text-coral underline underline-offset-4 transition-colors"
                 >
-                  ¿No vas a poder asistir? Cancelá tu turno acá
+                  ¿No vas a poder asistir? Cancelá tu turno acá <span className="no-underline text-ink/40">(gratis hasta 24 h antes)</span>
                 </button>
               ) : (
                 <div className="rounded-xl border border-coral/30 bg-coral/10 p-3 text-xs font-bold text-coral text-center">
                   {cancelFeedback}
+                </div>
+              )}
+              {cancelBlocked && !cancelFeedback && (
+                <div className="rounded-xl border-2 border-amber-500/40 bg-amber-50 p-3 text-center">
+                  <p className="text-xs font-bold text-amber-900">Faltan menos de 24 h: ya no se puede cancelar online y la seña no se devuelve.</p>
+                  {settings.whatsapp ? (
+                    <a href={createWhatsAppUrl(settings.whatsapp, `Hola! Soy ${client} y tengo turno el ${fmtLong(selectedDate || "")} a las ${time} hs. Necesito cambiarlo o cancelarlo 🙏`)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 font-display text-xs font-bold text-white">
+                      <IconWhatsApp className="h-3.5 w-3.5" /> Hablar con el local
+                    </a>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-amber-800">Comunicate directamente con {user.business}.</p>
+                  )}
                 </div>
               )}
 
@@ -938,9 +959,11 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
           bookings={biz.bookings}
           services={biz.services}
           professionals={biz.professionals}
+          whatsapp={settings.whatsapp}
           onCancelBooking={(bId) => {
-            cancelBookingByClient(user.id, bId, "Cancelado por el cliente desde Mis Turnos");
-            toast("Turno cancelado ✓ El horario fue liberado.");
+            const r = cancelBookingByClient(user.id, bId, "Cancelado por el cliente desde Mis Turnos");
+            if (r.ok) toast("Turno cancelado ✓ El horario fue liberado.");
+            return r;
           }}
           onClose={() => setShowLookupModal(false)}
         />
@@ -1161,6 +1184,7 @@ function LookupBookingsModal({
   bookings,
   services,
   professionals,
+  whatsapp,
   onCancelBooking,
   onClose,
 }: {
@@ -1168,10 +1192,12 @@ function LookupBookingsModal({
   bookings: Booking[];
   services: Service[];
   professionals: Professional[];
-  onCancelBooking: (id: string) => void;
+  whatsapp?: string;
+  onCancelBooking: (id: string) => { ok: boolean; error?: string };
   onClose: () => void;
 }) {
   const [inputPhone, setInputPhone] = useState("");
+  const [blockedMsg, setBlockedMsg] = useState(false);
   const phoneVal = normalizeArgentinaPhone(inputPhone);
   const nowKey = dateKey(new Date());
 
@@ -1192,7 +1218,7 @@ function LookupBookingsModal({
         <div className="flex items-start justify-between gap-3 border-b border-ink/10 pb-4">
           <div>
             <h3 className="font-display text-xl font-extrabold text-ink">Mis turnos en {businessName}</h3>
-            <p className="mt-0.5 text-xs text-inkmute">Consultá tus próximas citas o cancelá si no podés ir.</p>
+            <p className="mt-0.5 text-xs text-inkmute">Consultá tus próximas citas o cancelá gratis hasta 24 h antes.</p>
           </div>
           <button onClick={onClose} aria-label="Cerrar" className="flex h-8 w-8 items-center justify-center rounded-full border border-ink/15 text-inkmute hover:border-coral hover:text-coral transition-colors">✕</button>
         </div>
@@ -1246,7 +1272,8 @@ function LookupBookingsModal({
                       type="button"
                       onClick={() => {
                         if (window.confirm("¿Seguro que deseás cancelar este turno?")) {
-                          onCancelBooking(b.id);
+                          const r = onCancelBooking(b.id);
+                          if (!r.ok && r.error === "FALTA_MENOS_24H") setBlockedMsg(true);
                         }
                       }}
                       className="rounded-lg border border-coral/30 bg-coral/10 px-3 py-1.5 font-display text-xs font-bold text-coral hover:bg-coral hover:text-white transition-all"
@@ -1257,6 +1284,18 @@ function LookupBookingsModal({
                 </div>
               );
             })}
+            {blockedMsg && (
+              <div className="rounded-xl border-2 border-amber-500/40 bg-amber-50 p-3 text-center">
+                <p className="text-xs font-bold text-amber-900">Faltan menos de 24 h: la cancelación online está cerrada.</p>
+                {whatsapp ? (
+                  <a href={createWhatsAppUrl(whatsapp, `Hola! Soy cliente de ${businessName} y necesito cambiar o cancelar un turno 🙏`)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 font-display text-xs font-bold text-white">
+                    Hablar con el local
+                  </a>
+                ) : (
+                  <p className="mt-1 text-[11px] text-amber-800">Comunicate directamente con el local.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

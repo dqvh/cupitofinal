@@ -7,8 +7,8 @@ export type PaidPlan = (typeof PAID_PLANS)[number];
 export const isPaidPlan = (p: Plan): p is PaidPlan => p === "crece" || p === "escala";
 
 export const PLAN_AMOUNTS: Record<PaidPlan, Record<BillingCycle, number>> = {
-  crece: { mensual: 9900, anual: 9400 },
-  escala: { mensual: 23000, anual: 18400 },
+  crece: { mensual: 9500, anual: 7900 },
+  escala: { mensual: 22000, anual: 18300 },
 };
 
 const PENDING_KEY = "cupito_mp_pending";

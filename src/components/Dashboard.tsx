@@ -115,6 +115,7 @@ const STATUS: Record<BookingStatus, { label: string; cls: string }> = {
   confirmada: { label: "Confirmada", cls: "border-2 border-limedeep/60 bg-lime/25 text-fern" },
   atendida: { label: "Atendida", cls: "border-2 border-fern/30 bg-fern/10 text-fern" },
   cancelada: { label: "Cancelada", cls: "border-2 border-ink/10 bg-ink/5 text-ink/40" },
+  ausente: { label: "No vino", cls: "border-2 border-amber-500/40 bg-amber-50 text-amber-800" },
 };
 
 const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -194,6 +195,8 @@ export default function Dashboard() {
       if (result.authorized) {
         const plan = result.plan || readPendingCheckout()?.plan || "crece";
         store.setPlan(plan);
+        // Guardar el id para poder cancelar la suscripción en MP después
+        if (preapprovalId) store.saveMpPreapprovalId(preapprovalId);
         clearPendingCheckout();
         store.toast(`Pago confirmado. Ya estás en el plan ${PLAN_META[plan].name} ✓`);
         if (user.email) {
@@ -467,6 +470,7 @@ export default function Dashboard() {
                         onStatus={(id, s) => {
                           setStatus(id, s);
                           if (s === "atendida") { requestReview(id); toast("Turno atendido · le enviamos el link de reseña a su email 💌"); }
+                          else if (s === "ausente") { toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn"); }
                           else toast(s === "cancelada" ? "Turno cancelado. El hueco quedó libre." : "Turno confirmado.");
                         }}
                         onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
@@ -696,6 +700,8 @@ export default function Dashboard() {
                                     if (s === "atendida") {
                                       requestReview(id);
                                       toast("Turno atendido · link de reseña enviado 💌");
+                                    } else if (s === "ausente") {
+                                      toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn");
                                     } else toast("Estado actualizado.");
                                   }}
                                   onDelete={(id) => {
@@ -1425,8 +1431,9 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
         )}
         {b.status === "pendiente" && !claimPending && <button onClick={() => onStatus(b.id, "confirmada")} className="btn-press rounded-full bg-evergreen px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-pine">Confirmar</button>}
         {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "atendida")} className="btn-press rounded-full bg-fern px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-evergreen">Atendida ✓</button>}
-        {(b.status === "atendida" || b.status === "cancelada") && <button onClick={() => onStatus(b.id, "pendiente")} className="btn-press rounded-full border-2 border-ink/15 px-3.5 py-2 text-xs font-bold text-inkmute transition-colors hover:border-evergreen hover:text-evergreen">Restaurar</button>}
-        {!cancelled && <button onClick={() => onStatus(b.id, "cancelada")} className="btn-press rounded-full border-2 border-coral/40 px-3.5 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">Cancelar</button>}
+        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "ausente")} className="btn-press rounded-full border-2 border-amber-500/50 px-3.5 py-2 text-xs font-bold text-amber-800 transition-colors hover:bg-amber-500 hover:text-white">No vino</button>}
+        {(b.status === "atendida" || b.status === "cancelada" || b.status === "ausente") && <button onClick={() => onStatus(b.id, "pendiente")} className="btn-press rounded-full border-2 border-ink/15 px-3.5 py-2 text-xs font-bold text-inkmute transition-colors hover:border-evergreen hover:text-evergreen">Restaurar</button>}
+        {!cancelled && b.status !== "ausente" && <button onClick={() => onStatus(b.id, "cancelada")} className="btn-press rounded-full border-2 border-coral/40 px-3.5 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">Cancelar</button>}
         <button onClick={() => onDelete(b.id)} aria-label="Eliminar reserva" className="flex h-8 w-8 items-center justify-center rounded-full text-ink/35 transition-colors hover:bg-coral/10 hover:text-coral"><IconTrash className="h-4 w-4" /></button>
       </span>
     </div>
@@ -2406,6 +2413,10 @@ function StatsView({ db }: { db: BizData }) {
   const prev7 = perDay.slice(0, 7).reduce((a, d) => a + d.count, 0);
   const resDelta = prev7 > 0 ? Math.round(((curr7 - prev7) / prev7) * 100) : null;
 
+  const noShows = db.bookings.filter((b) => b.status === "ausente").length;
+  const withOutcome = db.bookings.filter((b) => b.status === "atendida" || b.status === "ausente").length;
+  const noShowRate = withOutcome > 0 ? Math.round((noShows / withOutcome) * 100) : 0;
+
   const kpis = [
     { label: "Ingresos del mes", value: revenue, prefix: "$", icon: <IconWallet className="h-5 w-5" />, accent: true, delta: null as number | null },
     { label: "Reservas (7 días)", value: curr7, prefix: "", icon: <IconCalendar className="h-5 w-5" />, accent: false, delta: resDelta },
@@ -2474,6 +2485,16 @@ function StatsView({ db }: { db: BizData }) {
           </div>
         ))}
       </div>
+
+      {withOutcome > 0 && (
+        <div className={`flex items-center gap-3 rounded-2xl border-2 px-4 py-3 ${noShowRate >= 20 ? "border-amber-500/40 bg-amber-50" : "border-ink/10 bg-white/60"}`}>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15 font-display text-sm font-extrabold text-amber-800">{noShowRate}%</span>
+          <p className="text-xs text-inkmute">
+            <strong className="text-ink">Tasa de ausencias: {noShows} de {withOutcome} turnos ({noShowRate}%)</strong>
+            {noShowRate >= 20 ? " — alta. Activá la seña y los recordatorios para bajarla." : " — los recordatorios automáticos la mantienen baja."}
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <Reveal className="card p-6">
@@ -2862,8 +2883,23 @@ function CouponModal({ onClose }: { onClose: () => void }) {
 
 /* ============ SUSCRIPCIÓN ============ */
 function SubscriptionView({ current, user, onSelect }: { current: Plan; user: NonNullable<ReturnType<typeof useStore>["user"]>; onSelect: (p: Plan) => void }) {
-  const { cancelSubscription, resumeSubscription, toast, data } = useStore();
+  const { toast, data, cancelSubscriptionAsync } = useStore();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const doCancel = async () => {
+    setCancelling(true);
+    setCancelError(null);
+    const r = await cancelSubscriptionAsync();
+    setCancelling(false);
+    if (!r.ok) {
+      setCancelError(`${r.error} Si ya lo cancelaste en Mercado Pago, escribinos a hola@cupito.app y lo resolvemos.`);
+      return;
+    }
+    setConfirmCancel(false);
+    toast("Suscripción cancelada en Mercado Pago. No se te cobra más ✓", "warn");
+  };
   const sub = user.subscription;
   const monthUsed = data ? monthBookingCount(data) : 0;
   const monthPct = Math.min(100, Math.round((monthUsed / SEMILLA_MONTHLY_LIMIT) * 100));
@@ -2924,10 +2960,10 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
               {sub?.status === "cancelada" ? (
                 <button
                   type="button"
-                  onClick={() => { resumeSubscription(); toast("Suscripción automática reactivada ✓"); }}
+                  onClick={() => onSelect(current)}
                   className="rounded-full bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime shadow-sm transition-all hover:bg-pine"
                 >
-                  Reactivar renovación automática
+                  Volver a suscribirme
                 </button>
               ) : (
                 <button
@@ -2945,15 +2981,17 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
             <div className="pop-in mt-5 rounded-2xl border-2 border-coral/30 bg-coral/5 p-4">
               <p className="font-display text-sm font-extrabold text-ink">¿Querés cancelar la renovación automática?</p>
               <p className="mt-1 text-xs text-inkmute leading-relaxed">
-                Vas a poder seguir usando todas las funciones de tu plan <strong>{PLAN_META[current].name}</strong> hasta el <strong>{nextDateStr}</strong>. Llegada esa fecha, tu cuenta pasará automáticamente al plan gratuito Semilla.
+                Se cancela de verdad en Mercado Pago: no se te cobra más. Vas a poder seguir usando {PLAN_META[current].name} hasta el <strong>{nextDateStr}</strong> y después tu cuenta pasa a Semilla.
               </p>
+              {cancelError && <p className="mt-2 rounded-xl border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{cancelError}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => { cancelSubscription(); setConfirmCancel(false); toast("Suscripción cancelada. Estará activa hasta el vencimiento.", "warn"); }}
-                  className="rounded-full bg-coral px-4 py-2 font-display text-xs font-bold text-white transition-all hover:bg-coral/90"
+                  disabled={cancelling}
+                  onClick={() => { void doCancel(); }}
+                  className="rounded-full bg-coral px-4 py-2 font-display text-xs font-bold text-white transition-all hover:bg-coral/90 disabled:opacity-60"
                 >
-                  Sí, cancelar renovación
+                  {cancelling ? "Cancelando en Mercado Pago…" : "Sí, cancelar en Mercado Pago"}
                 </button>
                 <button
                   type="button"
@@ -3081,7 +3119,7 @@ type SettingsTab = "negocio" | "pagina" | "pagos" | "horarios" | "plan" | "cuent
 
 function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: NonNullable<ReturnType<typeof useStore>["user"]>; settings: BizSettings; onSaveProfile: (b: string, n: string) => void; onSelectPlan: (p: Plan) => void }) {
   const [tab, setTab] = useState<SettingsTab>("negocio");
-  const { updateSettings, cancelSubscription, resumeSubscription } = useStore();
+  const { updateSettings } = useStore();
 
   const tabs: { id: SettingsTab; label: string; icon: ReactNode }[] = [
     { id: "negocio", label: "Negocio", icon: <IconWallet className="h-4 w-4" /> },
@@ -3114,8 +3152,6 @@ function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: N
             current={user.plan}
             user={user}
             onSelect={onSelectPlan}
-            onCancelSub={cancelSubscription}
-            onResumeSub={resumeSubscription}
           />
         )}
         {tab === "cuenta" && <AccountTab />}
@@ -3521,19 +3557,31 @@ function PlanTab({
   current,
   user,
   onSelect,
-  onCancelSub,
-  onResumeSub,
 }: {
   current: Plan;
   user: NonNullable<ReturnType<typeof useStore>["user"]>;
   onSelect: (p: Plan) => void;
-  onCancelSub: () => void;
-  onResumeSub: () => void;
 }) {
+  const { toast, cancelSubscriptionAsync } = useStore();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const sub = user.subscription;
   const plans: Plan[] = ["semilla", "crece", "escala"];
   const nextDateStr = fmtDateHuman(sub?.nextRenewal || new Date(Date.now() + 30 * 86400000).toISOString());
+
+  const doCancel = async () => {
+    setCancelling(true);
+    setCancelError(null);
+    const r = await cancelSubscriptionAsync();
+    setCancelling(false);
+    if (!r.ok) {
+      setCancelError(`${r.error} Si ya lo cancelaste en Mercado Pago, escribinos a hola@cupito.app y lo resolvemos.`);
+      return;
+    }
+    setConfirmCancel(false);
+    toast("Suscripción cancelada en Mercado Pago. No se te cobra más ✓", "warn");
+  };
 
   return (
     <div className="card p-6 space-y-5">
@@ -3560,10 +3608,10 @@ function PlanTab({
             {sub?.status === "cancelada" ? (
               <button
                 type="button"
-                onClick={onResumeSub}
+                onClick={() => onSelect(current)}
                 className="rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime hover:bg-pine"
               >
-                Reactivar renovación
+                Volver a suscribirme
               </button>
             ) : (
               <button
@@ -3579,13 +3627,16 @@ function PlanTab({
           {confirmCancel && (
             <div className="pop-in mt-3 border-t border-coral/20 pt-3">
               <p className="text-xs text-ink font-bold">¿Confirmás cancelar la renovación automática?</p>
+              <p className="mt-1 text-[11px] text-inkmute">Se cancela en Mercado Pago: no se te cobra más. Mantenés el plan hasta el {nextDateStr}.</p>
+              {cancelError && <p className="mt-2 rounded-xl border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{cancelError}</p>}
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => { onCancelSub(); setConfirmCancel(false); }}
-                  className="rounded-full bg-coral px-3.5 py-1.5 font-display text-xs font-bold text-white hover:bg-coral/90"
+                  disabled={cancelling}
+                  onClick={() => { void doCancel(); }}
+                  className="rounded-full bg-coral px-3.5 py-1.5 font-display text-xs font-bold text-white hover:bg-coral/90 disabled:opacity-60"
                 >
-                  Sí, cancelar
+                  {cancelling ? "Cancelando…" : "Sí, cancelar en Mercado Pago"}
                 </button>
                 <button
                   type="button"

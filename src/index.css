@@ -218,8 +218,7 @@ body {
 }
 
 /* ---------- impresion de cartel de mostrador ---------- */
-@media print {
-  body * {
+@media print {  body * {
     visibility: hidden;
   }
   #printable-poster, #printable-poster * {
@@ -239,4 +238,13 @@ body {
     background: #ffffff !important;
     margin: 0 !important;
   }
+}
+
+/* ---------- fluidez en celular ---------- */
+/* El overlay de ruido con blend-mode obliga a recomponer toda la página en
+   cada frame: en celu se apaga (no se nota) y el scroll deja de trabarse. */
+@media (max-width: 768px) {
+  .noise { display: none; }
+  /* En táctil no hay hover: evita estados "pegados" al tocar cards/botones */
+  .card-hover:hover { transform: none; box-shadow: 0 1px 2px rgba(12, 36, 28, 0.04); }
 }

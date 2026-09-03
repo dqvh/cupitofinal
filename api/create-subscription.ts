@@ -12,8 +12,8 @@
 export const config = { runtime: "edge" };
 
 const PLANS = {
-  crece: { mensual: 9900, anual: 112800 }, // 9.400/mes × 12
-  escala: { mensual: 23000, anual: 220800 }, // 18.400/mes × 12
+  crece: { mensual: 9500, anual: 94800 }, // 7.900/mes × 12 (2 meses gratis)
+  escala: { mensual: 22000, anual: 219600 }, // 18.300/mes × 12 (2 meses gratis)
 } as const;
 
 function json(o: unknown, status = 200) {
