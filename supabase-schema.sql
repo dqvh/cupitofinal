@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS cupito_users (
 );
 -- Migración para bases ya creadas:
 ALTER TABLE cupito_users ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
+ALTER TABLE cupito_users ADD COLUMN IF NOT EXISTS auth_id TEXT UNIQUE;
 
 -- 2. Tabla de Datos de Negocio (servicios, horarios, reservas, reseñas, cupones)
 CREATE TABLE IF NOT EXISTS cupito_data (
