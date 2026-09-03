@@ -29,6 +29,20 @@ body {
 
 ::selection { background: var(--color-lime); color: var(--color-ink); }
 
+/* ---------- scrollbar de marca (desktop) ---------- */
+html { scrollbar-width: thin; scrollbar-color: #1e5c49 transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #1e5c49, #0c241c);
+  border-radius: 999px;
+  border: 2px solid #eef1e6;
+}
+::-webkit-scrollbar-thumb:hover { background: #0c241c; }
+/* scrollbars finas dentro de modales y paneles */
+.modal-scroll::-webkit-scrollbar, .thin-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.modal-scroll::-webkit-scrollbar-thumb, .thin-scroll::-webkit-scrollbar-thumb { border: none; }
+
 /* ---------- texturas ---------- */
 .noise {
   position: fixed; inset: 0; z-index: 70; pointer-events: none; opacity: 0.05; mix-blend-mode: overlay;

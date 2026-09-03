@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
-  THEMES, SEMILLA_MONTHLY_LIMIT, monthBookingCount,
+  THEMES, SEMILLA_MONTHLY_LIMIT, monthBookingCount, findOverlap, isSlotBlocked,
   type User, type BizData, type BizSettings, type Coupon, type ColorTheme,
 } from "../lib/store";
 import {
@@ -188,16 +188,20 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
     return false;
   };
   const rawSlots = selectedDate ? slotsForDay(hoursFor(selectedDate)) : [];
-  const blockedTimesForDate = (key: string) =>
-    (biz.blockedSlots || [])
-      .filter((bs) => bs.date === key && bs.time && (!bs.proId || !proId || bs.proId === proId))
-      .map((bs) => bs.time!);
-  const takenTimes = (key: string) => [
-    ...biz.bookings.filter((b) => b.date === key && b.status !== "cancelada" && (!b.proId || !proId || b.proId === proId)).map((b) => b.time),
-    ...blockedTimesForDate(key),
-  ];
+  const busyTimes = (key: string) => {
+    const h = hoursFor(key);
+    if (!h.open) return [] as string[];
+    const dur = service?.duration ?? 45;
+    const pro = proId ?? undefined;
+    return slotsForDay(h).filter(
+      (t) =>
+        isSlotBlocked(biz.blockedSlots || [], key, t, pro) ||
+        !!findOverlap({ date: key, time: t, dur, proId: pro }, biz.bookings, biz.services)
+    );
+  };
+  const takenTimes = busyTimes;
   const slots = (selectedDate === todayKey ? rawSlots.filter((t) => t > currentHHMM) : rawSlots)
-    .filter((t) => !blockedTimesForDate(selectedDate ?? "").includes(t));
+    .filter((t) => !takenTimes(selectedDate ?? "").includes(t));
   const allTaken = rawSlots.length > 0 && slots.every((t) => takenTimes(selectedDate ?? "").includes(t));
   const monthLimitReached = !paid && monthBookingCount(biz) >= SEMILLA_MONTHLY_LIMIT;
   const hasBreak = selectedDate ? !!hoursFor(selectedDate).from2 : false;

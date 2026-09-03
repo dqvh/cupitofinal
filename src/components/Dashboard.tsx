@@ -18,6 +18,9 @@ import {
   isRecurrentClient,
   SEMILLA_MONTHLY_LIMIT,
   monthBookingCount,
+  serviceDurationOf,
+  findOverlap,
+  isSlotBlocked,
   type ThemeId,
   type Booking,
   type BookingStatus,
@@ -1476,8 +1479,11 @@ function BookingModal({ initialDate, initialClient, initialPhone, initialService
   if (!data) return null;
 
   const dayHours = data.settings.hours[dayOfWeek(date)];
-  const taken = data.bookings.filter((b) => b.date === date && b.status !== "cancelada").map((b) => b.time);
-  const free = slotsForDay(dayHours).filter((t) => !taken.includes(t));
+  const selPro = proId || undefined;
+  const selDur = serviceDurationOf(data.services, serviceId);
+  const free = slotsForDay(dayHours).filter(
+    (t) => !isSlotBlocked(data.blockedSlots || [], date, t, selPro) && !findOverlap({ date, time: t, dur: selDur, proId: selPro }, data.bookings, data.services)
+  );
 
   const submit = (e: FormEvent) => {
     e.preventDefault();

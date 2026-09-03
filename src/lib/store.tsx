@@ -447,8 +447,7 @@ export function sortWaitlist(waitlist: WaitlistEntry[], bookings: Booking[], pla
 }
 
 /* Horarios según configuración del día (intervalos 45 min), con corte opcional */
-export function slotsForDay(h: DayHours | undefined): string[] {
-  if (!h || !h.open) return [];
+export function slotsForDay(h: DayHours | undefined): string[] {  if (!h || !h.open) return [];
   const block = (from?: string, to?: string): string[] => {
     if (!from || !to) return [];
     const [fh, fm] = from.split(":").map(Number);
@@ -463,6 +462,52 @@ export function slotsForDay(h: DayHours | undefined): string[] {
     return out;
   };
   return [...block(h.from, h.to), ...block(h.from2, h.to2)];
+}
+
+export function toMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+export function serviceDurationOf(services: Pick<Service, "id" | "duration">[], id: string): number {
+  return services.find((s) => s.id === id)?.duration ?? 45;
+}
+
+/* ¿El turno nuevo pisa algún turno existente? Compara intervalos reales
+   (hora + duración del servicio), no solo la hora exacta. Antes un servicio
+   de 90 min a las 10:00 dejaba reservar otro a las 10:45 encimado. */
+export function findOverlap(
+  slot: { date: string; time: string; dur: number; proId?: string },
+  list: Pick<Booking, "id" | "date" | "time" | "status" | "proId" | "serviceId" | "client">[],
+  services: Pick<Service, "id" | "duration">[]
+): Booking | undefined {
+  const s = toMinutes(slot.time);
+  const e = s + slot.dur;
+  return list.find((b) => {
+    if (b.date !== slot.date || b.status === "cancelada") return false;
+    if (b.proId && slot.proId && b.proId !== slot.proId) return false;
+    const bs = toMinutes(b.time);
+    const be = bs + serviceDurationOf(services, b.serviceId);
+    return s < be && bs < e;
+  }) as Booking | undefined;
+}
+
+/* ¿El horario está bloqueado? Soporta bloqueo puntual (time), por rango
+   (time → endTime) y día completo (sin time). */
+export function isSlotBlocked(
+  slots: Pick<BlockedSlot, "date" | "time" | "endTime" | "proId">[],
+  date: string,
+  time: string,
+  proId?: string
+): boolean {
+  return slots.some((bs) => {
+    if (bs.date !== date) return false;
+    if (bs.proId && proId && bs.proId !== proId) return false;
+    if (!bs.time) return true;
+    if (!bs.endTime) return bs.time === time;
+    const t = toMinutes(time);
+    return t >= toMinutes(bs.time) && t < toMinutes(bs.endTime);
+  });
 }
 
 export function defaultHours(): DayHours[] {
@@ -1423,10 +1468,9 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       return { ok: false, error: `Llegaste a las ${SEMILLA_MONTHLY_LIMIT} reservas del mes del plan Semilla. Subí a Crece para reservas ilimitadas.` } as const;
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." } as const;
-    const isBlocked = (data.blockedSlots || []).some((bs) => bs.date === date && (!bs.time || bs.time === time) && (!bs.proId || !proId || bs.proId === proId));
-    if (isBlocked) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." } as const;
-    const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !proId || b.proId === proId));
-    if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` } as const;
+    if (isSlotBlocked(data.blockedSlots || [], date, time, proId)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." } as const;
+    const clash = findOverlap({ date, time, dur: serviceDurationOf(data.services, serviceId), proId }, data.bookings, data.services);
+    if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` } as const;
     const id = uid();
     const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId, createdAt: Date.now() };
     // UN solo guardado atómico: crea el turno Y borra de la lista juntos.
@@ -1472,10 +1516,9 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       return { ok: false, error: `Llegaste a las ${SEMILLA_MONTHLY_LIMIT} reservas del mes del plan Semilla. Subí a Crece para reservas ilimitadas.` };
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
-    const isBlocked = (data.blockedSlots || []).some((bs) => bs.date === date && (!bs.time || bs.time === time) && (!bs.proId || !proId || bs.proId === proId));
-    if (isBlocked) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
-    const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !proId || b.proId === proId));
-    if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` };
+    if (isSlotBlocked(data.blockedSlots || [], date, time, proId)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
+    const clash = findOverlap({ date, time, dur: serviceDurationOf(data.services, serviceId), proId }, data.bookings, data.services);
+    if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
     const id = uid();
     const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId, createdAt: Date.now() };
     data.bookings = [...data.bookings, newBooking];
@@ -1496,10 +1539,9 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       const dayCount = data.bookings.filter((b) => b.date === date).length;
       pro = data.professionals[dayCount % data.professionals.length].id;
     }
-    const isBlocked = (data.blockedSlots || []).some((bs) => bs.date === date && (!bs.time || bs.time === time) && (!bs.proId || !pro || bs.proId === pro));
-    if (isBlocked) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
-    const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !pro || b.proId === pro));
-    if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` };
+    if (isSlotBlocked(data.blockedSlots || [], date, time, pro)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
+    const clash = findOverlap({ date, time, dur: serviceDurationOf(data.services, serviceId), proId: pro }, data.bookings, data.services);
+    if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
     const id = uid();
     const cleanEmail = (email || "").trim();
     const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim, createdAt: Date.now() };
@@ -1514,8 +1556,13 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const data = loadData(sessionUserId);
     const target = data.bookings.find((b) => b.id === id);
     if (!target) return { ok: false, error: "No se encontró el turno." };
-    const clash = data.bookings.find((b) => b.id !== id && b.date === newDate && b.time === newTime && b.status !== "cancelada");
-    if (clash) return { ok: false, error: `El horario ${newTime} del ${newDate} ya está ocupado por ${clash.client}.` };
+    const newPro = newProId !== undefined ? newProId : target.proId;
+    const clash = findOverlap(
+      { date: newDate, time: newTime, dur: serviceDurationOf(data.services, target.serviceId), proId: newPro },
+      data.bookings.filter((b) => b.id !== id),
+      data.services
+    );
+    if (clash) return { ok: false, error: clash.time === newTime ? `El horario ${newTime} del ${newDate} ya está ocupado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
 
     data.bookings = data.bookings.map((b) => {
       if (b.id !== id) return b;
