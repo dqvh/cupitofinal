@@ -28,6 +28,7 @@ import {
   sbValidateSession,
   sbHasSession,
   sbGetAccessToken,
+  takeForbiddenUser,
 } from "./supabase";
 import { sendReviewRequestEmail } from "./email";
 
@@ -2224,9 +2225,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Sincronización continua de datos frescos desde Supabase para el negocio logueado
   useEffect(() => {
     if (!sessionUserId || !isSupabaseConfigured) return;
+    forbiddenNoticedFor.current = null;
+    const checkForbidden = () => {
+      const f = takeForbiddenUser();
+      if (f && f === sessionUserId && forbiddenNoticedFor.current !== sessionUserId) {
+        forbiddenNoticedFor.current = sessionUserId;
+        toast("La nube rechazó el guardado: cerrá sesión y volvé a entrar para reconectar 🔄", "warn");
+      }
+    };
     api.syncUserDataFromCloud(sessionUserId);
     const interval = setInterval(() => {
       api.syncUserDataFromCloud(sessionUserId);
+      checkForbidden();
     }, 6000);
     const onFocus = () => api.syncUserDataFromCloud(sessionUserId);
     window.addEventListener("focus", onFocus);
@@ -2239,6 +2249,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Si hay sesión local vieja pero no hay JWT, las escrituras no llegan a la nube:
   // avisar una vez que hay que volver a entrar (la sesión Auth expira o se cerró en otro lado).
   const reloginNoticed = useRef(false);
+  const forbiddenNoticedFor = useRef<string | null>(null);
   useEffect(() => {
     if (reloginNoticed.current || !memo.user || isDemoUser(memo.user)) return;
     if (!isSupabaseConfigured || sbHasSession()) return;

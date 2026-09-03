@@ -84,8 +84,27 @@ async function upsert(table: "cupito_users" | "cupito_data", row: Record<string,
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Supabase upsert ${res.status}: ${txt.slice(0, 200)}`);
+    // 401/403 = RLS rechazó la escritura (sesión vieja o sin JWT).
+    // Se registra para avisar en pantalla en vez de fallar en silencio.
+    if (res.status === 401 || res.status === 403) {
+      const uid = row.id ?? row.user_id;
+      if (uid) noteRemoteForbidden(String(uid));
+    }
+    const err = new Error(`Supabase upsert ${res.status}: ${txt.slice(0, 200)}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
+}
+
+/* Cola de userIds cuya escritura rechazó la nube (para toast de re-login) */
+const forbiddenQueue: string[] = [];
+export function noteRemoteForbidden(userId: string) {
+  if (!forbiddenQueue.includes(userId) && forbiddenQueue.length < 10) {
+    forbiddenQueue.push(userId);
+  }
+}
+export function takeForbiddenUser(): string | null {
+  return forbiddenQueue.shift() ?? null;
 }
 
 function mapUser(u: any): User {
