@@ -191,6 +191,7 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
       created_at: user.createdAt,
       subscription: user.subscription || null,
       auth_id: (user as User & { auth_id?: string }).auth_id || null,
+      deleted: false,
     }, "id");
 
     if (data) {
@@ -198,6 +199,7 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
         user_id: user.id,
         data,
         updated_at: Date.now(),
+        deleted: false,
       }, "user_id");
     }
     return true;

@@ -371,6 +371,14 @@ function markUserDeleted(id: string) {
   safeSet(DELETED_USERS_KEY, JSON.stringify(Array.from(s)));
 }
 
+function unmarkUserDeleted(id: string) {
+  const s = getDeletedUserIds();
+  if (s.has(id)) {
+    s.delete(id);
+    safeSet(DELETED_USERS_KEY, JSON.stringify(Array.from(s)));
+  }
+}
+
 const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -722,7 +730,12 @@ function saveUsers(list: User[]) {
 
 function saveSession(id: string | null) {
   sessionUserId = id;
-  if (id) safeSet(SESSION_KEY, id); else safeRemove(SESSION_KEY);
+  if (id) {
+    unmarkUserDeleted(id);
+    safeSet(SESSION_KEY, id);
+  } else {
+    safeRemove(SESSION_KEY);
+  }
 }
 
 /* Marca que la cuenta se creó recién (para mostrarle elegir plan al entrar).
