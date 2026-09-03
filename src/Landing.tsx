@@ -207,11 +207,43 @@ function BookingDemo() {
 
   return (
     <div className="relative">
-      <div className="floaty absolute -left-5 -top-6 z-10 hidden rotate-[-5deg] items-center gap-2 rounded-xl border-2 border-ink/10 bg-card px-3.5 py-2 text-xs font-bold text-ink shadow-block-coral sm:flex" style={{ "--tilt": "-5deg" } as React.CSSProperties}>
-        <span className="h-2 w-2 rounded-full bg-coral" /> 0 turnos pisados este mes
+      {/* Burbuja 1: Reserva nueva */}
+      <div
+        className="floaty absolute -left-7 -top-8 z-20 hidden items-start gap-2.5 rounded-2xl border-2 border-ink/10 bg-white/95 p-3 text-xs font-semibold text-ink shadow-xl shadow-evergreen/10 backdrop-blur-md sm:flex"
+        style={{ "--tilt": "-4deg" } as React.CSSProperties}
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-lime text-ink font-bold text-xs">✓</span>
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">Nueva reserva online</p>
+          <p className="font-display font-bold text-xs text-ink">Sofía M. · Uñas semi</p>
+          <p className="text-[10px] text-inkmute">Sábado 15:30 hs · Seña pagada</p>
+        </div>
       </div>
-      <div className="floaty absolute -right-4 top-1/3 z-10 hidden rotate-[4deg] items-center gap-2 rounded-xl border-2 border-ink/10 bg-lime px-3.5 py-2 text-xs font-bold text-ink shadow-block-ink md:flex" style={{ "--tilt": "4deg", animationDelay: "1.2s" } as React.CSSProperties}>
-        <IconCheck className="h-3.5 w-3.5" /> Anticipo cobrado
+
+      {/* Burbuja 2: Seña acreditada */}
+      <div
+        className="floaty absolute -right-6 top-1/4 z-20 hidden items-start gap-2.5 rounded-2xl border-2 border-lime/40 bg-evergreen p-3 text-xs font-semibold text-paper shadow-2xl md:flex"
+        style={{ "--tilt": "4deg", animationDelay: "1.4s" } as React.CSSProperties}
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-lime/20 text-lime font-bold text-xs">💸</span>
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-lime">Seña acreditada</p>
+          <p className="font-display font-bold text-xs text-paper">+$5.000 asegurados</p>
+          <p className="text-[10px] text-paper/70">Caja y agenda garantizada</p>
+        </div>
+      </div>
+
+      {/* Burbuja 3: Recordatorio WhatsApp */}
+      <div
+        className="floaty absolute -left-5 -bottom-7 z-20 hidden items-start gap-2.5 rounded-2xl border-2 border-ink/10 bg-white/95 p-3 text-xs font-semibold text-ink shadow-xl backdrop-blur-md lg:flex"
+        style={{ "--tilt": "-2deg", animationDelay: "2.8s" } as React.CSSProperties}
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs">💬</span>
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">Recordatorio enviado</p>
+          <p className="font-display font-bold text-xs text-ink">«Hola Lucas, mañana 11 hs te esperamos»</p>
+          <p className="text-[10px] text-inkmute">Automático por WhatsApp</p>
+        </div>
       </div>
 
       <div className="relative rounded-[22px] border-2 border-ink/15 bg-card text-ink shadow-block">
@@ -527,6 +559,58 @@ function Problem() {
             </div>
           </Reveal>
         </div>
+
+        {/* Comparativa visual Sin Cupito vs Con Cupito */}
+        <Reveal delay={160} className="mt-16">
+          <div className="rounded-[28px] border-2 border-ink/10 bg-card p-6 shadow-block-ink sm:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b-2 border-ink/10 pb-4 mb-6">
+              <div>
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-coral">Comparativa en tu día a día</p>
+                <h3 className="font-display text-2xl font-extrabold text-ink">¿Por qué cambiar el cuaderno o el chat?</h3>
+              </div>
+              <span className="w-fit rounded-full bg-lime/30 px-3 py-1 text-xs font-bold text-ink">
+                Resultados desde el día 1
+              </span>
+            </div>
+            <div className="grid gap-3 sm:gap-4">
+              {[
+                {
+                  sin: "Cancelan o te clavan el visto a último momento y el sillón queda vacío toda la tarde.",
+                  con: "Cobrás seña previa al reservar o el próximo de la lista entra automático. Silla llena.",
+                },
+                {
+                  sin: "Respondés mensajes de turnos a las 2 AM o con las manos ocupadas mientras atendés.",
+                  con: "Tus clientes reservan solos las 24 horas desde tu link. Vos solo trabajás tranquilo.",
+                },
+                {
+                  sin: "Turnos pisados por anotar en cuadernos de papel o no cruzar agendas con tu equipo.",
+                  con: "Calendario inteligente en tiempo real que no pisa jamás a ningún profesional.",
+                },
+                {
+                  sin: "«Uy, me re olvidé». Clientes que faltan sin avisar y esa plata no vuelve nunca más.",
+                  con: "Invitación a Google/Apple Calendar y recordatorios automáticos enviados por WhatsApp.",
+                },
+              ].map((row, idx) => (
+                <div key={idx} className="grid md:grid-cols-2 gap-3 rounded-2xl border border-ink/8 bg-paper/60 p-4 transition-all hover:bg-paper">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-coral/15 font-display text-xs font-black text-coral">✕</span>
+                    <div>
+                      <span className="font-display text-xs font-extrabold uppercase tracking-wider text-coral">Sin Cupito</span>
+                      <p className="mt-0.5 text-xs sm:text-sm text-inkmute leading-relaxed">{row.sin}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 border-t border-ink/8 pt-3 md:border-t-0 md:border-l md:border-ink/8 md:pl-4 md:pt-0">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-fern/15 font-display text-xs font-black text-fern">✓</span>
+                    <div>
+                      <span className="font-display text-xs font-extrabold uppercase tracking-wider text-fern">Con Cupito</span>
+                      <p className="mt-0.5 text-xs sm:text-sm font-semibold text-ink leading-relaxed">{row.con}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -1174,12 +1258,30 @@ function CustomPlanModal({ onClose }: { onClose: () => void }) {
 
 /* ============ FAQ ============ */
 const FAQS = [
-  { q: "¿Necesito saber de tecnología para configurarlo?", a: "No. Si sabés crear una historia de Instagram, sabés usar Cupito. Elegís una plantilla, cargás tus servicios y horarios, y en unos 10 minutos tenés tu link funcionando." },
-  { q: "¿Mis clientes tienen que descargarse una app?", a: "Jamás. Tocan tu link (desde tu bio, un QR o un mensaje) y reservan directo desde el navegador, en menos de un minuto." },
-  { q: "¿Cómo funciona la seña?", a: "Vos definís el porcentaje (por ejemplo, 20%). Al reservar, el cliente transfiere a tu alias o CBU y carga el número de comprobante. Vos verificás que el dinero llegó y confirmás el turno con un clic." },
-  { q: "¿Puedo tener horarios distintos por día y un corte al mediodía?", a: "Sí. Cada día de la semana tiene su propio horario de apertura y cierre, y podés agregar un corte (por ejemplo, de 13:00 a 15:00). Los turnos disponibles se generan solos según eso." },
-  { q: "¿Qué pasa si un cliente cancela a último momento?", a: "Vos definís la política. Si ya pagó la seña y cancela fuera de tiempo, la seña es tuya. Además, la lista de espera te avisa para llenar ese hueco en minutos." },
-  { q: "¿Puedo probarlo sin pagar?", a: "Sí: el plan Semilla es gratis para siempre (25 reservas al mes) y el plan Crece tiene 14 días de prueba completa, sin tarjeta. Si no te convence, no pagás nada." },
+  {
+    q: "¿Mis clientes tienen que descargarse una app para reservar?",
+    a: "Jamás. Tus clientes tocan tu link (desde tu bio de Instagram, un estado de WhatsApp o escaneando el cartel con QR en tu local) y reservan directo en el navegador de su celular en 1 minuto. No instalan nada, no ocupa espacio y no tienen que crearse contraseñas obligatorias para reservar.",
+  },
+  {
+    q: "¿Es realmente gratis para empezar?",
+    a: "Sí, tenés 14 días de prueba completa con todas las funciones desbloqueadas sin poner ningún dato de tarjeta de crédito. Además, contás con el plan Semilla gratuito para siempre (hasta 25 reservas al mes). Si tu negocio crece, pasás al plan Crece cuando quieras.",
+  },
+  {
+    q: "¿Cómo funciona la seña por transferencia?",
+    a: "Vos definís el porcentaje (por ejemplo, 20% o 50%). Al reservar, el cliente ve tu Alias o CBU bancario, realiza la transferencia y adjunta el número de comprobante. Vos acreditás la seña con un solo clic desde tu panel y el turno queda confirmado.",
+  },
+  {
+    q: "¿Qué pasa cuando un cliente cancela su turno?",
+    a: "Cupito gestiona el hueco automáticamente: el cliente puede cancelar con anticipación desde el botón «Mis turnos» y el horario se libera solo. Además, la lista de espera te permite reasignar el lugar al instante para que nunca te quede un sillón vacío.",
+  },
+  {
+    q: "¿Puedo configurar horarios distintos por día y corte al mediodía?",
+    a: "Sí, totalmente. Podés elegir qué días abrís, a qué hora abrís y cerrás cada día, y agregar cortes de almuerzo (por ejemplo, de 13:00 a 15:00). Los turnos disponibles para tus clientes se calculan automáticamente.",
+  },
+  {
+    q: "¿Necesito saber de tecnología para configurarlo?",
+    a: "Para nada. Si sabés usar WhatsApp o Instagram, podés manejar Cupito. Tu página ya viene lista para usar y podés personalizar tus servicios, precios y fotos en menos de 5 minutos.",
+  },
 ];
 
 function Faq() {
@@ -1211,9 +1313,51 @@ function Faq() {
             );
           })}
         </div>
-        <Reveal delay={200} className="mt-12 text-center">
-          <p className="text-inkmute">¿Tenés otra duda? Escribinos a hola@cupito.app</p>
-          <a href="#/auth" className="mt-6 inline-flex items-center gap-2 rounded-full border-2 border-ink/20 px-6 py-3 font-display font-bold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:border-evergreen hover:bg-evergreen hover:text-lime">
+
+        {/* Box interactivo para preguntar por WhatsApp directo */}
+        <Reveal delay={200} className="mt-14">
+          <div className="mx-auto max-w-xl rounded-3xl border-2 border-evergreen/15 bg-white p-6 shadow-sm sm:p-8">
+            <div className="flex items-center gap-3.5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-evergreen text-lime shadow-sm">
+                <IconWhatsApp className="h-6 w-6" />
+              </span>
+              <div>
+                <h3 className="font-display text-lg font-extrabold text-ink leading-tight">¿Te quedaste con alguna duda?</h3>
+                <p className="text-xs text-inkmute">Escribí tu consulta acá y te respondemos por WhatsApp en minutos:</p>
+              </div>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const input = form.elements.namedItem("faqQuery") as HTMLInputElement;
+                const q = input?.value?.trim();
+                if (!q) return;
+                const text = `¡Hola! Vengo de la página de Cupito y quería consultarles: ${q}`;
+                window.open(`https://wa.me/5491131996205?text=${encodeURIComponent(text)}`, "_blank");
+              }}
+              className="mt-4 flex flex-col sm:flex-row gap-2"
+            >
+              <input
+                name="faqQuery"
+                type="text"
+                placeholder="Ej: ¿Puedo usarlo si tengo 3 profesionales en el local?"
+                required
+                className="field flex-1 text-sm bg-ink/[0.02]"
+              />
+              <button
+                type="submit"
+                className="btn-press btn-glow-lime inline-flex items-center justify-center gap-2 rounded-xl bg-evergreen px-5 py-3 font-display text-xs font-bold text-lime hover:bg-pine"
+              >
+                <span>Consultar por WhatsApp</span>
+                <IconArrow className="h-3.5 w-3.5" />
+              </button>
+            </form>
+          </div>
+        </Reveal>
+
+        <Reveal delay={250} className="mt-10 text-center">
+          <a href="#/auth" className="inline-flex items-center gap-2 rounded-full border-2 border-ink/20 px-6 py-3 font-display font-bold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:border-evergreen hover:bg-evergreen hover:text-lime">
             Probar Cupito gratis <IconArrow className="h-4 w-4" />
           </a>
         </Reveal>
