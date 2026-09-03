@@ -2228,9 +2228,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     forbiddenNoticedFor.current = null;
     const checkForbidden = () => {
       const f = takeForbiddenUser();
-      if (f && f === sessionUserId && forbiddenNoticedFor.current !== sessionUserId) {
+      if (f && f.userId === sessionUserId && forbiddenNoticedFor.current !== sessionUserId) {
         forbiddenNoticedFor.current = sessionUserId;
-        toast("La nube rechazó el guardado: cerrá sesión y volvé a entrar para reconectar 🔄", "warn");
+        toast(
+          f.status === 400
+            ? "La nube rechazó el guardado: corré el SQL nuevo en Supabase y después tocá algo para reintentar"
+            : "La nube rechazó el guardado: cerrá sesión y volvé a entrar para reconectar 🔄",
+          "warn"
+        );
       }
     };
     api.syncUserDataFromCloud(sessionUserId);

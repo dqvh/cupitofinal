@@ -85,10 +85,11 @@ async function upsert(table: "cupito_users" | "cupito_data", row: Record<string,
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     // 401/403 = RLS rechazó la escritura (sesión vieja o sin JWT).
+    // 400 = pedido mal formado (casi siempre: falta correr el SQL nuevo).
     // Se registra para avisar en pantalla en vez de fallar en silencio.
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
       const uid = row.id ?? row.user_id;
-      if (uid) noteRemoteForbidden(String(uid));
+      if (uid) noteRemoteForbidden(String(uid), res.status);
     }
     const err = new Error(`Supabase upsert ${res.status}: ${txt.slice(0, 200)}`) as Error & { status?: number };
     err.status = res.status;
@@ -96,14 +97,14 @@ async function upsert(table: "cupito_users" | "cupito_data", row: Record<string,
   }
 }
 
-/* Cola de userIds cuya escritura rechazó la nube (para toast de re-login) */
-const forbiddenQueue: string[] = [];
-export function noteRemoteForbidden(userId: string) {
-  if (!forbiddenQueue.includes(userId) && forbiddenQueue.length < 10) {
-    forbiddenQueue.push(userId);
+/* Cola de escrituras rechazadas por la nube (para toast de diagnóstico) */
+const forbiddenQueue: { userId: string; status: number }[] = [];
+export function noteRemoteForbidden(userId: string, status = 0) {
+  if (forbiddenQueue.length < 10 && !forbiddenQueue.some((f) => f.userId === userId)) {
+    forbiddenQueue.push({ userId, status });
   }
 }
-export function takeForbiddenUser(): string | null {
+export function takeForbiddenUser(): { userId: string; status: number } | null {
   return forbiddenQueue.shift() ?? null;
 }
 
