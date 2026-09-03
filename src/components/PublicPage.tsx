@@ -50,8 +50,9 @@ export default function PublicPage({ slug }: { slug: string }) {
   const { user } = page;
   const biz: BizData = page.data;
   const s = biz.settings;
-  const theme = THEMES[s.theme ?? "evergreen"] ?? THEMES.evergreen;
   const paid = isPaid(user);
+  const activeThemeId = paid ? (s.theme ?? "evergreen") : "evergreen";
+  const theme = THEMES[activeThemeId] ?? THEMES.evergreen;
   const avg = biz.reviews.length > 0 ? biz.reviews.reduce((a, r) => a + r.rating, 0) / biz.reviews.length : null;
 
   return (

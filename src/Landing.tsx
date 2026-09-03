@@ -73,7 +73,7 @@ function Nav() {
           {links.map((l) => (
             <a key={l.href} href={l.href} className="text-sm font-semibold text-paper/70 transition-colors duration-200 hover:text-lime">{l.label}</a>
           ))}
-          <a href="#/b/studio-nails" className="text-sm font-semibold text-lime/80 transition-colors duration-200 hover:text-lime">Ver ejemplo</a>
+          <a href="/studio-nails" target="_blank" rel="noreferrer" className="text-sm font-semibold text-lime/80 transition-colors duration-200 hover:text-lime">Ver ejemplo</a>
         </nav>
         <div className="flex items-center gap-3">
           {user ? (
@@ -398,7 +398,7 @@ function Hero() {
             </div>
             <p className="mt-4 text-sm text-paper/60">
               ¿Querés ver la página que reciben tus clientes?{" "}
-              <a href="#/b/studio-nails" className="font-display font-bold text-lime underline decoration-limedeep/60 decoration-2 underline-offset-4 transition-colors hover:text-limedeep">Mirá el ejemplo en vivo →</a>
+              <a href="/studio-nails" target="_blank" rel="noreferrer" className="font-display font-bold text-lime underline decoration-limedeep/60 decoration-2 underline-offset-4 transition-colors hover:text-limedeep">Mirá el ejemplo en vivo →</a>
             </p>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-paper/60">
               <span className="inline-flex items-center gap-2"><IconCheck className="h-4 w-4 text-lime" /> 14 días gratis</span>
@@ -945,25 +945,25 @@ type PlanDef = { id: Plan; name: string; tagline: string; monthly: number; yearl
 const PLANS: PlanDef[] = [
   {
     id: "semilla", name: "Semilla", tagline: "Para probar el agua sin mojarte.", monthly: 0, yearly: 0, cta: "Empezar gratis", highlight: false,
-    features: [{ t: "1 calendario y 1 profesional" }, { t: "25 reservas al mes" }, { t: "Tu link cupito.app/tu-negocio" }, { t: "Recordatorios por email" }, { t: "Lista de espera" }, { t: "Estadísticas básicas" }],
+    features: [{ t: "1 calendario y 1 profesional" }, { t: "25 reservas al mes" }, { t: "Tu link propio cupito.app/tu-negocio" }, { t: "Recordatorios por email" }, { t: "Lista de espera" }, { t: "Estadísticas básicas" }],
   },
   {
     id: "crece", name: "Crece", tagline: "El favorito de los que viven de sus turnos.", monthly: 9900, yearly: 9400, cta: "Suscribirme", highlight: true, badge: "Más elegido",
     features: [
-      { t: "Reservas ilimitadas" }, { t: "Hasta 3 profesionales" }, { t: "Seña configurable: la activás cuando quieras y elegís el %" },
-      { t: "Tienda de productos: vendé en cada reserva" }, { t: "Cupones y descuentos" }, { t: "Horarios de atención distintos por día" }, { t: "Página personalizada con tu marca" },
+      { t: "Reservas ilimitadas" }, { t: "Hasta 3 profesionales" }, { t: "Cobro de seña configurable por transferencia" },
+      { t: "Paletas de colores exclusivas para tu página" }, { t: "Tienda de productos: vendé en cada reserva" },
+      { t: "Cupones de descuento y promociones" }, { t: "Límite de anticipación de reservas y cortes de horario" },
     ],
   },
   {
     id: "escala", name: "Escala", tagline: "Para estudios, clínicas y equipos grandes.", monthly: 23000, yearly: 18400, cta: "Suscribirme", highlight: false,
     features: [
       { t: "Todo lo de Crece" },
-      { t: "Profesionales y equipos ilimitados" },
+      { t: "Profesionales y colaboradores ilimitados" },
       { t: "Estadísticas avanzadas con análisis de retención e ingresos" },
-      { t: "Exportación de datos y reportes a Excel / CSV" },
-      { t: "Paletas de colores exclusivas para tu página" },
-      { t: "Lista de espera inteligente con aviso prioritario" },
-      { t: "Soporte prioritario" },
+      { t: "Exportación de clientes y reservas a Excel / CSV" },
+      { t: "Lista de espera inteligente con prioridad" },
+      { t: "Soporte preferencial y onboarding guiado" },
     ],
   },
 ];
@@ -1240,8 +1240,8 @@ function Footer() {
               <a href="#/auth" className="group inline-flex items-center gap-3 rounded-full bg-lime px-9 py-5 font-display text-xl font-bold text-ink transition-all duration-200 hover:-translate-y-1 hover:bg-limedeep hover:shadow-[0_20px_50px_rgba(205,244,99,0.4)] active:translate-y-0">
                 Crear mi agenda gratis <IconArrow className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1.5" />
               </a>
-              <a href="#/b/studio-nails" className="inline-flex items-center gap-2 rounded-full border-2 border-paper/25 px-7 py-[18px] font-display text-base font-bold text-paper transition-all duration-200 hover:border-lime hover:text-lime">
-                Ver el ejemplo en vivo
+              <a href="/studio-nails" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border-2 border-paper/25 px-7 py-[18px] font-display text-base font-bold text-paper transition-all duration-200 hover:border-lime hover:text-lime">
+                Ver el ejemplo en vivo ↗
               </a>
             </div>
             <p className="mt-7 text-sm text-paper/50">14 días gratis · Sin tarjeta · Cancelás cuando quieras · Tus datos son tuyos</p>

@@ -216,6 +216,7 @@ export interface BizSettings {
   transferHolder: string;
   setupDismissed: boolean;
   theme?: ThemeId;
+  maxAdvanceDays?: number;
 }
 
 export interface BizData {
@@ -389,6 +390,7 @@ export function defaultSettings(): BizSettings {
     transferHolder: "",
     setupDismissed: false,
     theme: "evergreen",
+    maxAdvanceDays: 30,
   };
 }
 

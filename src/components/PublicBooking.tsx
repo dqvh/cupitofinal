@@ -36,13 +36,14 @@ function gcalUrl(o: { title: string; date: string; time: string; duration: numbe
 }
 
 /* ---------- calendario mensual ---------- */
-function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme }: {
-  cursor: Date; setCursor: (d: Date) => void; selected: string | null; onSelect: (k: string) => void; isClosed: (k: string) => boolean; theme: ColorTheme;
+function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme, maxAdvanceDays = 30 }: {
+  cursor: Date; setCursor: (d: Date) => void; selected: string | null; onSelect: (k: string) => void; isClosed: (k: string) => boolean; theme: ColorTheme; maxAdvanceDays?: number;
 }) {
   const year = cursor.getFullYear(), month = cursor.getMonth();
   const now = new Date();
   const nowMonth = now.getFullYear() * 12 + now.getMonth();
   const curMonth = year * 12 + month;
+  const maxMonths = maxAdvanceDays > 0 ? Math.max(1, Math.ceil(maxAdvanceDays / 30)) : 12;
   const pad = (new Date(year, month, 1).getDay() + 6) % 7;
   const total = new Date(year, month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array.from({ length: pad }, () => null), ...Array.from({ length: total }, (_, i) => i + 1)];
@@ -56,7 +57,7 @@ function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme }:
           <IconChevron className="h-4 w-4 rotate-180" />
         </button>
         <p className="font-display text-base font-extrabold capitalize text-ink">{label}</p>
-        <button type="button" disabled={curMonth >= nowMonth + 1} onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Mes siguiente"
+        <button type="button" disabled={curMonth >= nowMonth + maxMonths} onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Mes siguiente"
           className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/12 bg-white/60 text-ink transition-all enabled:hover:translate-x-0.5 enabled:hover:border-ink enabled:hover:bg-white disabled:opacity-30">
           <IconChevron className="h-4 w-4" />
         </button>
@@ -69,14 +70,14 @@ function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme }:
           if (d === null) return <span key={`x${i}`} />;
           const key = dateKey(new Date(year, month, d));
           const past = key < dateKey(now);
-          const maxDate = dateKey(addDays(now, 30));
+          const maxDate = maxAdvanceDays > 0 ? dateKey(addDays(now, maxAdvanceDays)) : "9999-99-99";
           const tooFar = key > maxDate;
           const closed = isClosed(key);
           const sel = key === selected;
           const disabled = past || tooFar || closed;
           return (
             <button type="button" key={key} disabled={disabled} onClick={() => onSelect(key)}
-              title={tooFar ? "Solo podés reservar hasta con 30 días de anticipación" : undefined}
+              title={tooFar ? `Solo podés reservar hasta con ${maxAdvanceDays} días de anticipación` : undefined}
               className={`relative flex aspect-square items-center justify-center rounded-lg border-2 font-display text-sm font-bold transition-all duration-150 ${sel ? theme.activeSlot : disabled ? "cursor-not-allowed border-transparent bg-ink/[0.04] text-ink/25" : "border-ink/10 bg-white/60 text-ink hover:-translate-y-0.5 hover:border-ink/40"}`}>
               {d}
               {closed && !past && !tooFar && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-coral/60" />}
@@ -141,7 +142,9 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
 
   const paid = isPaid(user);
   const settings = biz.settings;
-  const theme = THEMES[settings.theme ?? "evergreen"] ?? THEMES.evergreen;
+  const activeThemeId = paid ? (settings.theme ?? "evergreen") : "evergreen";
+  const theme = THEMES[activeThemeId] ?? THEMES.evergreen;
+  const maxAdvanceDays = settings.maxAdvanceDays ?? 30;
   const hasPros = biz.professionals.length > 0;
   const depositOn = paid && settings.depositEnabled && settings.depositPct > 0;
   const service = biz.services.find((s) => s.id === serviceId);
@@ -357,7 +360,8 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
               <MonthPicker cursor={cursor} setCursor={setCursor} selected={selectedDate}
                 onSelect={(key) => { setSelectedDate(key); setTime(null); setWlDone(false); setShowWlForm(false); setStep(3); }}
                 isClosed={isClosed}
-                theme={theme} />
+                theme={theme}
+                maxAdvanceDays={maxAdvanceDays} />
             </div>
           </div>
         )}

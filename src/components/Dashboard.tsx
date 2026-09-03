@@ -264,7 +264,7 @@ export default function Dashboard() {
             ))}
           </nav>
           <div className="border-t border-paper/10 p-4">
-            <a href={`#/b/${user.slug}`} className="mb-2 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">
+            <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="mb-2 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">
               <IconLink className="h-4 w-4" /> Ver mi página
             </a>
             <div className="flex items-center gap-3 rounded-xl bg-pine/70 p-3">
@@ -592,7 +592,7 @@ export default function Dashboard() {
                       <div className="mt-5 flex flex-wrap gap-2.5">
                         <button onClick={() => { const url = `https://cupito.app/${user.slug}`; navigator.clipboard?.writeText(url).then(() => toast("Link copiado 📋"), () => toast(url, "warn")); }}
                           className="rounded-full bg-lime px-5 py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">Copiar link</button>
-                        <a href={`#/b/${user.slug}`} className="rounded-full border-2 border-paper/25 px-5 py-2.5 font-display text-sm font-bold text-paper transition-all hover:border-lime hover:text-lime">Abrir mi página ↗</a>
+                        <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="rounded-full border-2 border-paper/25 px-5 py-2.5 font-display text-sm font-bold text-paper transition-all hover:border-lime hover:text-lime">Abrir mi página ↗</a>
                       </div>
                     </div>
                     <div className="card mt-5 p-5">
@@ -754,7 +754,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
 
   if (!user || !data) return null;
 
-  const publicUrl = `${window.location.origin}${window.location.pathname}#/b/${user.slug}`;
+  const publicUrl = `${window.location.origin}/${user.slug}`;
 
   const saveHoursAndNext = () => {
     updateSettings({ hours });
@@ -1646,7 +1646,7 @@ function StatsView({ db }: { db: BizData }) {
             )}
           </div>
           <a
-            href={`#/b/${user?.slug}`}
+            href={`/${user?.slug}`}
             target="_blank"
             rel="noreferrer"
             className="rounded-full border-2 border-ink/15 px-5 py-2 font-display text-xs font-bold text-ink transition-all hover:-translate-y-0.5 hover:border-evergreen hover:bg-evergreen hover:text-lime"
@@ -2103,9 +2103,9 @@ function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: N
 
       <div className="pop-in mt-6 max-w-2xl" key={tab}>
         {tab === "negocio" && <BusinessTab user={user} onSave={onSaveProfile} />}
-        {tab === "pagina" && <PersonalizationCard settings={settings} onSave={(patch) => updateSettings(patch)} />}
+        {tab === "pagina" && <PersonalizationCard settings={settings} paid={isPaid(user)} onSave={(patch) => updateSettings(patch)} onRequestUpgrade={() => onSelectPlan("crece")} />}
         {tab === "pagos" && <DepositCard settings={settings} paid={isPaid(user)} onChange={(patch) => updateSettings(patch)} />}
-        {tab === "horarios" && <HoursCard hours={settings.hours} onChange={(hours) => updateSettings({ hours })} />}
+        {tab === "horarios" && <HoursCard hours={settings.hours} settings={settings} onChange={(hours) => updateSettings({ hours })} onUpdateSettings={(patch) => updateSettings(patch)} />}
         {tab === "plan" && (
           <PlanTab
             current={user.plan}
@@ -2152,7 +2152,7 @@ function BusinessTab({ user, onSave }: { user: { business: string; name: string;
   );
 }
 
-function PersonalizationCard({ settings, onSave }: { settings: BizSettings; onSave: (patch: Partial<BizSettings>) => void }) {
+function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { settings: BizSettings; paid: boolean; onSave: (patch: Partial<BizSettings>) => void; onRequestUpgrade: () => void }) {
   const { toast } = useStore();
   const [f, setF] = useState({
     description: settings.description || "",
@@ -2181,7 +2181,7 @@ function PersonalizationCard({ settings, onSave }: { settings: BizSettings; onSa
       whatsapp: f.whatsapp.replace(/\D/g, ""),
       instagram: f.instagram.trim().replace(/^@/, ""),
       mapsUrl: f.mapsUrl.trim(),
-      theme: f.theme,
+      theme: paid ? f.theme : "evergreen",
     });
     toast("Tu página se actualizó ✓");
   };
@@ -2198,27 +2198,48 @@ function PersonalizationCard({ settings, onSave }: { settings: BizSettings; onSa
 
       {/* Paleta de colores */}
       <div>
-        <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-inkmute">
-          🎨 Paleta de colores de tu página
-        </label>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <label className="block text-xs font-bold uppercase tracking-wider text-inkmute">
+            🎨 Paleta de colores de tu página
+          </label>
+          {!paid && (
+            <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
+              🔒 Paletas exclusivas: Plan Crece
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {(Object.keys(THEMES) as ThemeId[]).map((tid) => {
             const th = THEMES[tid];
+            const isLocked = !paid && tid !== "evergreen";
             const isSel = f.theme === tid;
             return (
               <button
                 key={tid}
                 type="button"
-                onClick={() => setF({ ...f, theme: tid })}
-                className={`flex items-center gap-2.5 rounded-xl border-2 p-3 text-left transition-all ${
-                  isSel ? "!border-evergreen !bg-evergreen/5 shadow-sm" : "border-ink/10 bg-white hover:border-ink/30"
+                onClick={() => {
+                  if (isLocked) {
+                    toast("🎨 Las paletas de colores exclusivas están disponibles en el plan Crece.", "warn");
+                    onRequestUpgrade();
+                    return;
+                  }
+                  setF({ ...f, theme: tid });
+                }}
+                className={`relative flex items-center gap-2.5 rounded-xl border-2 p-3 text-left transition-all ${
+                  isSel
+                    ? "!border-evergreen !bg-evergreen/5 shadow-sm"
+                    : isLocked
+                    ? "border-ink/8 bg-ink/[0.02] opacity-75 hover:border-amber-500/40"
+                    : "border-ink/10 bg-white hover:border-ink/30"
                 }`}
               >
                 <span className={`h-6 w-6 shrink-0 rounded-full bg-gradient-to-tr ${th.sampleGradient} shadow-inner flex items-center justify-center`}>
                   {isSel && <span className="h-2 w-2 rounded-full bg-white shadow" />}
+                  {isLocked && !isSel && <span className="text-[10px]">🔒</span>}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-ink">{th.name}</p>
+                  {isLocked && <p className="text-[9px] font-bold text-amber-800">Plan Crece</p>}
                 </div>
               </button>
             );
@@ -2335,7 +2356,17 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
   );
 }
 
-function HoursCard({ hours, onChange }: { hours: DayHours[]; onChange: (hours: DayHours[]) => void }) {
+function HoursCard({
+  hours,
+  settings,
+  onChange,
+  onUpdateSettings,
+}: {
+  hours: DayHours[];
+  settings: BizSettings;
+  onChange: (hours: DayHours[]) => void;
+  onUpdateSettings: (patch: Partial<BizSettings>) => void;
+}) {
   const { toast } = useStore();
   const set = (i: number, patch: Partial<DayHours>) => {
     const next = hours.map((h, idx) => (idx === i ? { ...h, ...patch } : h));
@@ -2378,6 +2409,43 @@ function HoursCard({ hours, onChange }: { hours: DayHours[]; onChange: (hours: D
             </div>
           );
         })}
+      </div>
+
+      {/* Anticipación máxima de reservas */}
+      <div className="mt-8 border-t-2 border-dashed border-ink/10 pt-6">
+        <label className="mb-1 block font-display text-sm font-extrabold text-ink">
+          📅 ¿Con cuánta anticipación pueden reservar tus clientes?
+        </label>
+        <p className="mb-3 text-xs text-inkmute">
+          Elegí el límite máximo de días hacia adelante en el calendario para que no saquen turnos con meses de anticipación.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { days: 7, label: "7 días (1 sem)" },
+            { days: 14, label: "14 días (2 sem)" },
+            { days: 30, label: "30 días (1 mes)" },
+            { days: 60, label: "60 días (2 meses)" },
+          ].map((opt) => {
+            const isSel = (settings.maxAdvanceDays ?? 30) === opt.days;
+            return (
+              <button
+                key={opt.days}
+                type="button"
+                onClick={() => {
+                  onUpdateSettings({ maxAdvanceDays: opt.days });
+                  toast(`Límite configurado a ${opt.label} ✓`);
+                }}
+                className={`btn-press rounded-xl border-2 py-2.5 px-3 text-center font-display text-xs font-bold transition-all ${
+                  isSel
+                    ? "border-evergreen bg-evergreen text-lime shadow-sm"
+                    : "border-ink/12 bg-white text-ink hover:border-ink/40"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
