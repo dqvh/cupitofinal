@@ -309,6 +309,10 @@ async function authFetch(
    Si configurás VITE_TURNSTILE_SITEKEY (Vercel) + el secreto en Supabase
    Auth → CAPTCHA, cada signup/signin lleva token anti-bots sin molestar
    al usuario. Sin sitekey, no hace nada. */
+
+export function turnstileSitekey(): string {
+  return pickEnv("VITE_TURNSTILE_SITEKEY", "NEXT_PUBLIC_TURNSTILE_SITEKEY");
+}
 let turnstileLoading: Promise<any> | null = null;
 function loadTurnstile(): Promise<any> {
   if (typeof window === "undefined") return Promise.reject(new Error("ssr"));
@@ -331,7 +335,7 @@ function loadTurnstile(): Promise<any> {
 }
 
 export async function getCaptchaToken(): Promise<string> {
-  const sitekey = pickEnv("VITE_TURNSTILE_SITEKEY", "NEXT_PUBLIC_TURNSTILE_SITEKEY");
+  const sitekey = turnstileSitekey();
   if (!sitekey || !isSupabaseConfigured || typeof window === "undefined") return "";
   try {
     const t = await loadTurnstile();
@@ -345,8 +349,15 @@ export async function getCaptchaToken(): Promise<string> {
       };
       const timer = setTimeout(() => finish(""), 10000);
       try {
+        // Off-screen visible (NO display:none: Turnstile falla en contenedores ocultos)
         const holder = document.createElement("div");
-        holder.style.display = "none";
+        holder.style.position = "fixed";
+        holder.style.left = "-9999px";
+        holder.style.top = "0";
+        holder.style.width = "30px";
+        holder.style.height = "30px";
+        holder.style.opacity = "0";
+        holder.style.pointerEvents = "none";
         holder.setAttribute("aria-hidden", "true");
         document.body.appendChild(holder);
         const wid = t.render(holder, {
@@ -414,8 +425,13 @@ export type SbSignUpResult =
 
 export async function sbSignUp(email: string, password: string): Promise<SbSignUpResult> {
   const em = email.toLowerCase().trim();
+  let captchaSent = false;
   try {
     const captcha = await getCaptchaToken();
+    captchaSent = !!captcha;
+    if (turnstileSitekey() && !captchaSent) {
+      console.warn("[Cupito] Turnstile no generó token (¿adblock? ¿dominio no autorizado en Cloudflare? ¿falta redeploy del sitekey?). Se intenta igual sin token.");
+    }
     const data = await authFetch("/signup", { email: em, password }, captcha ? { captcha } : undefined);
     const session = toSession(data);
     if (session) {
@@ -433,7 +449,11 @@ export async function sbSignUp(email: string, password: string): Promise<SbSignU
     return { ok: false, reason: "confirm", error: "confirm", authId: pendingId };
   } catch (e) {
     const msg = String((e as Error).message || "");
+    console.warn("[Cupito] signup falló:", msg);
     if (/captcha/i.test(msg)) {
+      if (turnstileSitekey() && !captchaSent) {
+        return { ok: false, reason: "error", error: "El captcha no cargó en tu navegador. Probá en incógnito sin adblock y verificá el dominio en Cloudflare." };
+      }
       return { ok: false, reason: "error", error: "La verificación anti-bots falló. Recargá la página e intentá de nuevo." };
     }
     if (/422|already registered|already exists|exists/i.test(msg)) {
@@ -451,8 +471,13 @@ export async function sbSignUp(email: string, password: string): Promise<SbSignU
 
 export async function sbSignIn(email: string, password: string): Promise<SbSignUpResult> {
   const em = email.toLowerCase().trim();
+  let captchaSent = false;
   try {
     const captcha = await getCaptchaToken();
+    captchaSent = !!captcha;
+    if (turnstileSitekey() && !captchaSent) {
+      console.warn("[Cupito] Turnstile no generó token (¿adblock? ¿dominio no autorizado en Cloudflare? ¿falta redeploy del sitekey?). Se intenta igual sin token.");
+    }
     const data = await authFetch("/token?grant_type=password", { email: em, password }, captcha ? { captcha } : undefined);
     const session = toSession(data);
     if (!session) throw new Error("session");
@@ -460,7 +485,11 @@ export async function sbSignIn(email: string, password: string): Promise<SbSignU
     return { ok: true, authId: session.user_id, email: session.email || em };
   } catch (e) {
     const msg = String((e as Error).message || "");
+    console.warn("[Cupito] signin falló:", msg);
     if (/captcha/i.test(msg)) {
+      if (turnstileSitekey() && !captchaSent) {
+        return { ok: false, reason: "error", error: "El captcha no cargó en tu navegador. Probá en incógnito sin adblock y verificá el dominio en Cloudflare." };
+      }
       return { ok: false, reason: "error", error: "La verificación anti-bots falló. Recargá la página e intentá de nuevo." };
     }
     if (/400|401|invalid|credentials|grant/i.test(msg)) {
