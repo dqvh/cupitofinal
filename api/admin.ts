@@ -51,6 +51,11 @@ export default async function handler(req: Request): Promise<Response> {
   };
 
   try {
+    /* ---------------- VERIFY ---------------- */
+    if (body.action === "verify") {
+      return json({ ok: true });
+    }
+
     /* ---------------- PROVISION ---------------- */
     if (body.action === "provision") {
       const name = String(body.name || "").trim().slice(0, 60);

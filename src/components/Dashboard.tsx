@@ -164,6 +164,41 @@ export default function Dashboard() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [notifyWl, setNotifyWl] = useState<{ client: string; phone: string; serviceName: string; date: string; time: string } | null>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    const checkStandalone = () => {
+      const isApp = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true;
+      setIsStandalone(Boolean(isApp));
+    };
+    checkStandalone();
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+    };
+  }, []);
+
+  const promptInstall = async () => {
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice && choice.outcome === "accepted") {
+          setDeferredPrompt(null);
+          store.toast("¡Cupito agregado a tu pantalla de inicio! 📲");
+          return;
+        }
+      } catch {}
+    }
+    setShowInstallModal(true);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -358,10 +393,28 @@ export default function Dashboard() {
               </div>
             ))}
           </nav>
-          <div className="border-t border-paper/10 p-4">
-            <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="mb-2 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">
+          <div className="border-t border-paper/10 p-4 space-y-2">
+            <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center gap-2 rounded-full bg-lime py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">
               <IconLink className="h-4 w-4" /> Ver mi página
             </a>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={promptInstall}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-paper/15 bg-paper/5 px-2 py-2 font-display text-[11px] font-bold text-paper transition-all hover:bg-paper/10 hover:border-lime"
+                title="Instalar como app en la pantalla del celular"
+              >
+                📲 {isStandalone ? "App lista" : "Instalar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCalendarModal(true)}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-paper/15 bg-paper/5 px-2 py-2 font-display text-[11px] font-bold text-paper transition-all hover:bg-paper/10 hover:border-lime"
+                title="Sincronizar turnos con el calendario del celular"
+              >
+                <IconCalendar className="h-3.5 w-3.5 text-lime" /> Calendario
+              </button>
+            </div>
             <div className="flex items-center gap-3 rounded-xl bg-pine/70 p-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime font-display text-xs font-bold text-ink">
                 {user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
@@ -383,7 +436,24 @@ export default function Dashboard() {
                 <LogoMark className="h-8 w-8 text-fern" />
                 <span className="font-display text-xl font-bold">cupito<span className="text-lime">.</span></span>
               </a>
-              <a href={`/${user.slug}`} className="rounded-full bg-lime px-4 py-1.5 font-display text-xs font-bold text-ink">Mi página</a>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={promptInstall}
+                  className="rounded-full bg-lime/20 border border-lime/40 px-3 py-1.5 font-display text-xs font-bold text-lime"
+                >
+                  📲 {isStandalone ? "App lista" : "Instalar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCalendarModal(true)}
+                  className="rounded-full bg-paper/10 px-2.5 py-1.5 font-display text-xs font-bold text-paper"
+                  title="Sincronizar calendario"
+                >
+                  📅 Cal
+                </button>
+                <a href={`/${user.slug}`} className="rounded-full bg-lime px-3.5 py-1.5 font-display text-xs font-bold text-ink">Mi página</a>
+              </div>
             </div>
             <div className="no-scrollbar flex gap-2 overflow-x-auto px-5 pb-3">
               {SECTIONS.flatMap((s) => s.items).map((n) => (
@@ -412,6 +482,22 @@ export default function Dashboard() {
                 <p className="mt-1 text-sm text-inkmute">{viewTitle[1]}</p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCalendarModal(true)}
+                  className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border-2 border-ink/15 bg-white/70 px-4 py-2 font-display text-xs font-bold text-ink hover:bg-white hover:border-ink/40"
+                  title="Sincronizar turnos con el calendario de tu celular"
+                >
+                  <IconCalendar className="h-3.5 w-3.5 text-fern" /> Calendario
+                </button>
+                <button
+                  type="button"
+                  onClick={promptInstall}
+                  className="btn-press hidden md:inline-flex items-center gap-1.5 rounded-full border-2 border-lime/50 bg-lime/20 px-3.5 py-2 font-display text-xs font-bold text-fern hover:bg-lime/30"
+                  title="Instalar en la pantalla de inicio del celular"
+                >
+                  📲 {isStandalone ? "App lista" : "Instalar app"}
+                </button>
                 <a
                   href={`/${user.slug}`}
                   target="_blank"
@@ -932,6 +1018,19 @@ export default function Dashboard() {
       </div>
 
       {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} waitlistId={prefill?.waitlistId} onClose={() => { setShowNew(false); setPrefill(null); }} onCreated={(info) => setNotifyWl(info)} />}
+      {showInstallModal && (
+        <InstallAppModal
+          onClose={() => setShowInstallModal(false)}
+          onPrompt={promptInstall}
+          hasDeferred={Boolean(deferredPrompt)}
+        />
+      )}
+      {showCalendarModal && (
+        <CalendarSyncModal
+          user={user}
+          onClose={() => setShowCalendarModal(false)}
+        />
+      )}
       {notifyWl && <WaitlistNotifyModal info={notifyWl} businessName={user.business} onClose={() => setNotifyWl(null)} />}
       {serviceModal.open && <ServiceModal service={serviceModal.id ? data.services.find((s) => s.id === serviceModal.id) : undefined} onClose={() => setServiceModal({ open: false })} />}
       {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => {
@@ -1389,6 +1488,19 @@ function StatusPill({ on, label, sub }: { on: boolean; label: string; sub: strin
   );
 }
 
+function googleCalUrl(opts: { title: string; date: string; time: string; dur: number; details: string }): string {
+  const [y, m, d] = opts.date.split("-").map(Number);
+  const [hh, mm] = (opts.time || "10:00").split(":").map(Number);
+  const startMs = Date.UTC(y, m - 1, d, hh + 3, mm, 0);
+  const endMs = startMs + Math.max(opts.dur, 15) * 60 * 1000;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fmt = (ms: number) => {
+    const dt = new Date(ms);
+    return `${dt.getUTCFullYear()}${pad(dt.getUTCMonth() + 1)}${pad(dt.getUTCDate())}T${pad(dt.getUTCHours())}${pad(dt.getUTCMinutes())}00Z`;
+  };
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(opts.title)}&dates=${fmt(startMs)}/${fmt(endMs)}&details=${encodeURIComponent(opts.details)}`;
+}
+
 function BookingRow({ b, service, pro, products, businessName, onStatus, onDelete, onVerify, onReject, onReschedule }: {
   b: Booking;
   service?: Service;
@@ -1451,6 +1563,22 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
             <span className="hidden sm:inline">WhatsApp</span>
           </a>
         )}
+        <a
+          href={googleCalUrl({
+            title: `${service?.name || "Turno"} - ${b.client}`,
+            date: b.date,
+            time: b.time,
+            dur: service?.duration ?? 45,
+            details: `Cliente: ${b.client}\nTeléfono: ${b.phone || "Sin teléfono"}\nServicio: ${service?.name || "Turno"}\nNegocio: ${businessName || "Cupito"}`,
+          })}
+          target="_blank"
+          rel="noreferrer"
+          title="Guardar este turno en Google Calendar"
+          className="btn-press flex h-8 items-center gap-1 rounded-full border border-sky-600/30 bg-sky-50 px-2 text-xs font-bold text-sky-800 transition-all hover:bg-sky-100"
+        >
+          <IconCalendar className="h-3.5 w-3.5 text-sky-600" />
+          <span className="hidden sm:inline">Cal</span>
+        </a>
         {claimPending && (
           <>
             <button onClick={() => onVerify(b.id)} className="btn-press rounded-full bg-fern px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-evergreen">Acreditar</button>
@@ -1484,6 +1612,148 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
         <div className="mt-5">{children}</div>
       </div>
     </div>
+  );
+}
+
+/* ============ MODAL: INSTALAR APP ============ */
+function InstallAppModal({ onClose, onPrompt, hasDeferred }: { onClose: () => void; onPrompt: () => void; hasDeferred: boolean }) {
+  const isIos = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+
+  return (
+    <Modal title="📲 Instalar Cupito" onClose={onClose}>
+      <div className="space-y-4 text-ink">
+        <p className="text-sm text-inkmute">
+          Instalá el panel de control en la pantalla de inicio de tu celular para entrar en 1 toque y anotar turnos sin abrir el navegador.
+        </p>
+
+        {hasDeferred && (
+          <button
+            onClick={() => { onPrompt(); onClose(); }}
+            className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-evergreen py-3.5 font-display text-sm font-bold text-lime shadow-md hover:bg-pine"
+          >
+            📲 Instalar en este celular ahora
+          </button>
+        )}
+
+        {isIos ? (
+          <div className="rounded-2xl border-2 border-ink/10 bg-paper p-4 space-y-2.5">
+            <p className="font-display text-xs font-extrabold uppercase tracking-wider text-fern">
+              Pasos para iPhone (Safari):
+            </p>
+            <ol className="list-decimal pl-5 space-y-2 text-xs leading-relaxed font-semibold text-ink">
+              <li>
+                Tocá el botón <strong>Compartir</strong> en la barra inferior de Safari (el cuadradito con la flechita hacia arriba ⎋).
+              </li>
+              <li>
+                Deslizá hacia abajo y seleccioná <strong>"Agregar a pantalla de inicio"</strong> (o "Añadir a pantalla de inicio" ➕).
+              </li>
+              <li>
+                Tocá <strong>"Agregar"</strong> arriba a la derecha.
+              </li>
+            </ol>
+            <p className="text-[11px] text-inkmute">
+              ¡Listo! Te quedará el ícono oficial de Cupito en tu pantalla como una app nativa.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border-2 border-ink/10 bg-paper p-4 space-y-2.5">
+            <p className="font-display text-xs font-extrabold uppercase tracking-wider text-fern">
+              Pasos para Android (Chrome / Brave):
+            </p>
+            <ol className="list-decimal pl-5 space-y-2 text-xs leading-relaxed font-semibold text-ink">
+              <li>
+                Tocá los <strong>tres puntos ⋮</strong> arriba a la derecha en Chrome.
+              </li>
+              <li>
+                Seleccioná <strong>"Instalar aplicación"</strong> o <strong>"Agregar a la pantalla principal"</strong>.
+              </li>
+              <li>
+                Confirmá tocando <strong>"Instalar"</strong>.
+              </li>
+            </ol>
+          </div>
+        )}
+
+        <div className="rounded-xl bg-lime/20 p-3 text-xs text-fern font-semibold flex items-center gap-2.5">
+          <span className="text-base">⚡</span>
+          <span>Abre en pantalla completa sin barra de navegación, ultra liviana y rápida.</span>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ============ MODAL: SINCRONIZAR CALENDARIO ============ */
+function CalendarSyncModal({ user, onClose }: { user: User; onClose: () => void }) {
+  const calUrl = `https://cupito.app/api/calendar?id=${encodeURIComponent(user.id)}`;
+  const webcalUrl = `webcal://cupito.app/api/calendar?id=${encodeURIComponent(user.id)}`;
+  const gcalUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
+
+  return (
+    <Modal title="📅 Calendario del Celular" onClose={onClose}>
+      <div className="space-y-4 text-ink">
+        <p className="text-sm text-inkmute">
+          Sincronizá todos tus turnos en tiempo real con la app de Calendario de tu iPhone o Android. Cualquier turno nuevo o cambio se actualiza automáticamente en tu celu.
+        </p>
+
+        <div className="space-y-2.5">
+          <a
+            href={webcalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink/15 bg-white p-3.5 transition-all hover:border-evergreen hover:shadow-sm"
+          >
+            <div className="flex items-center gap-3 text-left">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-xl">🍏</span>
+              <div>
+                <p className="font-display text-sm font-bold text-ink">iPhone (Apple Calendar)</p>
+                <p className="text-[11px] text-inkmute">Abre la app Calendario y toca "Suscribirse"</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-evergreen px-3 py-1 text-xs font-bold text-lime">Conectar</span>
+          </a>
+
+          <a
+            href={gcalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink/15 bg-white p-3.5 transition-all hover:border-evergreen hover:shadow-sm"
+          >
+            <div className="flex items-center gap-3 text-left">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-xl">🤖</span>
+              <div>
+                <p className="font-display text-sm font-bold text-ink">Google Calendar</p>
+                <p className="text-[11px] text-inkmute">Para celulares Android o Gmail en la compu</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-evergreen px-3 py-1 text-xs font-bold text-lime">Conectar</span>
+          </a>
+        </div>
+
+        <div className="rounded-2xl border border-ink/10 bg-paper p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-inkmute uppercase tracking-wider">Enlace iCal de suscripción:</span>
+            <CopyButton text={calUrl} label="Copiar link" copiedLabel="✓ Copiado" className="!py-1 !px-2.5 !text-[11px]" />
+          </div>
+          <p className="font-mono text-[11px] text-ink/70 break-all bg-white p-2 rounded-lg border border-ink/10 select-all">
+            {calUrl}
+          </p>
+          <p className="text-[11px] text-inkmute leading-relaxed">
+            Podés pegar este enlace en cualquier app de calendario como "Suscripción a calendario" o "Añadir desde URL".
+          </p>
+        </div>
+
+        <div className="flex justify-end">
+          <a
+            href={calUrl}
+            download={`cupito-${user.slug}.ics`}
+            className="btn-press inline-flex items-center gap-1.5 text-xs font-bold text-fern hover:underline"
+          >
+            ⬇️ Descargar archivo .ics completo
+          </a>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

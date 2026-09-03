@@ -64,7 +64,28 @@ function Gate({ hasCode }: { hasCode: boolean }) {
       return;
     }
     setBusy(true);
-    setError(null);
+    const cleanCode = code.trim();
+
+    // 1. Probar si la clave ingresada es CUPITO_ADMIN_KEY del servidor en Vercel
+    try {
+      const vRes = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify", adminKey: cleanCode }),
+      });
+      const vData = (await vRes.json().catch(() => ({}))) as { ok?: boolean };
+      if (vRes.ok && vData.ok) {
+        setAdminKey(cleanCode);
+        await adminSetPasscode(cleanCode);
+        setBusy(false);
+        try {
+          sessionStorage.removeItem("cupito_admin_fails");
+          sessionStorage.removeItem("cupito_admin_locked_until");
+        } catch {}
+        toast("Bienvenido a la Central 🔑");
+        return;
+      }
+    } catch {}
 
     if (hasCode) {
       const ok = await adminLogin(code);
