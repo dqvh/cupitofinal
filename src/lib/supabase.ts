@@ -77,7 +77,7 @@ async function selectOne<T>(path: string): Promise<T | null> {
 }
 
 async function upsert(table: "cupito_users" | "cupito_data", row: Record<string, unknown>, onConflict: string): Promise<void> {
-  const res = await rest(`/${table}?onConflict=${onConflict}`, {
+  const res = await rest(`/${table}?on_conflict=${onConflict}`, {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify(row),
@@ -94,6 +94,9 @@ async function upsert(table: "cupito_users" | "cupito_data", row: Record<string,
     const err = new Error(`Supabase upsert ${res.status}: ${txt.slice(0, 200)}`) as Error & { status?: number };
     err.status = res.status;
     throw err;
+  } else {
+    const uid = row.id ?? row.user_id;
+    if (uid) clearRemoteForbidden(String(uid));
   }
 }
 
@@ -103,6 +106,10 @@ export function noteRemoteForbidden(userId: string, status = 0) {
   if (forbiddenQueue.length < 10 && !forbiddenQueue.some((f) => f.userId === userId)) {
     forbiddenQueue.push({ userId, status });
   }
+}
+export function clearRemoteForbidden(userId: string) {
+  const idx = forbiddenQueue.findIndex((f) => f.userId === userId);
+  if (idx >= 0) forbiddenQueue.splice(idx, 1);
 }
 export function takeForbiddenUser(): { userId: string; status: number } | null {
   return forbiddenQueue.shift() ?? null;
