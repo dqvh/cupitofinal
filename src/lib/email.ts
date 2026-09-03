@@ -63,7 +63,7 @@ export async function sendBookingConfirmationEmail(params: BookingEmailParams) {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="left">
-                    <span style="font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#0c241c;">cupito<span style="color:#10b981;">.</span></span>
+                    <img src="https://cupito.app/icon.png" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:6px;margin-right:8px;" alt="Cupito" /><span style="font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#0c241c;vertical-align:middle;">cupito<span style="color:#10b981;">.</span></span>
                   </td>
                   <td align="right">
                     <span style="display:inline-block;background-color:#ecfdf5;color:#059669;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:0.3px;border:1px solid #a7f3d0;">
@@ -196,7 +196,7 @@ export async function sendWelcomeAccountEmail(params: WelcomeAccountEmailParams)
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="left">
-                    <span style="font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#0c241c;">cupito<span style="color:#10b981;">.</span></span>
+                    <img src="https://cupito.app/icon.png" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:6px;margin-right:8px;" alt="Cupito" /><span style="font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#0c241c;vertical-align:middle;">cupito<span style="color:#10b981;">.</span></span>
                   </td>
                   <td align="right">
                     <span style="display:inline-block;background-color:#f4f4f5;color:#52525b;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:0.3px;">
@@ -324,7 +324,7 @@ export async function sendSubscriptionWelcomeEmail(params: SubscriptionEmailPara
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td align="left">
-                    <span style="font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#0c241c;">cupito<span style="color:#10b981;">.</span></span>
+                    <img src="https://cupito.app/icon.png" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:6px;margin-right:8px;" alt="Cupito" /><span style="font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#0c241c;vertical-align:middle;">cupito<span style="color:#10b981;">.</span></span>
                   </td>
                   <td align="right">
                     <span style="display:inline-block;background-color:#ecfdf5;color:#059669;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:0.3px;border:1px solid #a7f3d0;">

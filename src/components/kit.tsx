@@ -10,17 +10,15 @@ function S({ className = "w-6 h-6", d, filled = false }: IconProps & { d: string
   );
 }
 
-/* Marca Cupito: calendario con cupo + check */
+/* Marca Cupito: nuevo logo oficial */
 export function LogoMark({ className = "w-8 h-8" }: IconProps) {
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <rect width="32" height="32" rx="8" fill="currentColor" opacity="0.14" />
-      <rect x="4" y="6" width="24" height="22" rx="5" fill="currentColor" />
-      <rect x="9" y="3" width="3" height="6" rx="1.5" fill="currentColor" />
-      <rect x="20" y="3" width="3" height="6" rx="1.5" fill="currentColor" />
-      <rect x="8" y="12" width="16" height="4.5" rx="2.25" fill="#cdf463" />
-      <path d="M10 21.5l3.2 3 6.3-6" stroke="#cdf463" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <img
+      src="/icon.png"
+      alt="Cupito"
+      className={`${className} object-contain rounded-[22%] shadow-sm inline-block shrink-0`}
+      loading="eager"
+    />
   );
 }
 
