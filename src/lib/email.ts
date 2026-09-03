@@ -255,6 +255,122 @@ export async function sendSubscriptionWelcomeEmail(params: SubscriptionEmailPara
   return sendViaApi({ to: params.toEmail, subject, html });
 }
 
+interface WelcomeAccountEmailParams {
+  toEmail: string;
+  ownerName: string;
+  businessName: string;
+  slug: string;
+}
+
+/**
+ * Envía email de bienvenida cuando un dueño crea su cuenta en Cupito
+ */
+export async function sendWelcomeAccountEmail(params: WelcomeAccountEmailParams) {
+  if (!params.toEmail || !params.toEmail.includes("@")) return;
+
+  const subject = `¡Bienvenido a Cupito! Tu página para ${params.businessName} ya está lista 🎉`;
+  const adminUrl = "https://cupito.app/#/app";
+  const publicUrl = `https://cupito.app/${params.slug}`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f7f5f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0c241c;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f7f5f0;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:540px;background-color:#ffffff;border-radius:24px;border:2px solid rgba(12,36,28,0.08);box-shadow:0 12px 30px rgba(12,36,28,0.06);overflow:hidden;" cellspacing="0" cellpadding="0">
+          
+          <!-- Encabezado con marca -->
+          <tr>
+            <td style="background-color:#0c241c;padding:28px 32px;text-align:center;">
+              <span style="display:inline-block;font-size:24px;font-weight:900;color:#cdf463;letter-spacing:-0.5px;">Cupito</span>
+              <span style="display:block;font-size:12px;font-weight:700;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:4px;">Tu agenda online 24/7</span>
+            </td>
+          </tr>
+
+          <!-- Cuerpo -->
+          <tr>
+            <td style="padding:32px 32px 24px;">
+              <h1 style="margin:0 0 12px;font-size:22px;font-weight:800;color:#0c241c;letter-spacing:-0.5px;">¡Hola ${escapeHtml(params.ownerName.trim().split(" ")[0] || params.businessName)}!</h1>
+              <p style="margin:0 0 20px;font-size:15px;line-height:1.5;color:#4a6358;">
+                ¡Tu cuenta de <strong style="color:#0c241c;">${escapeHtml(params.businessName)}</strong> ya está creada y lista para empezar a recibir reservas!
+              </p>
+
+              <!-- Tarjeta de tu Link Oficial -->
+              <table role="presentation" width="100%" style="background-color:#0c241c;border-radius:18px;margin-bottom:24px;" cellspacing="0" cellpadding="20">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:1.5px;">Tu link oficial de reservas</p>
+                    <a href="${publicUrl}" target="_blank" style="display:block;font-size:16px;font-weight:800;color:#cdf463;text-decoration:none;word-break:break-all;">${publicUrl}</a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- 3 Pasos Clave -->
+              <h3 style="margin:0 0 14px;font-size:15px;font-weight:800;color:#0c241c;">Tus primeros pasos:</h3>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="8" style="margin-bottom:24px;">
+                <tr>
+                  <td style="font-size:18px;vertical-align:top;width:28px;">1.</td>
+                  <td style="font-size:14px;color:#4a6358;line-height:1.4;">
+                    <strong style="color:#0c241c;">Cargá tus servicios y precios</strong> en la sección «Servicios» de tu panel.
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-size:18px;vertical-align:top;">2.</td>
+                  <td style="font-size:14px;color:#4a6358;line-height:1.4;">
+                    <strong style="color:#0c241c;">Pegá tu link en tu bio de Instagram</strong> o en la respuesta rápida de WhatsApp Business.
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-size:18px;vertical-align:top;">3.</td>
+                  <td style="font-size:14px;color:#4a6358;line-height:1.4;">
+                    <strong style="color:#0c241c;">Imprimí tu cartel con código QR</strong> desde el panel para pegar en tu local.
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Botón Ir al Panel -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:24px;">
+                <tr>
+                  <td align="center">
+                    <a href="${adminUrl}" target="_blank" style="display:inline-block;width:100%;box-sizing:border-box;background-color:#0c241c;color:#cdf463;text-decoration:none;font-size:15px;font-weight:800;padding:15px 24px;border-radius:14px;text-align:center;">
+                      Entrar a mi Panel de Control →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;font-size:13px;color:#85998e;line-height:1.5;">
+                ¿Tenés alguna duda o necesitás una mano para configurar algo? Respondé directamente a este email o escribinos por WhatsApp al <strong>+54 9 11 3199-6205</strong>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Pie -->
+          <tr>
+            <td style="background-color:#fdfbf7;border-top:1px solid #ede7db;padding:18px 32px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#a3b2aa;">
+                Cupito · Hecho en Argentina 🇦🇷 · <a href="https://cupito.app" style="color:#1e5c49;text-decoration:none;">cupito.app</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+  return sendViaApi({ to: params.toEmail, subject, html });
+}
+
 async function sendViaApi(body: { to: string; subject: string; html: string; from?: string }) {
   try {
     const res = await fetch("/api/send-email", {

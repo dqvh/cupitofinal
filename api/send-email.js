@@ -35,7 +35,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: from || 'Cupito <hola@cupito.app>',
+        from: from || process.env.RESEND_FROM || 'Cupito <hola@cupito.app>',
         to: Array.isArray(to) ? to : [to],
         subject,
         html,

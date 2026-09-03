@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { PLAN_META, type Plan, useStore } from "../lib/store";
 import { LogoMark, IconCheck, IconArrow } from "./kit";
+import { sendWelcomeAccountEmail } from "../lib/email";
 
 type Mode = "registro" | "login";
 
@@ -40,6 +41,15 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
 
   const goApp = (plan: Plan) => {
     toast("¡Cuenta creada! Tu agenda ya está lista 🎉");
+    if (email.trim()) {
+      const slug = business.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "mi-negocio";
+      sendWelcomeAccountEmail({
+        toEmail: email.trim(),
+        ownerName: name,
+        businessName: business,
+        slug,
+      }).catch(() => {});
+    }
     window.location.hash = plan === "semilla" ? "#/app?onboarding=1" : `#/app?checkout=${plan}&onboarding=1`;
   };
 
