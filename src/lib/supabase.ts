@@ -3,13 +3,15 @@ import type { User, BizData, Booking } from "./store";
 
 const supabaseUrl =
   (import.meta.env.VITE_SUPABASE_URL as string) ||
-  (import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string) ||
   (import.meta.env.SUPABASE_URL as string) ||
+  (import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string) ||
   "";
 
 const supabaseAnonKey =
   (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ||
   (import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) ||
+  (import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as string) ||
+  (import.meta.env.SUPABASE_PUBLISHABLE_KEY as string) ||
   (import.meta.env.SUPABASE_ANON_KEY as string) ||
   "";
 
@@ -27,7 +29,7 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   : null;
 
 /**
- * Busca un negocio y toda su información directamente en Supabase por su slug.
+ * Busca un negocio y toda su informaciï¿½n directamente en Supabase por su slug.
  * Permite que cualquier celular o computadora vea el negocio en tiempo real.
  */
 export async function fetchRemoteUserBySlug(
@@ -73,7 +75,7 @@ export async function fetchRemoteUserBySlug(
 }
 
 /**
- * Obtiene todos los negocios registrados en Supabase para sincronización.
+ * Obtiene todos los negocios registrados en Supabase para sincronizaciï¿½n.
  */
 export async function fetchAllRemoteUsers(): Promise<User[]> {
   if (!supabase) return [];
@@ -102,7 +104,7 @@ export async function fetchAllRemoteUsers(): Promise<User[]> {
 }
 
 /**
- * Sincroniza un usuario y su información con Supabase.
+ * Sincroniza un usuario y su informaciï¿½n con Supabase.
  */
 export async function syncUserToRemote(user: User, data?: BizData): Promise<boolean> {
   if (!supabase) return false;

@@ -12,6 +12,8 @@
  *   Evento: "Suscripciones" (preapproval)
  */
 
+import { createClient } from "@supabase/supabase-js";
+
 export const config = { runtime: "edge" };
 
 export default async function handler(req: Request): Promise<Response> {
@@ -45,12 +47,15 @@ export default async function handler(req: Request): Promise<Response> {
 
     console.log(`[Cupito] Suscripción de ${email} → ${status} (plan ${planId})`);
 
-    if (status === "authorized") {
-      // 2) [SUPABASE] Pago aprobado → activar el plan del local:
-      // await supabase.from("users").update({ plan: planId }).eq("email", email);
-    } else if (status === "paused" || status === "cancelled") {
-      // 2b) [SUPABASE] Pago rechazado o cancelado → bajar al plan gratis:
-      // await supabase.from("users").update({ plan: "semilla" }).eq("email", email);
+    const sUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const sKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (sUrl && sKey) {
+      const supabase = createClient(sUrl, sKey);
+      if (status === "authorized") {
+        await supabase.from("cupito_users").update({ plan: planId }).eq("email", email);
+      } else if (status === "paused" || status === "cancelled") {
+        await supabase.from("cupito_users").update({ plan: "semilla" }).eq("email", email);
+      }
     }
   } catch (err) {
     console.error("[Cupito] Error procesando webhook:", err);
