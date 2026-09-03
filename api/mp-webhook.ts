@@ -52,7 +52,12 @@ export default async function handler(req: Request): Promise<Response> {
     if (sUrl && sKey) {
       const supabase = createClient(sUrl, sKey);
       if (status === "authorized") {
-        await supabase.from("cupito_users").update({ plan: planId }).eq("email", email);
+        // deleted:false por si era una cuenta dada de baja que vuelve a pagar
+        const { data: existing } = await supabase.from("cupito_users").select("id").eq("email", email).maybeSingle();
+        await supabase.from("cupito_users").update({ plan: planId, deleted: false }).eq("email", email);
+        if (existing?.id) {
+          await supabase.from("cupito_data").update({ deleted: false }).eq("user_id", existing.id);
+        }
         // Bienvenida por email (cubre al que pagó y cerró la pestaña sin volver).
         // El flujo normal ya la manda desde el front; acá es respaldo.
         const resendKey = process.env.RESEND_API_KEY;

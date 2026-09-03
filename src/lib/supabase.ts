@@ -1,5 +1,10 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { User, BizData, Booking, WaitlistEntry } from "./store";
+
+/**
+ * Cliente liviano de Supabase vía REST (fetch directo, sin la librería
+ * @supabase/supabase-js que pesaba ~120KB en el bundle inicial).
+ * No usa realtime ni auth: solo PostgREST con la key pública (anon).
+ */
 
 const pickEnv = (...keys: string[]): string => {
   const env = (import.meta as unknown as { env?: Record<string, unknown> }).env ?? {};
@@ -49,51 +54,70 @@ if (typeof window !== "undefined" && !isSupabaseConfigured) {
   console.warn("[Cupito Supabase] Nube NO configurada:", getSupabaseStatus().reason);
 }
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-    })
-  : null;
+async function rest(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${supabaseUrl}/rest/v1${path}`, {
+    ...init,
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+}
+
+async function selectOne<T>(path: string): Promise<T | null> {
+  const res = await rest(path);
+  if (!res.ok) throw new Error(`Supabase ${res.status}`);
+  const arr = (await res.json()) as T[];
+  return Array.isArray(arr) && arr.length > 0 ? arr[0] : null;
+}
+
+async function upsert(table: "cupito_users" | "cupito_data", row: Record<string, unknown>, onConflict: string): Promise<void> {
+  const res = await rest(`/${table}?onConflict=${onConflict}`, {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Supabase upsert ${res.status}: ${txt.slice(0, 200)}`);
+  }
+}
+
+function mapUser(u: any): User {
+  return {
+    id: u.id,
+    name: u.name,
+    business: u.business,
+    email: u.email,
+    password: u.password,
+    slug: u.slug,
+    plan: u.plan,
+    createdAt: Number(u.created_at || Date.now()),
+    subscription: u.subscription || undefined,
+  };
+}
 
 /**
- * Busca un negocio y toda su informaci�n directamente en Supabase por su slug.
+ * Busca un negocio y toda su información directamente en Supabase por su slug.
  * Permite que cualquier celular o computadora vea el negocio en tiempo real.
  */
 export async function fetchRemoteUserBySlug(
   slug: string
 ): Promise<{ user: User; data: BizData } | null> {
-  if (!supabase) return null;
+  if (!isSupabaseConfigured) return null;
   try {
-    const { data: userData, error: userErr } = await supabase
-      .from("cupito_users")
-      .select("*")
-      .eq("slug", slug.toLowerCase().trim())
-      .maybeSingle();
+    const userData = await selectOne<any>(`/cupito_users?select=*&slug=eq.${encodeURIComponent(slug.toLowerCase().trim())}`);
+    if (!userData) return null;
+    const user = mapUser(userData);
 
-    if (userErr || !userData) return null;
-
-    const user: User = {
-      id: userData.id,
-      name: userData.name,
-      business: userData.business,
-      email: userData.email,
-      password: userData.password,
-      slug: userData.slug,
-      plan: userData.plan,
-      createdAt: Number(userData.created_at || Date.now()),
-      subscription: userData.subscription || undefined,
-    };
-
-    const { data: rowData, error: dataErr } = await supabase
-      .from("cupito_data")
-      .select("data")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (dataErr || !rowData?.data) {
+    const rowData = await selectOne<{ data: BizData }>(
+      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(user.id)}`
+    );
+    if (!rowData?.data) {
       return { user, data: null as unknown as BizData };
     }
-
     return { user, data: rowData.data as BizData };
   } catch (err) {
     console.warn("[Cupito Supabase] Error consultando negocio por slug:", err);
@@ -102,28 +126,16 @@ export async function fetchRemoteUserBySlug(
 }
 
 /**
- * Obtiene todos los negocios registrados en Supabase para sincronizaci�n.
+ * Obtiene todos los negocios registrados en Supabase para sincronización.
  */
 export async function fetchAllRemoteUsers(): Promise<User[]> {
-  if (!supabase) return [];
+  if (!isSupabaseConfigured) return [];
   try {
-    const { data, error } = await supabase
-      .from("cupito_users")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error || !data) return [];
-    return data.map((u) => ({
-      id: u.id,
-      name: u.name,
-      business: u.business,
-      email: u.email,
-      password: u.password,
-      slug: u.slug,
-      plan: u.plan,
-      createdAt: Number(u.created_at || Date.now()),
-      subscription: u.subscription || undefined,
-    }));
+    const res = await rest(`/cupito_users?select=*&order=created_at.desc`);
+    if (!res.ok) return [];
+    const data = (await res.json()) as any[];
+    if (!Array.isArray(data)) return [];
+    return data.map(mapUser);
   } catch (err) {
     console.warn("[Cupito Supabase] Error obteniendo usuarios remotos:", err);
     return [];
@@ -131,12 +143,12 @@ export async function fetchAllRemoteUsers(): Promise<User[]> {
 }
 
 /**
- * Sincroniza un usuario y su informaci�n con Supabase.
+ * Sincroniza un usuario y su información con Supabase.
  */
 export async function syncUserToRemote(user: User, data?: BizData): Promise<boolean> {
-  if (!supabase) return false;
+  if (!isSupabaseConfigured) return false;
   try {
-    const { error: uErr } = await supabase.from("cupito_users").upsert({
+    await upsert("cupito_users", {
       id: user.id,
       name: user.name,
       business: user.business,
@@ -146,25 +158,15 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
       plan: user.plan,
       created_at: user.createdAt,
       subscription: user.subscription || null,
-    });
-
-    if (uErr) {
-      console.warn("[Cupito Supabase] Error guardando usuario:", uErr);
-      return false;
-    }
+    }, "id");
 
     if (data) {
-      const { error: dErr } = await supabase.from("cupito_data").upsert({
+      await upsert("cupito_data", {
         user_id: user.id,
         data,
         updated_at: Date.now(),
-      });
-      if (dErr) {
-        console.warn("[Cupito Supabase] Error guardando datos del negocio:", dErr);
-        return false;
-      }
+      }, "user_id");
     }
-
     return true;
   } catch (err) {
     console.warn("[Cupito Supabase] Error en syncUserToRemote:", err);
@@ -178,34 +180,15 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
 export async function fetchRemoteUserByEmail(
   email: string
 ): Promise<{ user: User; data: BizData | null } | null> {
-  if (!supabase) return null;
+  if (!isSupabaseConfigured) return null;
   try {
-    const { data: userData, error: userErr } = await supabase
-      .from("cupito_users")
-      .select("*")
-      .eq("email", email.toLowerCase().trim())
-      .maybeSingle();
+    const userData = await selectOne<any>(`/cupito_users?select=*&email=eq.${encodeURIComponent(email.toLowerCase().trim())}`);
+    if (!userData) return null;
+    const user = mapUser(userData);
 
-    if (userErr || !userData) return null;
-
-    const user: User = {
-      id: userData.id,
-      name: userData.name,
-      business: userData.business,
-      email: userData.email,
-      password: userData.password,
-      slug: userData.slug,
-      plan: userData.plan,
-      createdAt: Number(userData.created_at || Date.now()),
-      subscription: userData.subscription || undefined,
-    };
-
-    const { data: rowData } = await supabase
-      .from("cupito_data")
-      .select("data")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
+    const rowData = await selectOne<{ data: BizData }>(
+      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(user.id)}`
+    );
     return { user, data: (rowData?.data as BizData) ?? null };
   } catch (err) {
     console.warn("[Cupito Supabase] Error consultando negocio por email:", err);
@@ -218,25 +201,22 @@ export async function fetchRemoteUserByEmail(
  * Necesario para que el borrado se propague y no "resucite" en otros dispositivos.
  */
 export async function deleteRemoteWaitlist(userId: string, waitlistId: string): Promise<boolean> {
-  if (!supabase) return false;
+  if (!isSupabaseConfigured) return false;
   try {
-    const { data: row } = await supabase
-      .from("cupito_data")
-      .select("data")
-      .eq("user_id", userId)
-      .maybeSingle();
-
+    const row = await selectOne<{ data: BizData }>(
+      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(userId)}`
+    );
     if (!row?.data) return true; // nada que borrar
     const currentData = row.data as BizData;
     const updatedWaitlist = (currentData.waitlist || []).filter((w) => w.id !== waitlistId);
     if (updatedWaitlist.length === (currentData.waitlist || []).length) return true;
 
-    const { error } = await supabase.from("cupito_data").upsert({
+    await upsert("cupito_data", {
       user_id: userId,
       data: { ...currentData, waitlist: updatedWaitlist },
       updated_at: Date.now(),
-    });
-    return !error;
+    }, "user_id");
+    return true;
   } catch (err) {
     console.warn("[Cupito Supabase] Error eliminando waitlist remota:", err);
     return false;
@@ -247,49 +227,47 @@ export async function deleteRemoteWaitlist(userId: string, waitlistId: string): 
  * Elimina una reserva directamente en Supabase (para que no resucite con el merge).
  */
 export async function deleteRemoteBooking(userId: string, bookingId: string): Promise<boolean> {
-  if (!supabase) return false;
+  if (!isSupabaseConfigured) return false;
   try {
-    const { data: row } = await supabase
-      .from("cupito_data")
-      .select("data")
-      .eq("user_id", userId)
-      .maybeSingle();
-
+    const row = await selectOne<{ data: BizData }>(
+      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(userId)}`
+    );
     if (!row?.data) return true;
     const currentData = row.data as BizData;
     const updated = (currentData.bookings || []).filter((b) => b.id !== bookingId);
     if (updated.length === (currentData.bookings || []).length) return true;
 
-    const { error } = await supabase.from("cupito_data").upsert({
+    await upsert("cupito_data", {
       user_id: userId,
       data: { ...currentData, bookings: updated },
       updated_at: Date.now(),
-    });
-    return !error;
+    }, "user_id");
+    return true;
   } catch (err) {
     console.warn("[Cupito Supabase] Error eliminando booking remoto:", err);
     return false;
   }
 }
+
 /**
- * Elimina un usuario y su información asociada de Supabase.
+ * Borrado lógico de un usuario: marca deleted=true en ambas tablas.
+ * Con las políticas RLS nuevas la key pública ya no puede hacer DELETE físico,
+ * así que borrar = ocultar (las lecturas filtran deleted=false en el servidor).
  */
 export async function deleteUserFromRemote(userId: string): Promise<boolean> {
-  if (!supabase) return false;
+  if (!isSupabaseConfigured) return false;
   try {
-    const { error: dErr } = await supabase
-      .from("cupito_data")
-      .delete()
-      .eq("user_id", userId);
-    if (dErr) console.warn("[Cupito Supabase] Error eliminando cupito_data remoto:", dErr);
-
-    const { error: uErr } = await supabase
-      .from("cupito_users")
-      .delete()
-      .eq("id", userId);
-    if (uErr) console.warn("[Cupito Supabase] Error eliminando cupito_users remoto:", uErr);
-
-    return !uErr;
+    const patch = async (table: string, filter: string) => {
+      const res = await rest(`/${table}?${filter}`, {
+        method: "PATCH",
+        body: JSON.stringify({ deleted: true }),
+      });
+      if (!res.ok) console.warn(`[Cupito Supabase] Error marcando ${table} como borrado:`, res.status);
+      return res.ok;
+    };
+    const okData = await patch("cupito_data", `user_id=eq.${encodeURIComponent(userId)}`);
+    const okUser = await patch("cupito_users", `id=eq.${encodeURIComponent(userId)}`);
+    return okUser && okData;
   } catch (err) {
     console.warn("[Cupito Supabase] Error en deleteUserFromRemote:", err);
     return false;
@@ -300,15 +278,12 @@ export async function deleteUserFromRemote(userId: string): Promise<boolean> {
  * Obtiene la información completa (BizData) de un negocio desde Supabase.
  */
 export async function fetchRemoteBizData(userId: string): Promise<BizData | null> {
-  if (!supabase) return null;
+  if (!isSupabaseConfigured) return null;
   try {
-    const { data: row, error } = await supabase
-      .from("cupito_data")
-      .select("data")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (error || !row?.data) return null;
+    const row = await selectOne<{ data: BizData }>(
+      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(userId)}`
+    );
+    if (!row?.data) return null;
     return row.data as BizData;
   } catch (err) {
     console.warn("[Cupito Supabase] Error obteniendo BizData remoto:", err);
@@ -320,13 +295,11 @@ export async function fetchRemoteBizData(userId: string): Promise<BizData | null
  * Guarda una reserva creada por un cliente desde su celular en Supabase.
  */
 export async function saveRemoteBooking(userId: string, booking: Booking): Promise<boolean> {
-  if (!supabase) return false;
+  if (!isSupabaseConfigured) return false;
   try {
-    const { data: row } = await supabase
-      .from("cupito_data")
-      .select("data")
-      .eq("user_id", userId)
-      .maybeSingle();
+    const row = await selectOne<{ data: BizData }>(
+      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(userId)}`
+    );
 
     let currentData = (row?.data as BizData) || null;
     if (!currentData) {
@@ -362,16 +335,11 @@ export async function saveRemoteBooking(userId: string, booking: Booking): Promi
       };
     }
 
-    const { error } = await supabase.from("cupito_data").upsert({
+    await upsert("cupito_data", {
       user_id: userId,
       data: currentData,
       updated_at: Date.now(),
-    });
-
-    if (error) {
-      console.warn("[Cupito Supabase] Error upserting remote booking:", error);
-      return false;
-    }
+    }, "user_id");
     return true;
   } catch (err) {
     console.warn("[Cupito Supabase] Error guardando reserva remota:", err);
@@ -383,26 +351,22 @@ export async function saveRemoteBooking(userId: string, booking: Booking): Promi
  * Guarda una entrada en la lista de espera en Supabase.
  */
 export async function saveRemoteWaitlist(userId: string, entry: WaitlistEntry): Promise<boolean> {
-  if (!supabase) return false;
+  if (!isSupabaseConfigured) return false;
   try {
-    const { data: row } = await supabase
-      .from("cupito_data")
-      .select("data")
-      .eq("user_id", userId)
-      .maybeSingle();
-
+    const row = await selectOne<{ data: BizData }>(
+      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(userId)}`
+    );
     if (!row?.data) return false;
     const currentData = row.data as BizData;
     const existing = currentData.waitlist || [];
     const updatedWaitlist = [entry, ...existing.filter((w) => w.id !== entry.id)];
 
-    const { error } = await supabase.from("cupito_data").upsert({
+    await upsert("cupito_data", {
       user_id: userId,
       data: { ...currentData, waitlist: updatedWaitlist },
       updated_at: Date.now(),
-    });
-
-    return !error;
+    }, "user_id");
+    return true;
   } catch (err) {
     console.warn("[Cupito Supabase] Error guardando waitlist remota:", err);
     return false;

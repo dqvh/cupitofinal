@@ -88,13 +88,14 @@ export default async function handler(req: Request): Promise<Response> {
 
   try {
     const [usersRes, dataRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/cupito_users?select=id,business,slug`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/cupito_users?select=id,business,slug,deleted`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/cupito_data?select=user_id,data`, { headers }),
     ]);
     if (!usersRes.ok) return json({ error: "No se pudieron leer los usuarios de Supabase." }, 500);
     if (!dataRes.ok) return json({ error: "No se pudieron leer los datos de Supabase." }, 500);
 
-    const users = (await usersRes.json()) as { id: string; business: string; slug: string }[];
+    const users = ((await usersRes.json()) as { id: string; business: string; slug: string; deleted?: boolean }[])
+      .filter((u) => !u.deleted); // service role saltea RLS: filtrar borrados a mano
     const rows = (await dataRes.json()) as { user_id: string; data: any }[];
     const dataByUser = new Map(rows.map((r) => [r.user_id, r.data]));
 

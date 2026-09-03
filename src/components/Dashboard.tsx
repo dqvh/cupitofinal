@@ -143,6 +143,7 @@ export default function Dashboard() {
     addClosedDate,
     removeClosedDate,
   } = store;
+  const sessionUserId = store.sessionUserId;
   const [view, setView] = useState<View>("hoy");
   const [selDate, setSelDate] = useState(dateKey(new Date()));
   const [weekStart, setWeekStart] = useState(0);
@@ -237,6 +238,17 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Barrido de señas vencidas: comprobantes sin verificar por más de 24 h
+  // liberan el turno solos para no dejar huecos bloqueados para siempre.
+  useEffect(() => {
+    if (!sessionUserId) return;
+    const n = store.releaseExpiredClaims();
+    if (n > 0) {
+      store.toast(`Se liberaron ${n} turno${n === 1 ? "" : "s"} con seña sin verificar por más de 24 h.`, "warn");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUserId]);
+
   const today = dateKey(new Date());
   const week = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(new Date(), weekStart + i)), [weekStart]);
 
@@ -273,6 +285,13 @@ export default function Dashboard() {
     .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
 
   const pendingClaims = data.bookings.filter((b) => b.depositClaim && !b.paidDeposit && b.status !== "cancelada").length;
+  const oldestClaimHrs = (() => {
+    const times = data.bookings
+      .filter((b) => b.depositClaim && !b.paidDeposit && b.status !== "cancelada")
+      .map((b) => b.depositClaim!.sentAt);
+    if (times.length === 0) return 0;
+    return Math.max(0, Math.floor((Date.now() - Math.min(...times)) / 3600000));
+  })();
 
   const serviceOf = (id: string) => data.services.find((s) => s.id === id);
 
@@ -417,6 +436,7 @@ export default function Dashboard() {
                 <IconBell className="h-5 w-5 shrink-0 text-coral" />
                 <p className="flex-1 text-sm font-semibold text-ink">
                   {pendingClaims} seña{pendingClaims === 1 ? "" : "s"} esperando tu verificación — revisá tu homebanking y acreditá o rechazá desde Reservas.
+                  <span className="block text-xs font-normal text-inkmute">Se liberan solas si pasan 24 h sin verificar{oldestClaimHrs > 0 ? ` · la más vieja lleva ${oldestClaimHrs} h` : ""}.</span>
                 </p>
               </div>
             )}

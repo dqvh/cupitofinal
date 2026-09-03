@@ -850,6 +850,7 @@ interface StoreApi {
   removeBooking(id: string): void;
   markDepositPaid(id: string, method: PaymentMethod): void;
   rejectDeposit(id: string): void;
+  releaseExpiredClaims(): number;
   setBookingPro(id: string, proId: string | undefined): void;
   addBlockedSlot(slot: Omit<BlockedSlot, "id">): void;
   removeBlockedSlot(id: string): void;
@@ -1380,6 +1381,8 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   addCoupon({ code, pct }) {
     if (!sessionUserId) return "Necesitás una cuenta.";
+    const owner = users.find((u) => u.id === sessionUserId);
+    if (owner && !isPaid(owner)) return "Los cupones son del plan Crece. Subí de plan para crearlos.";
     const clean = code.trim().toUpperCase();
     if (!/^[A-Z0-9]{3,14}$/.test(clean)) return "El código debe tener 3-14 letras o números (sin espacios).";
     const data = loadData(sessionUserId);
@@ -1610,6 +1613,31 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     data.bookings = data.bookings.map((b) => (b.id === id ? { ...b, depositClaim: undefined } : b));
     saveData(sessionUserId, data);
     emit();
+  },
+  /* Libera turnos con comprobante de seña sin verificar por más de 24 h.
+     Devuelve cuántos liberó. Se corre al abrir el panel. */
+  releaseExpiredClaims() {
+    if (!sessionUserId) return 0;
+    const data = loadData(sessionUserId);
+    const now = Date.now();
+    let released = 0;
+    data.bookings = data.bookings.map((b) => {
+      if (
+        b.status !== "cancelada" &&
+        b.depositClaim &&
+        !b.paidDeposit &&
+        now - b.depositClaim.sentAt > 24 * 3600 * 1000
+      ) {
+        released++;
+        return { ...b, status: "cancelada" as BookingStatus, depositClaim: undefined, cancelReason: "Seña no verificada en 24 h (liberado automático)" };
+      }
+      return b;
+    });
+    if (released > 0) {
+      saveData(sessionUserId, data);
+      emit();
+    }
+    return released;
   },
   setBookingPro(id, proId) {
     if (!sessionUserId) return;
