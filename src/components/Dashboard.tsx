@@ -27,6 +27,7 @@ import {
   type Professional,
 } from "../lib/store";
 import { createWhatsAppUrl, formatArgentinaPhone, cleanPhoneDigits } from "../lib/phone";
+import { sound } from "../lib/audio";
 import PublicBooking from "./PublicBooking";
 import { PlanCheckout } from "./PlanCheckout";
 import {
@@ -147,6 +148,8 @@ export default function Dashboard() {
   const [gridDate, setGridDate] = useState(dateKey(new Date()));
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockPrefillTime, setBlockPrefillTime] = useState<string | undefined>(undefined);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -426,7 +429,7 @@ export default function Dashboard() {
                           else toast(s === "cancelada" ? "Turno cancelado. El hueco quedó libre." : "Turno confirmado.");
                         }}
                         onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
-                        onVerify={(id) => { store.markDepositPaid(id, "transferencia"); toast("Seña acreditada ✓"); }}
+                        onVerify={(id) => { store.markDepositPaid(id, "transferencia"); sound.playSuccess(); toast("Seña acreditada ✓"); }}
                         onReject={(id) => { store.rejectDeposit(id); toast("Comprobante rechazado. El cliente puede reenviarlo.", "warn"); }}
                         onReschedule={(b) => setRescheduling(b)}
                       />
@@ -660,6 +663,7 @@ export default function Dashboard() {
                                   }}
                                   onVerify={(id) => {
                                     store.markDepositPaid(id, "transferencia");
+                                    sound.playSuccess();
                                     toast("Seña acreditada ✓");
                                   }}
                                   onReject={(id) => {
@@ -795,13 +799,19 @@ export default function Dashboard() {
                       <div className="mt-5 flex flex-wrap gap-2.5">
                         <button onClick={() => { const url = `https://cupito.app/${user.slug}`; navigator.clipboard?.writeText(url).then(() => toast("Link copiado 📋"), () => toast(url, "warn")); }}
                           className="rounded-full bg-lime px-5 py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">Copiar link</button>
+                        <button
+                          onClick={() => setShowShareModal(true)}
+                          className="rounded-full border-2 border-lime bg-lime/15 px-4 py-2.5 font-display text-sm font-bold text-lime transition-all hover:bg-lime hover:text-ink"
+                        >
+                          💬 Mensajes WhatsApp / Instagram
+                        </button>
                         <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="rounded-full border-2 border-paper/25 px-5 py-2.5 font-display text-sm font-bold text-paper transition-all hover:border-lime hover:text-lime">Abrir mi página ↗</a>
                       </div>
                     </div>
                     <div className="card mt-5 p-5">
                       <p className="font-display text-base font-extrabold text-ink">QR para tu mostrador</p>
-                      <p className="mt-1 text-sm text-inkmute">Imprimilo: los que esperan reservan la próxima en el momento.</p>
-                      <div className="mt-3"><QrBlock url={`https://cupito.app/${user.slug}`} /></div>
+                      <p className="mt-1 text-sm text-inkmute">Imprimilo en hoja A4: los que esperan reservan la próxima en el momento.</p>
+                      <div className="mt-3"><QrBlock url={`https://cupito.app/${user.slug}`} onPrint={() => setShowPrintModal(true)} /></div>
                     </div>
                   </div>
                   <div>
@@ -864,6 +874,32 @@ export default function Dashboard() {
           onClose={() => setShowBlockModal(false)}
         />
       )}
+      {showShareModal && (
+        <ShareTemplatesModal
+          business={user.business}
+          slug={user.slug}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
+      {showPrintModal && (
+        <PrintPosterModal
+          business={user.business}
+          slug={user.slug}
+          onClose={() => setShowPrintModal(false)}
+        />
+      )}
+
+      {/* Botón flotante móvil para agendar turno rápido */}
+      <div className="fixed bottom-5 right-5 z-40 sm:hidden pop-in">
+        <button
+          onClick={() => { setPrefill(null); setShowNew(true); sound.playPop(); }}
+          className="btn-press flex items-center gap-2 rounded-full bg-evergreen px-4 py-3 font-display text-xs font-black text-lime shadow-xl shadow-evergreen/40 border-2 border-lime/30 active:scale-95"
+          aria-label="Nuevo turno rápido"
+        >
+          <IconPlus className="h-4 w-4" />
+          <span>+ Turno</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -2016,6 +2052,138 @@ function ClientsCRMView({
   );
 }
 
+function ShareTemplatesModal({ business, slug, onClose }: { business: string; slug: string; onClose: () => void }) {
+  const { toast } = useStore();
+  const url = `https://cupito.app/${slug}`;
+
+  const templates = [
+    {
+      id: "wa-auto",
+      title: "Respuesta automática para WhatsApp Business",
+      subtitle: "Para configurar como saludo o mensaje de ausencia en WhatsApp",
+      badge: "Recomendado",
+      text: `¡Hola! 👋 Gracias por comunicarte con ${business}.\n\nPodés ver todos nuestros servicios, precios actualizados y reservar tu turno en el día y horario que prefieras desde acá:\n👉 ${url}\n\n¡Es súper fácil y rápido! Te esperamos.`,
+    },
+    {
+      id: "ig-bio",
+      title: "Texto para tu Bio de Instagram",
+      subtitle: "Corto, claro y directo para el enlace de tu perfil",
+      badge: "Instagram",
+      text: `📍 ${business}\n🗓️ Reservá tu turno online las 24 hs 👇\n🔗 ${url}`,
+    },
+    {
+      id: "stories",
+      title: "Para Historias / Estados de WhatsApp",
+      subtitle: "Para cuando abrís agenda y querés llenar los turnos de la semana",
+      badge: "Difusión",
+      text: `¡Abrimos la agenda para esta semana en ${business}! 🗓️✨\n\nElegí tu turno antes de que se agoten los lugares:\n👉 ${url}`,
+    },
+  ];
+
+  return (
+    <Modal title="Mensajes listos para compartir" onClose={onClose}>
+      <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        <p className="text-xs text-inkmute">
+          Copiá estos mensajes con un clic y pegalos en tus redes para que tus clientes empiecen a reservar solos sin consultarte por chat.
+        </p>
+
+        {templates.map((t) => (
+          <div key={t.id} className="rounded-2xl border-2 border-ink/10 bg-paper p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-display text-xs font-extrabold text-ink">{t.title}</span>
+              <span className="rounded-full bg-evergreen/10 px-2 py-0.5 text-[10px] font-bold text-evergreen">
+                {t.badge}
+              </span>
+            </div>
+            <p className="text-[11px] text-inkmute">{t.subtitle}</p>
+            <div className="relative rounded-xl border border-ink/10 bg-white p-3 font-sans text-xs text-ink/85 whitespace-pre-line leading-relaxed select-all">
+              {t.text}
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(t.text).then(() => toast("¡Mensaje copiado al portapapeles! 📋"));
+                }}
+                className="btn-press rounded-lg bg-evergreen px-4 py-1.5 font-display text-xs font-bold text-lime hover:bg-pine shadow-sm"
+              >
+                Copiar mensaje 📋
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function PrintPosterModal({ business, slug, onClose }: { business: string; slug: string; onClose: () => void }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const url = `https://cupito.app/${slug}`;
+
+  useEffect(() => {
+    QRCode.toDataURL(url, { width: 500, margin: 2, color: { dark: "#082b22", light: "#ffffff" } })
+      .then((d) => setSrc(d))
+      .catch(() => {});
+  }, [url]);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <Modal title="Cartel de mostrador imprimible" onClose={onClose}>
+      <div className="space-y-4 text-center">
+        <p className="text-xs text-inkmute text-left">
+          Imprimí este cartel en cualquier impresora común (hoja A4). Pegalo en tu mostrador o espejo para que tus clientes escaneen y agenden directamente.
+        </p>
+
+        {/* Poster preview container */}
+        <div id="printable-poster" className="mx-auto max-w-xs rounded-2xl border-4 border-evergreen bg-white p-6 text-ink shadow-md">
+          <div className="border-b-2 border-evergreen/15 pb-4">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.25em] text-fern">Turnos Online</p>
+            <h2 className="mt-1 font-display text-2xl font-black text-evergreen leading-tight">{business}</h2>
+          </div>
+
+          <div className="my-5 flex flex-col items-center">
+            {src ? (
+              <img src={src} alt={`QR para ${business}`} className="h-44 w-44 rounded-xl border border-ink/10" />
+            ) : (
+              <div className="h-44 w-44 animate-pulse bg-ink/5 rounded-xl" />
+            )}
+            <p className="mt-3 font-display text-xs font-bold uppercase tracking-wider text-ink">
+              Escaneá con la cámara de tu celular
+            </p>
+          </div>
+
+          <div className="space-y-1.5 rounded-xl bg-ink/[0.03] p-3 text-left text-[11px] font-medium text-ink/75">
+            <p className="flex items-center gap-1.5">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-evergreen text-[9px] font-bold text-lime">1</span>
+              <span>Elegí tu servicio y horario</span>
+            </p>
+            <p className="flex items-center gap-1.5">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-evergreen text-[9px] font-bold text-lime">2</span>
+              <span>Confirmá tu turno al instante</span>
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-dashed border-ink/15 text-[11px] font-bold text-inkmute">
+            {url.replace(/^https?:\/\//, "")}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button onClick={onClose} className="rounded-xl border border-ink/15 px-4 py-2 text-xs font-bold text-inkmute hover:text-ink">
+            Cerrar
+          </button>
+          <button onClick={handlePrint} className="rounded-xl bg-evergreen px-5 py-2 text-xs font-bold text-lime shadow-sm hover:bg-pine">
+            🖨️ Imprimir cartel (A4)
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function ServiceModal({ service, onClose }: { service?: Service; onClose: () => void }) {
   const { addService, updateService, toast } = useStore();
   const [name, setName] = useState(service?.name ?? "");
@@ -2729,11 +2897,11 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
 }
 
 /* ============ QR ============ */
-function QrBlock({ url }: { url: string }) {
+function QrBlock({ url, onPrint }: { url: string; onPrint?: () => void }) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    QRCode.toDataURL(url, { width: 280, margin: 1, color: { dark: "#082b22", light: "#ffffff" } })
+    QRCode.toDataURL(url, { width: 320, margin: 1, color: { dark: "#082b22", light: "#ffffff" } })
       .then((d) => { if (alive) setSrc(d); })
       .catch(() => {});
     return () => { alive = false; };
@@ -2741,8 +2909,17 @@ function QrBlock({ url }: { url: string }) {
   if (!src) return null;
   return (
     <div className="flex flex-col items-center gap-3 rounded-2xl bg-white p-4">
-      <img src={src} alt={`QR para reservar en ${url}`} className="h-40 w-40 rounded-lg" />
-      <a href={src} download="qr-cupito.png" className="w-full rounded-xl bg-lime py-2.5 text-center font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">Descargar QR (PNG)</a>
+      <img src={src} alt={`QR para reservar en ${url}`} className="h-40 w-40 rounded-lg shadow-sm" />
+      <div className="flex w-full flex-col sm:flex-row gap-2">
+        <a href={src} download="qr-cupito.png" className="flex-1 rounded-xl border-2 border-ink/12 bg-white py-2.5 text-center font-display text-xs font-bold text-ink transition-all hover:border-evergreen">
+          Descargar QR
+        </a>
+        {onPrint && (
+          <button onClick={onPrint} className="flex-1 rounded-xl bg-evergreen py-2.5 text-center font-display text-xs font-bold text-lime transition-all hover:bg-pine shadow-sm">
+            🖨️ Imprimir cartel
+          </button>
+        )}
+      </div>
     </div>
   );
 }

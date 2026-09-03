@@ -390,7 +390,7 @@ function Hero() {
               Cupito le da a tus clientes un link para <strong className="font-semibold text-paper">reservar, pagar la seña y recibir recordatorios</strong>. Vos solo trabajás: cero mensajes a las 3 AM, cero turnos pisados.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
-              <a href="#/auth" className="group inline-flex items-center gap-2.5 rounded-full bg-lime px-7 py-4 font-display text-lg font-bold text-ink transition-all duration-200 hover:-translate-y-1 hover:bg-limedeep hover:shadow-[0_16px_40px_rgba(205,244,99,0.35)] active:translate-y-0">
+              <a href="#/auth" className="group btn-glow-lime inline-flex items-center gap-2.5 rounded-full bg-lime px-7 py-4 font-display text-lg font-bold text-ink transition-all duration-200 hover:-translate-y-1 hover:bg-limedeep active:translate-y-0">
                 Crear mi página gratis
                 <IconArrow className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1.5" />
               </a>
@@ -1317,7 +1317,7 @@ function StickyMobileBar() {
         </div>
         <a
           href="#/login"
-          className="btn-press shrink-0 rounded-full bg-lime px-4 py-2 font-display text-xs font-extrabold text-ink shadow-sm active:scale-95"
+          className="btn-press btn-glow-lime shrink-0 rounded-full bg-lime px-4 py-2 font-display text-xs font-extrabold text-ink shadow-sm active:scale-95"
         >
           Empezar gratis →
         </a>

@@ -5,9 +5,10 @@ import {
 } from "../lib/store";
 import {
   IconCheck, IconCalendar, IconChevron, IconBag, IconTicket, IconPlus, IconUsers,
-  IconWhatsApp, LogoMark, IconSun, IconMoon, CopyButton, ConfettiBurst, Badge,
+  IconWhatsApp, LogoMark, IconSun, IconMoon, CopyButton, ConfettiBurst, Badge, IconSearch,
 } from "./kit";
 import { normalizeArgentinaPhone, cleanPhoneDigits, createWhatsAppUrl } from "../lib/phone";
+import { sound } from "../lib/audio";
 
 /* ---------- helpers .ics / Google Calendar ---------- */
 function toLocalStamp(dt: Date) {
@@ -130,10 +131,17 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const [showLookupModal, setShowLookupModal] = useState(false);
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupFeedback, setLookupFeedback] = useState<string | null>(null);
+  const [serviceSearch, setServiceSearch] = useState("");
 
   const phoneVal = useMemo(() => normalizeArgentinaPhone(phone), [phone]);
   const wlPhoneVal = useMemo(() => normalizeArgentinaPhone(wlPhone), [wlPhone]);
   const lookupVal = useMemo(() => normalizeArgentinaPhone(lookupPhone), [lookupPhone]);
+
+  const filteredServices = useMemo(() => {
+    const q = serviceSearch.trim().toLowerCase();
+    if (!q) return biz.services;
+    return biz.services.filter((s) => s.name.toLowerCase().includes(q));
+  }, [biz.services, serviceSearch]);
 
   useEffect(() => {
     if (done) {
@@ -243,6 +251,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
     setConfirmedId(res.id);
     setCancelFeedback(null);
     setDone(true);
+    sound.playSuccess();
     if (owner === undefined)
       toast(opts.claimTx ? `Nueva reserva de ${client.trim()} — seña pendiente de verificación 💸` : `¡Nueva reserva de ${client.trim()}! Ya está en tu agenda 🎉`);
   };
@@ -301,18 +310,70 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
         {/* 1 · servicio */}
         {!done && step === 0 && (
           <div className="pop-in grid gap-2.5">
-            <p className="text-xs font-bold uppercase tracking-wider text-inkmute">1 · Elegí un servicio</p>
-            {biz.services.length === 0 && <p className="rounded-xl border-2 border-dashed border-ink/15 p-4 text-sm text-inkmute">Este negocio todavía no cargó sus servicios.</p>}
-            {biz.services.map((s) => (
-              <button key={s.id} onClick={() => { setServiceId(s.id); setStep(hasPros ? 1 : 2); }}
-                className="group flex items-center justify-between gap-3 rounded-xl border-2 border-ink/10 bg-white/60 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/50 hover:bg-white hover:shadow-sm">
-                <span>
-                  <span className="block font-display text-[15px] font-bold">{s.name}</span>
-                  <span className="text-xs text-inkmute">{s.duration} min</span>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wider text-inkmute">1 · Elegí un servicio</p>
+              {biz.services.length > 0 && (
+                <span className="text-[11px] font-bold text-inkmute">
+                  {filteredServices.length} de {biz.services.length} servicio{biz.services.length === 1 ? "" : "s"}
                 </span>
-                <span className="shrink-0 font-display text-[15px] font-bold text-ink">{fmtMoney(s.price)}</span>
-              </button>
-            ))}
+              )}
+            </div>
+
+            {biz.services.length > 4 && (
+              <div className="relative">
+                <IconSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-inkmute" />
+                <input
+                  type="text"
+                  placeholder="Buscar servicio (ej: corte, uñas, masaje)..."
+                  className="field !py-2 !pl-8 !text-xs !rounded-xl"
+                  value={serviceSearch}
+                  onChange={(e) => setServiceSearch(e.target.value)}
+                />
+                {serviceSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setServiceSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-inkmute hover:text-ink"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
+            {biz.services.length === 0 ? (
+              <p className="rounded-xl border-2 border-dashed border-ink/15 p-4 text-sm text-inkmute">
+                Este negocio todavía no cargó sus servicios.
+              </p>
+            ) : filteredServices.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-ink/15 p-4 text-center">
+                <p className="text-xs font-bold text-ink">No se encontró "{serviceSearch}"</p>
+                <button
+                  type="button"
+                  onClick={() => setServiceSearch("")}
+                  className="mt-1 text-xs font-bold text-evergreen hover:underline"
+                >
+                  Ver todos los servicios
+                </button>
+              </div>
+            ) : (
+              filteredServices.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    setServiceId(s.id);
+                    setStep(hasPros ? 1 : 2);
+                  }}
+                  className="group flex items-center justify-between gap-3 rounded-xl border-2 border-ink/10 bg-white/60 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/50 hover:bg-white hover:shadow-sm"
+                >
+                  <span>
+                    <span className="block font-display text-[15px] font-bold">{s.name}</span>
+                    <span className="text-xs text-inkmute">{s.duration} min</span>
+                  </span>
+                  <span className="shrink-0 font-display text-[15px] font-bold text-ink">{fmtMoney(s.price)}</span>
+                </button>
+              ))
+            )}
           </div>
         )}
 
