@@ -20,6 +20,8 @@ import {
   IconChart,
   IconBag,
   IconWhatsApp,
+  IconMail,
+  IconInstagram,
 } from "./components/kit";
 
 /* ================================================================
@@ -588,7 +590,7 @@ function Problem() {
                 },
                 {
                   sin: "«Uy, me re olvidé». Clientes que faltan sin avisar y esa plata no vuelve nunca más.",
-                  con: "Invitación a Google/Apple Calendar y recordatorios automáticos enviados por WhatsApp.",
+                  con: "Confirmación y recordatorio por email 24 h antes, más invitación a Google/Apple Calendar.",
                 },
               ].map((row, idx) => (
                 <div key={idx} className="grid md:grid-cols-2 gap-3 rounded-2xl border border-ink/8 bg-paper/60 p-4 transition-all hover:bg-paper">
@@ -1403,21 +1405,22 @@ function Footer() {
             </a>
             <p className="mt-4 max-w-xs leading-relaxed text-paper/60">El sistema de reservas online para negocios que viven de sus turnos. Hecho en Latinoamérica, para Latinoamérica.</p>
             <div className="mt-6 flex gap-3">
-              {["IG", "TT", "YT", "X"].map((s) => (
-                <a key={s} href="#inicio" aria-label={`Cupito en ${s}`} className="flex h-10 w-10 items-center justify-center rounded-full border border-paper/20 font-display text-xs font-bold text-paper/70 transition-all duration-200 hover:-translate-y-1 hover:border-lime hover:bg-lime hover:text-ink">{s}</a>
-              ))}
+              <a href="mailto:hola@cupito.app" aria-label="Escribinos a hola@cupito.app" title="hola@cupito.app" className="flex h-10 w-10 items-center justify-center rounded-full border border-paper/20 text-paper/70 transition-all duration-200 hover:-translate-y-1 hover:border-lime hover:bg-lime hover:text-ink"><IconMail className="h-4 w-4" /></a>
+              <a href="https://instagram.com/cupitoapp" target="_blank" rel="noreferrer" aria-label="Cupito en Instagram" title="@cupitoapp" className="flex h-10 w-10 items-center justify-center rounded-full border border-paper/20 text-paper/70 transition-all duration-200 hover:-translate-y-1 hover:border-lime hover:bg-lime hover:text-ink"><IconInstagram className="h-4 w-4" /></a>
+              <a href="https://wa.me/5491131996205?text=Hola!%20Quiero%20saber%20m%C3%A1s%20de%20Cupito" target="_blank" rel="noreferrer" aria-label="Cupito en WhatsApp" title="WhatsApp" className="flex h-10 w-10 items-center justify-center rounded-full border border-paper/20 text-paper/70 transition-all duration-200 hover:-translate-y-1 hover:border-lime hover:bg-lime hover:text-ink"><IconWhatsApp className="h-4 w-4" /></a>
             </div>
+            <p className="mt-4 text-sm text-paper/60">Soporte: <a href="mailto:hola@cupito.app" className="font-bold text-lime hover:underline">hola@cupito.app</a></p>
           </div>
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             {[
-              { title: "Producto", links: ["Funciones", "Precios", "Integraciones", "Novedades"] },
-              { title: "Rubros", links: ["Barberías", "Clínicas y consultorios", "Estética", "Tattoo"] },
-              { title: "Empresa", links: ["Sobre nosotros", "Blog", "Contacto", "Prensa"] },
+              { title: "Producto", links: [{ t: "Funciones", h: "#beneficios" }, { t: "Precios", h: "#precios" }, { t: "Preguntas", h: "#faq" }, { t: "Crear cuenta", h: "#/auth" }] },
+              { title: "Rubros", links: [{ t: "Barberías", h: "#precios" }, { t: "Clínicas y consultorios", h: "#precios" }, { t: "Estética", h: "#precios" }, { t: "Tattoo", h: "#precios" }] },
+              { title: "Empresa", links: [{ t: "Contacto", h: "mailto:hola@cupito.app" }, { t: "Instagram", h: "https://instagram.com/cupitoapp" }, { t: "WhatsApp", h: "https://wa.me/5491131996205" }] },
             ].map((col) => (
               <div key={col.title}>
                 <h3 className="font-display text-sm font-bold uppercase tracking-[0.18em] text-lime">{col.title}</h3>
                 <ul className="mt-4 space-y-2.5">
-                  {col.links.map((l) => <li key={l}><a href="#inicio" className="text-sm text-paper/60 transition-colors duration-200 hover:text-lime">{l}</a></li>)}
+                  {col.links.map((l) => <li key={l.t}><a href={l.h} {...(l.h.startsWith("http") ? { target: "_blank", rel: "noreferrer" } : {})} className="text-sm text-paper/60 transition-colors duration-200 hover:text-lime">{l.t}</a></li>)}
                 </ul>
               </div>
             ))}

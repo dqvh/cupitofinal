@@ -46,6 +46,19 @@ export const IconWallet = ({ className }: IconProps) => (
   </svg>
 );
 export const IconLink = ({ className }: IconProps) => <S className={className} d="M10 14a4 4 0 005.7 0l3-3a4 4 0 10-5.7-5.6l-1.2 1.2M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 105.7 5.6l1.2-1.2" />;
+export const IconMail = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" strokeWidth="2" fill="none" />
+    <path d="M4 7.5l8 6 8-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+  </svg>
+);
+export const IconInstagram = ({ className }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" strokeWidth="2" fill="none" />
+    <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" fill="none" />
+    <circle cx="17.2" cy="6.8" r="1.4" fill="currentColor" />
+  </svg>
+);
 export const IconChart = ({ className }: IconProps) => <S className={className} d="M4 20V10m5.3 10V4m5.4 16v-7m5.3 7v-4M2 20h20" />;
 export const IconGear = ({ className }: IconProps) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
