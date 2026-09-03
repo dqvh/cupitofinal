@@ -135,8 +135,11 @@ export async function sendBookingConfirmationEmail(params: BookingEmailParams) {
                 <tr>
                   <td align="center">
                     <a href="${lookupUrl}" target="_blank" style="display:inline-block;width:100%;box-sizing:border-box;background-color:#ffffff;color:#18181b;text-decoration:none;font-size:13px;font-weight:600;padding:11px 20px;border-radius:12px;text-align:center;border:1px solid #d4d4d8;">
-                      Gestionar o cancelar mi turno
+                      Ver o cancelar mi turno
                     </a>
+                    <p style="margin:8px 0 0;font-size:11.5px;color:#71717a;line-height:1.5;">
+                      Se abre directo en «Mis turnos»: ingresá tu celular y cancelá sin llamar ni mandar mensajes.
+                    </p>
                   </td>
                 </tr>
               </table>
@@ -148,6 +151,122 @@ export async function sendBookingConfirmationEmail(params: BookingEmailParams) {
           </tr>
 
           <!-- Footer minimalista -->
+          <tr>
+            <td style="padding:20px 36px;background-color:#fafafa;border-top:1px solid #f4f4f5;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#a1a1aa;">
+                Organizado mediante <a href="https://cupito.app" style="color:#52525b;text-decoration:none;font-weight:600;">Cupito</a> · Sistema de reservas online
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+  return sendViaApi({ to: params.toEmail, subject, html });
+}
+
+/**
+ * 1b. Email de Recordatorio 24 h antes del turno (lo envía el cron diario).
+ * No se envía si el turno se reservó a menos de 24 h de la cita (ya tuvo confirmación).
+ */
+export async function sendBookingReminderEmail(params: BookingEmailParams) {
+  if (!params.toEmail || !params.toEmail.includes("@")) return;
+
+  const subject = `Recordatorio: tu turno en ${params.businessName} es mañana — ${params.timeStr} hs`;
+  const lookupUrl = `https://cupito.app/${params.slug}?buscar=1`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f5;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:520px;background-color:#ffffff;border-radius:20px;border:1px solid #e4e4e7;box-shadow:0 10px 30px rgba(0,0,0,0.04);overflow:hidden;" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="padding:32px 36px 20px;border-bottom:1px solid #f4f4f5;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="left">
+                    <img src="https://cupito.app/icon.png" width="28" height="28" style="display:inline-block;vertical-align:middle;border-radius:6px;margin-right:8px;" alt="Cupito" /><span style="font-size:20px;font-weight:900;letter-spacing:-0.5px;color:#0c241c;vertical-align:middle;">cupito<span style="color:#10b981;">.</span></span>
+                  </td>
+                  <td align="right">
+                    <span style="display:inline-block;background-color:#fef3c7;color:#b45309;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;letter-spacing:0.3px;border:1px solid #fde68a;">
+                      &#9200; Mañana
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 36px;">
+              <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#09090b;letter-spacing:-0.4px;">
+                ¡Hola ${escapeHtml(params.clientName.trim().split(" ")[0])}, te recordamos tu turno!
+              </h1>
+              <p style="margin:0 0 24px;font-size:14.5px;line-height:1.6;color:#52525b;">
+                Mañana te esperamos en <strong style="color:#09090b;">${escapeHtml(params.businessName)}</strong>:
+              </p>
+              <table role="presentation" width="100%" style="background-color:#fafafa;border:1px solid #e4e4e7;border-radius:14px;margin-bottom:24px;" cellspacing="0" cellpadding="16">
+                <tr>
+                  <td>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="6">
+                      <tr>
+                        <td style="font-size:12px;font-weight:600;color:#71717a;width:35%;">Servicio</td>
+                        <td style="font-size:14px;font-weight:700;color:#09090b;">${escapeHtml(params.serviceName)}</td>
+                      </tr>
+                      ${params.proName ? `
+                      <tr>
+                        <td style="font-size:12px;font-weight:600;color:#71717a;">Profesional</td>
+                        <td style="font-size:14px;font-weight:600;color:#09090b;">${escapeHtml(params.proName)}</td>
+                      </tr>` : ""}
+                      <tr>
+                        <td style="font-size:12px;font-weight:600;color:#71717a;">Fecha y hora</td>
+                        <td style="font-size:14px;font-weight:800;color:#047857;">${escapeHtml(params.dateStr)} · ${escapeHtml(params.timeStr)} hs</td>
+                      </tr>
+                      ${params.address ? `
+                      <tr>
+                        <td style="font-size:12px;font-weight:600;color:#71717a;">Dirección</td>
+                        <td style="font-size:13px;color:#09090b;">${escapeHtml(params.address)}</td>
+                      </tr>` : ""}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:20px;">
+                ${params.gCalUrl ? `
+                <tr>
+                  <td align="center" style="padding-bottom:10px;">
+                    <a href="${params.gCalUrl}" target="_blank" style="display:inline-block;width:100%;box-sizing:border-box;background-color:#0c241c;color:#ffffff;text-decoration:none;font-size:13.5px;font-weight:700;padding:13px 20px;border-radius:12px;text-align:center;">
+                      📅 Guardar en Google Calendar
+                    </a>
+                  </td>
+                </tr>` : ""}
+                <tr>
+                  <td align="center">
+                    <a href="${lookupUrl}" target="_blank" style="display:inline-block;width:100%;box-sizing:border-box;background-color:#ffffff;color:#18181b;text-decoration:none;font-size:13px;font-weight:600;padding:11px 20px;border-radius:12px;text-align:center;border:1px solid #d4d4d8;">
+                      Ver o cancelar mi turno
+                    </a>
+                    <p style="margin:8px 0 0;font-size:11.5px;color:#71717a;line-height:1.5;">
+                      Se abre directo en «Mis turnos»: si no podés venir, cancelá desde ahí y liberás el lugar.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;font-size:12px;color:#71717a;line-height:1.5;text-align:center;">
+                ¡Te esperamos! Si tenés alguna consulta, contactate con <strong>${escapeHtml(params.businessName)}</strong>.
+              </p>
+            </td>
+          </tr>
           <tr>
             <td style="padding:20px 36px;background-color:#fafafa;border-top:1px solid #f4f4f5;text-align:center;">
               <p style="margin:0;font-size:11px;color:#a1a1aa;">

@@ -23,7 +23,8 @@ function buildDates(date: string, time: string, duration: number) {
 }
 function icsContent(o: { title: string; date: string; time: string; duration: number; desc: string }) {
   const { start, end } = buildDates(o.date, o.time, o.duration);
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Cupito//Reservas//ES", "BEGIN:VEVENT", `UID:${Date.now()}@cupito.app`, `DTSTART:${toLocalStamp(start)}`, `DTEND:${toLocalStamp(end)}`, `SUMMARY:${o.title}`, `DESCRIPTION:${o.desc}`, "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", "DESCRIPTION:Recordatorio de tu turno", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  // Dos alarmas: 24 h antes y 1 h antes (Apple Calendar / Outlook las respetan solas).
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Cupito//Reservas//ES", "BEGIN:VEVENT", `UID:${Date.now()}@cupito.app`, `DTSTART:${toLocalStamp(start)}`, `DTEND:${toLocalStamp(end)}`, `SUMMARY:${o.title}`, `DESCRIPTION:${o.desc}`, "BEGIN:VALARM", "TRIGGER:-PT24H", "ACTION:DISPLAY", "DESCRIPTION:Tu turno es mañana", "END:VALARM", "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", "DESCRIPTION:Recordatorio de tu turno", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
 }
 function downloadIcs(content: string) {
   const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
@@ -96,7 +97,7 @@ function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme, m
 }
 
 /* ---------- widget principal ---------- */
-export default function PublicBooking({ owner }: { owner?: ({ user: User } & Record<"data", BizData>) | null } = {}) {
+export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({ user: User } & Record<"data", BizData>) | null; initialLookupOpen?: boolean } = {}) {
   const store = useStore();
   const user = owner ? owner.user : store.user;
   const biz = owner ? owner.data : store.data;
@@ -129,7 +130,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const [showAllSlots, setShowAllSlots] = useState(false);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
   const [cancelFeedback, setCancelFeedback] = useState<string | null>(null);
-  const [showLookupModal, setShowLookupModal] = useState(false);
+  const [showLookupModal, setShowLookupModal] = useState(!!initialLookupOpen);
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupFeedback, setLookupFeedback] = useState<string | null>(null);
   const [serviceSearch, setServiceSearch] = useState("");
@@ -240,7 +241,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const finish = (opts: { claimTx?: string }) => {
     if (!serviceId || !selectedDate || !time) return;
     const res = addBookingFor(user.id, {
-      client, phone, serviceId, date: selectedDate, time, source: "online",
+      client, phone, email: email.trim() || undefined, serviceId, date: selectedDate, time, source: "online",
       items: bookingItems.length ? bookingItems : undefined,
       proId: proId ?? undefined,
       status: opts.claimTx ? "pendiente" : undefined,
@@ -680,7 +681,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                   </p>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Email <span className="normal-case text-ink/40">(opcional, para confirmación y recordatorio)</span></label>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Email <span className="normal-case text-ink/40">(te confirma + te recuerda 24 h antes)</span></label>
                   <input className="field" type="email" placeholder="ana@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
 
@@ -774,12 +775,17 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
             <p className="mt-1 text-xs text-inkmute">
               Te esperamos en <strong className="text-ink font-bold">{user.business}</strong>
             </p>
+            {email.trim() !== "" && (
+              <p className="mx-auto mt-2 max-w-sm rounded-full bg-fern/10 px-3 py-1.5 text-[11px] font-semibold text-fern">
+                📩 Confirmación enviada a {email.trim()} + recordatorio 24 h antes
+              </p>
+            )}
 
             {/* Tarjeta de comprobante limpio */}
             <div className="mx-auto mt-4 max-w-sm rounded-2xl border-2 border-dashed border-ink/15 bg-white p-4 text-left shadow-sm">
               <div className="flex items-center justify-between border-b border-ink/10 pb-2">
-                <span className="font-display text-[11px] font-extrabold uppercase tracking-wider text-fern">
-                  ● Turno agendado
+                <span className="inline-flex items-center gap-1.5 font-display text-[11px] font-extrabold uppercase tracking-wider text-fern">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" /> Turno agendado
                 </span>
                 <CopyButton
                   text={`Turno en ${user.business}: ${service.name} para ${client} el ${fmtLong(selectedDate)} a las ${time} hs.`}
@@ -964,7 +970,7 @@ function CalendarHelpModal({ onClose }: { onClose: () => void }) {
               <li>Tocá el botón <strong>«Agregar a Apple Calendar (.ics)»</strong>.</li>
               <li>Tu iPhone abrirá la vista previa del evento con la fecha, hora y dirección del negocio.</li>
               <li>Tocá <strong>«Añadir a Calendario»</strong> (arriba a la derecha).</li>
-              <li>¡Listo! El turno quedará guardado con alarma 1 hora antes.</li>
+              <li>¡Listo! El turno quedará guardado con alarmas 24 h y 1 h antes.</li>
             </ol>
           </div>
 
@@ -977,7 +983,7 @@ function CalendarHelpModal({ onClose }: { onClose: () => void }) {
               <li>Tocá el botón <strong>«Abrir en Google Calendar»</strong>.</li>
               <li>Se abrirá la app o web de Google Calendar con todos los datos cargados.</li>
               <li>Tocá <strong>«Guardar»</strong> en la esquina superior.</li>
-              <li>¡Listo! Ya tenés el evento sincronizado en tu cuenta.</li>
+              <li>¡Listo! Tip: agregale notificación 24 h y 1 h antes así no te lo olvidás.</li>
             </ol>
           </div>
         </div>

@@ -14,6 +14,8 @@ import {
   PRO_LIMIT,
   defaultHours,
   THEMES,
+  sortWaitlist,
+  isRecurrentClient,
   type ThemeId,
   type Booking,
   type BookingStatus,
@@ -153,6 +155,7 @@ export default function Dashboard() {
   const [blockPrefillTime, setBlockPrefillTime] = useState<string | undefined>(undefined);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [notifyWl, setNotifyWl] = useState<{ client: string; phone: string; serviceName: string; date: string; time: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -740,14 +743,30 @@ export default function Dashboard() {
                   <EmptyState text="No hay nadie en lista de espera." sub="Cuando un cliente no encuentre horario, se va a anotar acá y te aparece con el número en el menú." />
                 ) : (
                   <div className="space-y-6">
-                    {Object.entries([...data.waitlist].sort((a, b) => a.date.localeCompare(b.date)).reduce<Record<string, typeof data.waitlist>>((acc, w) => { (acc[w.date] ||= []).push(w); return acc; }, {})).map(([d, list]) => (
+                    {isPaid(user) && user.plan === "escala" ? (
+                      <div className="flex items-center gap-2 rounded-2xl border-2 border-evergreen/25 bg-lime/15 px-4 py-3">
+                        <span className="rounded-full bg-evergreen px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-lime">Prioridad inteligente</span>
+                        <p className="text-xs text-inkmute">Tus clientes recurrentes aparecen primero. Exclusivo de tu plan Escala.</p>
+                      </div>
+                    ) : (
+                      <button onClick={() => setCheckoutPlan("escala")} className="flex w-full items-center gap-2 rounded-2xl border-2 border-dashed border-ink/20 bg-white/50 px-4 py-3 text-left transition-all hover:border-evergreen/50">
+                        <span className="text-sm">⚡</span>
+                        <p className="text-xs text-inkmute"><strong className="text-ink">Tip:</strong> en el plan Escala la lista se ordena sola: recurrentes primero. <span className="font-bold text-fern underline underline-offset-2">Ver Escala</span></p>
+                      </button>
+                    )}
+                    {Object.entries(sortWaitlist(data.waitlist, data.bookings, user.plan).sort((a, b) => a.date.localeCompare(b.date)).reduce<Record<string, typeof data.waitlist>>((acc, w) => { (acc[w.date] ||= []).push(w); return acc; }, {})).map(([d, list]) => (
                       <div key={d}>
                         <p className="font-display text-base font-bold text-ink">{fmtLong(d)}<span className="ml-2 text-sm font-semibold text-inkmute">{list.length} esperando</span></p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           {list.map((w) => (
-                            <div key={w.id} className="card flex items-center justify-between gap-3 p-4">
-                              <div>
-                                <p className="font-display text-[15px] font-bold text-ink">{w.client}</p>
+                            <div key={w.id} className="card card-hover flex items-center justify-between gap-3 p-4">
+                              <div className="min-w-0">
+                                <p className="flex flex-wrap items-center gap-1.5 font-display text-[15px] font-bold text-ink">
+                                  {w.client}
+                                  {user.plan === "escala" && isRecurrentClient(w, data.bookings) && (
+                                    <span className="rounded-full bg-lime px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-ink">⭐ Recurrente</span>
+                                  )}
+                                </p>
                                 <p className="text-xs text-inkmute">{w.phone} · {serviceOf(w.serviceId)?.name ?? "Servicio"}</p>
                               </div>
                               <div className="flex shrink-0 gap-1.5">
@@ -876,7 +895,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} waitlistId={prefill?.waitlistId} onClose={() => { setShowNew(false); setPrefill(null); }} />}
+      {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} waitlistId={prefill?.waitlistId} onClose={() => { setShowNew(false); setPrefill(null); }} onCreated={(info) => setNotifyWl(info)} />}
+      {notifyWl && <WaitlistNotifyModal info={notifyWl} businessName={user.business} onClose={() => setNotifyWl(null)} />}
       {serviceModal.open && <ServiceModal service={serviceModal.id ? data.services.find((s) => s.id === serviceModal.id) : undefined} onClose={() => setServiceModal({ open: false })} />}
       {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => {
         setCheckoutPlan(null);
@@ -1430,8 +1450,8 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-function BookingModal({ initialDate, initialClient, initialPhone, initialServiceId, waitlistId, onClose }: { initialDate: string; initialClient?: string; initialPhone?: string; initialServiceId?: string; waitlistId?: string; onClose: () => void }) {
-  const { data, addBooking, createBookingFromWaitlist, toast } = useStore();
+function BookingModal({ initialDate, initialClient, initialPhone, initialServiceId, waitlistId, onClose, onCreated }: { initialDate: string; initialClient?: string; initialPhone?: string; initialServiceId?: string; waitlistId?: string; onClose: () => void; onCreated?: (info: { client: string; phone: string; serviceName: string; date: string; time: string; fromWaitlist: boolean }) => void }) {
+  const { data, user, addBooking, createBookingFromWaitlist, toast } = useStore();
   const [client, setClient] = useState(initialClient ?? "");
   const [phone, setPhone] = useState(initialPhone ?? "");
   const [serviceId, setServiceId] = useState(initialServiceId ?? data?.services[0]?.id ?? "");
@@ -1456,8 +1476,15 @@ function BookingModal({ initialDate, initialClient, initialPhone, initialService
       ? createBookingFromWaitlist(waitlistId, { client, phone, serviceId, date, time, source: "manual", proId: proId || undefined })
       : addBooking({ client, phone, serviceId, date, time, source: "manual", proId: proId || undefined });
     if (!res.ok) return setError(res.error);
-    toast(`Reserva creada: ${client.trim()} · ${date} ${time}`);
-    onClose();
+    const serviceName = data.services.find((s) => s.id === serviceId)?.name ?? "tu turno";
+    if (waitlistId) {
+      // Viene de lista de espera: avisar por WhatsApp con un cartel dedicado.
+      onClose();
+      onCreated?.({ client: client.trim(), phone: phone.trim(), serviceName, date, time, fromWaitlist: true });
+    } else {
+      toast(`Reserva creada: ${client.trim()} · ${date} ${time}`);
+      onClose();
+    }
   };
 
   return (
@@ -1504,6 +1531,49 @@ function BookingModal({ initialDate, initialClient, initialPhone, initialService
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
         <button type="submit" className="w-full rounded-full bg-coral py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)]">Crear reserva</button>
       </form>
+    </Modal>
+  );
+}
+
+/* Cartel post-asignación: avisar por WhatsApp a quien estaba en lista de espera */
+function WaitlistNotifyModal({ info, businessName, onClose }: {
+  info: { client: string; phone: string; serviceName: string; date: string; time: string };
+  businessName: string;
+  onClose: () => void;
+}) {
+  const firstName = info.client.split(" ")[0];
+  const msg = `Hola ${firstName}! Te escribimos de ${businessName} 🎉 Se liberó un lugar y te asignamos tu turno de ${info.serviceName} para el ${fmtLong(info.date)} a las ${info.time} hs. Respondeme para confirmar que venís. ¡Te esperamos!`;
+  const hasPhone = info.phone.replace(/\D/g, "").length >= 8;
+  return (
+    <Modal title="Turno asignado 🎉" onClose={onClose}>
+      <div className="space-y-4 text-ink">
+        <div className="rounded-2xl border-2 border-limedeep/50 bg-lime/15 p-4">
+          <p className="font-display text-base font-extrabold">{info.client} ya salió de la lista de espera</p>
+          <p className="mt-1 text-sm text-inkmute">{info.serviceName} · {fmtLong(info.date)} a las {info.time} hs</p>
+        </div>
+        <div>
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-inkmute">Mensaje para {firstName}</p>
+          <p className="rounded-xl border-2 border-ink/10 bg-white/70 p-3 text-sm leading-relaxed">{msg}</p>
+        </div>
+        {hasPhone ? (
+          <a
+            href={createWhatsAppUrl(info.phone, msg)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={onClose}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 hover:bg-emerald-700"
+          >
+            <IconWhatsApp className="h-5 w-5" /> Avisarle por WhatsApp
+          </a>
+        ) : (
+          <p className="rounded-xl border-2 border-amber-500/30 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-900">
+            No hay teléfono cargado para {firstName}, avisale por el medio que prefieras.
+          </p>
+        )}
+        <button type="button" onClick={onClose} className="w-full text-center text-xs font-bold text-inkmute hover:text-ink">
+          Cerrar sin avisar
+        </button>
+      </div>
     </Modal>
   );
 }
@@ -2798,7 +2868,7 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
   const desc: Record<Plan, string[]> = {
     semilla: ["1 profesional", "25 reservas al mes", "Link web propio", "Recordatorios por email", "Horarios configurables"],
     crece: ["Reservas ilimitadas", "Hasta 3 profesionales", "Cobro de seña (Mercado Pago / Transferencia)", "Tienda de productos y cupones", "Horarios por día con corte"],
-    escala: ["Todo lo de Crece", "Profesionales y equipos ilimitados", "Estadísticas avanzadas y exportación", "Paletas de colores exclusivas", "Soporte prioritario"],
+    escala: ["Todo lo de Crece", "Profesionales y equipos ilimitados", "Estadísticas avanzadas y exportación", "Lista de espera con prioridad (recurrentes primero)", "Paletas de colores exclusivas", "Soporte prioritario"],
   };
 
   const nextDateStr = fmtDateHuman(sub?.nextRenewal || new Date(Date.now() + 30 * 86400000).toISOString());

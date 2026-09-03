@@ -10,6 +10,16 @@ export default function PublicPage({ slug }: { slug: string }) {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [loadingRemote, setLoadingRemote] = useState(!page);
 
+  // Los emails traen ?buscar=1 para abrir directo «Mis turnos» (ver/cancelar).
+  const autoOpenLookup = (() => {
+    try {
+      if ((window.location.search || "").includes("buscar=1")) return true;
+      const h = window.location.hash || "";
+      if (h.includes("buscar=1")) return true;
+    } catch { /* noop */ }
+    return false;
+  })();
+
   useEffect(() => {
     // Si estoy viendo mi propia página logueado, lo local ya es lo más fresco.
     if (page && sessionUserId && page.user.id === sessionUserId) {
@@ -132,7 +142,7 @@ export default function PublicPage({ slug }: { slug: string }) {
           {/* Widget de reserva: en celulares va primero (order-1) para que el cliente no tenga que scrollear */}
           <div className="order-1 lg:order-2">
             <Reveal delay={140}>
-              <PublicBooking owner={page} />
+              <PublicBooking owner={page} initialLookupOpen={autoOpenLookup} />
             </Reveal>
           </div>
 

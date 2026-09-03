@@ -13,7 +13,7 @@ import { IconArrow, IconCheck } from "./kit";
 
 const FEATURES: Record<PaidPlan, string[]> = {
   crece: ["Reservas ilimitadas", "Hasta 3 profesionales", "Seña, tienda y cupones", "Página con tu marca"],
-  escala: ["Todo lo de Crece", "Equipo ilimitado", "Soporte prioritario", "Pensado para estudios y clínicas"],
+  escala: ["Todo lo de Crece", "Equipo ilimitado", "Lista de espera con prioridad", "Estadísticas avanzadas y exportación", "Soporte prioritario"],
 };
 
 export function PlanCheckout({

@@ -42,8 +42,11 @@ export interface Booking {
   time: string; // HH:MM
   client: string;
   phone: string;
+  email?: string; // para confirmación y recordatorio 24 h antes
   status: BookingStatus;
   source: "online" | "manual";
+  createdAt?: number; // cuándo se creó (para no mandar recordatorio si se reservó <24 h antes)
+  reminderSentAt?: number; // cuándo se envió el recordatorio (evita duplicados del cron)
   items?: { productId: string; qty: number }[];
   proId?: string;
   paidDeposit?: boolean;
@@ -399,6 +402,35 @@ export function slugify(s: string): string {
   return base;
 }
 
+/* Lista de espera inteligente (Plan Escala): los clientes recurrentes van
+   primero y a igualdad de condición vale el orden de llegada. El resto de
+   los planes usa FIFO puro (orden de llegada). */
+export function isRecurrentClient(w: Pick<WaitlistEntry, "phone">, bookings: Pick<Booking, "phone" | "status">[]): boolean {
+  const digits = w.phone.replace(/\D/g, "");
+  if (digits.length < 8) return false;
+  const tail = digits.slice(-8);
+  return bookings.some(
+    (b) => b.status !== "cancelada" && b.phone.replace(/\D/g, "").endsWith(tail)
+  );
+}
+
+export function sortWaitlist(waitlist: WaitlistEntry[], bookings: Booking[], plan: Plan): WaitlistEntry[] {
+  const list = [...waitlist];
+  if (plan === "escala") {
+    const rec = new Map<string, boolean>();
+    list.forEach((w) => rec.set(w.id, isRecurrentClient(w, bookings)));
+    list.sort((a, b) => {
+      const pa = rec.get(a.id) ? 0 : 1;
+      const pb = rec.get(b.id) ? 0 : 1;
+      if (pa !== pb) return pa - pb; // recurrentes primero
+      return a.createdAt - b.createdAt; // después, orden de llegada
+    });
+    return list;
+  }
+  list.sort((a, b) => a.createdAt - b.createdAt);
+  return list;
+}
+
 /* Horarios según configuración del día (intervalos 45 min), con corte opcional */
 export function slotsForDay(h: DayHours | undefined): string[] {
   if (!h || !h.open) return [];
@@ -749,8 +781,8 @@ interface StoreApi {
   removeWaitlist(id: string): void;
   createBookingFromWaitlist(waitlistId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   requestReview(bookingId: string): void;
-  addBooking(b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
-  addBookingFor(ownerId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): { ok: true; id: string } | { ok: false; error: string };
+  addBooking(b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
+  addBookingFor(ownerId: string, b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): { ok: true; id: string } | { ok: false; error: string };
   rescheduleBooking(id: string, newDate: string, newTime: string, newProId?: string): { ok: boolean; error?: string };
   setStatus(id: string, status: BookingStatus): void;
   removeBooking(id: string): void;
@@ -1338,7 +1370,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !proId || b.proId === proId));
     if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` } as const;
     const id = uid();
-    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId };
+    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId, createdAt: Date.now() };
     // UN solo guardado atómico: crea el turno Y borra de la lista juntos.
     // Antes eran dos guardados separados y el sync a la nube los pisaba → turnos infinitos.
     data.bookings = [...data.bookings, newBooking];
@@ -1368,14 +1400,14 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !proId || b.proId === proId));
     if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` };
     const id = uid();
-    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId };
+    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId, createdAt: Date.now() };
     data.bookings = [...data.bookings, newBooking];
     saveData(sessionUserId, data);
     saveRemoteBooking(sessionUserId, newBooking).catch(() => {});
     emit();
     return { ok: true, id };
   },
-  addBookingFor(ownerId, { client, phone, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
+  addBookingFor(ownerId, { client, phone, email, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
     const data = loadData(ownerId);
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
@@ -1389,7 +1421,8 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !pro || b.proId === pro));
     if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` };
     const id = uid();
-    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim };
+    const cleanEmail = (email || "").trim();
+    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim, createdAt: Date.now() };
     data.bookings = [...data.bookings, newBooking];
     saveData(ownerId, data);
     saveRemoteBooking(ownerId, newBooking).catch(() => {});
@@ -1412,6 +1445,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         time: newTime,
         proId: newProId !== undefined ? newProId : b.proId,
         status: b.status === "cancelada" ? "confirmada" : b.status,
+        reminderSentAt: undefined, // cambió el día: el recordatorio viejo ya no sirve
       };
     });
     saveData(sessionUserId, data);

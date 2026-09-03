@@ -360,7 +360,7 @@ function BookingDemo() {
           {toasts >= 1 && (
             <div className="toast-in flex items-center gap-2.5 rounded-xl border-2 border-ink/10 bg-white px-3.5 py-2.5 shadow-block-ink">
               <IconBell className="h-5 w-5 text-fern" />
-              <p className="text-xs font-semibold text-ink">Recordatorio por email y calendario <span className="text-inkmute">· 24 h y 1 h antes</span></p>
+              <p className="text-xs font-semibold text-ink">Recordatorio por email 24 h antes + alarmas de calendario</p>
             </div>
           )}
           {toasts >= 2 && (
@@ -892,7 +892,7 @@ function Features() {
             <div className="card card-hover flex h-full flex-col p-7">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-coral/15 text-coral"><IconBell className="h-6 w-6" /></span>
               <h3 className="mt-4 font-display text-xl font-extrabold text-ink">Recordatorios automáticos</h3>
-              <p className="mt-2 flex-1 text-inkmute">Email y una invitación de calendario 24 h y 1 h antes de cada turno. Sin que acuerdes nada con nadie.</p>
+              <p className="mt-2 flex-1 text-inkmute">Confirmación por email al reservar, recordatorio 24 h antes y alarmas de calendario 24 h y 1 h antes. Sin que acuerdes nada con nadie.</p>
               <p className="mt-4 inline-block w-fit rounded-full bg-coral/10 px-3 py-1 text-xs font-bold text-coral">−68% de ausencias</p>
             </div>
           </Reveal>
@@ -932,7 +932,7 @@ function Features() {
             <div className="card card-hover flex h-full flex-col p-7">
               <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink/8 text-ink"><IconUsers className="h-6 w-6" /></span>
               <h3 className="mt-4 font-display text-xl font-extrabold text-ink">Lista de espera inteligente</h3>
-              <p className="mt-2 flex-1 text-inkmute">Día completo? Tus clientes se anotan solos. Se libera un hueco y vos se lo ofrecés con un clic.</p>
+              <p className="mt-2 flex-1 text-inkmute">Día completo? Tus clientes se anotan solos. Se libera un hueco, le das el turno con un clic y le avisás por WhatsApp. En Escala, tus recurrentes van primeros solos.</p>
               <p className="mt-4 inline-block w-fit rounded-full bg-ink/8 px-3 py-1 text-xs font-bold text-ink/60">Todos los planes</p>
             </div>
           </Reveal>
@@ -1031,7 +1031,7 @@ type PlanDef = { id: Plan; name: string; tagline: string; monthly: number; yearl
 const PLANS: PlanDef[] = [
   {
     id: "semilla", name: "Semilla", tagline: "Para probar el agua sin mojarte.", monthly: 0, yearly: 0, cta: "Empezar gratis", highlight: false,
-    features: [{ t: "1 calendario y 1 profesional" }, { t: "25 reservas al mes" }, { t: "Tu link propio cupito.app/tu-negocio" }, { t: "Recordatorios por email" }, { t: "Lista de espera" }, { t: "Estadísticas básicas" }],
+    features: [{ t: "1 calendario y 1 profesional" }, { t: "25 reservas al mes" }, { t: "Tu link propio cupito.app/tu-negocio" }, { t: "Confirmación y recordatorio por email" }, { t: "Lista de espera" }, { t: "Guía de configuración paso a paso" }, { t: "Estadísticas básicas" }],
   },
   {
     id: "crece", name: "Crece", tagline: "El favorito de los que viven de sus turnos.", monthly: 9900, yearly: 9400, cta: "Suscribirme", highlight: true, badge: "Más elegido",
@@ -1048,8 +1048,8 @@ const PLANS: PlanDef[] = [
       { t: "Profesionales y colaboradores ilimitados" },
       { t: "Estadísticas avanzadas con análisis de retención e ingresos" },
       { t: "Exportación de clientes y reservas a Excel / CSV" },
-      { t: "Lista de espera inteligente con prioridad" },
-      { t: "Soporte preferencial y onboarding guiado" },
+      { t: "Lista de espera inteligente con prioridad (recurrentes primero)" },
+      { t: "Soporte preferencial" },
     ],
   },
 ];
