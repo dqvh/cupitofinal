@@ -39,10 +39,11 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const [pickPlan, setPickPlan] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [resending, setResending] = useState(false);
+  const [showResend, setShowResend] = useState(false);
   const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   const [chosen, setChosen] = useState<Plan>(presetPlan ?? "crece");
 
-  const switchMode = (m: Mode) => { setMode(m); setError(null); setNotice(null); setPickPlan(false); setNeedsSetup(false); };  const fail = (msg: string) => { setError(msg); setNotice(null); setShakeKey((k) => k + 1); setLoading(false); };
+  const switchMode = (m: Mode) => { setMode(m); setError(null); setNotice(null); setPickPlan(false); setNeedsSetup(false); setShowResend(false); };  const fail = (msg: string) => { setError(msg); setNotice(null); setShakeKey((k) => k + 1); setLoading(false); };
   const info = (msg: string) => { setNotice(msg); setError(null); setShakeKey((k) => k + 1); setLoading(false); };
 
   const goApp = (plan: Plan) => {
@@ -104,6 +105,7 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
     e.preventDefault();
     setError(null);
     setNotice(null);
+    setShowResend(false);
     if (mode === "registro") {
       if (name.trim().length < 2) return fail("Contanos tu nombre.");
       if (business.trim().length < 2) return fail("¿Cómo se llama tu negocio?");
@@ -138,8 +140,14 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
             setMode("login");
             return info("Tu email ya está confirmado ✓ Contanos tu nombre y tu negocio para terminar.");
           }
-          // Avisos informativos (confirmar email, cuenta migrada) van en verde, no en rojo
-          if (/confirmaci|revisá tu email|entrá de nuevo|migrada/i.test(err)) return info(err);
+          // Email sin confirmar: avisar + ofrecer reenvío (solo si aún no confirmó;
+          // el "ya está confirmado" de NEEDS_SETUP no entra acá a propósito)
+          if (/todavía no está confirmado|para activar tu cuenta/i.test(err)) {
+            setShowResend(true);
+            return info(err);
+          }
+          // Otros avisos informativos van en verde, no en rojo
+          if (/revisá tu email|entrá de nuevo|migrada/i.test(err)) return info(err);
           return fail(err);
         }
       } catch {
@@ -210,7 +218,7 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
                 <p className="mt-1 text-sm text-inkmute">Tu login ya funciona. Completá estos datos y entras a tu panel.</p>
                 {error && <div key={shakeKey} className="shake mt-5 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">{error}</div>}
                 {notice && <div key={shakeKey} className="mt-5 rounded-xl border-2 border-fern/40 bg-fern/10 px-4 py-3 text-sm font-semibold text-fern">{notice}</div>}
-                {notice && /confirmaci|confirmado/i.test(notice) && (
+                {showResend && (
                   <button type="button" onClick={resendEmail} disabled={resending}
                     className="mt-3 w-full rounded-full border-2 border-ink/15 py-3 font-display text-sm font-bold text-ink transition-all hover:border-evergreen hover:text-evergreen disabled:opacity-60">
                     {resending ? "Reenviando…" : "📩 No me llegó: reenviar email"}
