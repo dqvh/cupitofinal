@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { User, BizData, Booking } from "./store";
+import type { User, BizData, Booking, WaitlistEntry } from "./store";
 
 const supabaseUrl =
   (import.meta.env.VITE_SUPABASE_URL as string) ||
@@ -146,6 +146,26 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
 }
 
 /**
+ * Obtiene la información completa (BizData) de un negocio desde Supabase.
+ */
+export async function fetchRemoteBizData(userId: string): Promise<BizData | null> {
+  if (!supabase) return null;
+  try {
+    const { data: row, error } = await supabase
+      .from("cupito_data")
+      .select("data")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error || !row?.data) return null;
+    return row.data as BizData;
+  } catch (err) {
+    console.warn("[Cupito Supabase] Error obteniendo BizData remoto:", err);
+    return null;
+  }
+}
+
+/**
  * Guarda una reserva creada por un cliente desde su celular en Supabase.
  */
 export async function saveRemoteBooking(userId: string, booking: Booking): Promise<boolean> {
@@ -157,19 +177,83 @@ export async function saveRemoteBooking(userId: string, booking: Booking): Promi
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (!row?.data) return false;
-    const currentData = row.data as BizData;
-    const updatedBookings = [booking, ...(currentData.bookings || [])];
+    let currentData = (row?.data as BizData) || null;
+    if (!currentData) {
+      currentData = {
+        services: [],
+        bookings: [booking],
+        products: [],
+        reviews: [],
+        coupons: [],
+        professionals: [],
+        waitlist: [],
+        settings: {
+          depositEnabled: false,
+          depositPct: 20,
+          hours: [],
+          description: "",
+          address: "",
+          whatsapp: "",
+          instagram: "",
+          mapsUrl: "",
+          transferAlias: "",
+          transferCBU: "",
+          transferHolder: "",
+          setupDismissed: false,
+        },
+      };
+    } else {
+      const existing = currentData.bookings || [];
+      const filtered = existing.filter((b) => b.id !== booking.id);
+      currentData = {
+        ...currentData,
+        bookings: [booking, ...filtered],
+      };
+    }
 
     const { error } = await supabase.from("cupito_data").upsert({
       user_id: userId,
-      data: { ...currentData, bookings: updatedBookings },
+      data: currentData,
+      updated_at: Date.now(),
+    });
+
+    if (error) {
+      console.warn("[Cupito Supabase] Error upserting remote booking:", error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn("[Cupito Supabase] Error guardando reserva remota:", err);
+    return false;
+  }
+}
+
+/**
+ * Guarda una entrada en la lista de espera en Supabase.
+ */
+export async function saveRemoteWaitlist(userId: string, entry: WaitlistEntry): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data: row } = await supabase
+      .from("cupito_data")
+      .select("data")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!row?.data) return false;
+    const currentData = row.data as BizData;
+    const existing = currentData.waitlist || [];
+    const updatedWaitlist = [entry, ...existing.filter((w) => w.id !== entry.id)];
+
+    const { error } = await supabase.from("cupito_data").upsert({
+      user_id: userId,
+      data: { ...currentData, waitlist: updatedWaitlist },
       updated_at: Date.now(),
     });
 
     return !error;
   } catch (err) {
-    console.warn("[Cupito Supabase] Error guardando reserva remota:", err);
+    console.warn("[Cupito Supabase] Error guardando waitlist remota:", err);
     return false;
   }
 }

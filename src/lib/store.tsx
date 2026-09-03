@@ -13,6 +13,9 @@ import {
   fetchRemoteUserBySlug,
   fetchAllRemoteUsers,
   syncUserToRemote,
+  fetchRemoteBizData,
+  saveRemoteBooking,
+  saveRemoteWaitlist,
 } from "./supabase";
 
 /* ================= tipos ================= */
@@ -634,11 +637,12 @@ interface StoreApi {
   addProfessional(name: string, role: string): string | null;
   updateProfessional(id: string, patch: Partial<Omit<Professional, "id">>): void;
   removeProfessional(id: string): void;
-  addWaitlist(e: { date: string; serviceId: string; client: string; phone: string }): string | null;
+  addWaitlist(e: { date: string; serviceId: string; client: string; phone: string }, ownerId?: string): string | null;
   removeWaitlist(id: string): void;
   requestReview(bookingId: string): void;
   addBooking(b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   addBookingFor(ownerId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): { ok: true; id: string } | { ok: false; error: string };
+  rescheduleBooking(id: string, newDate: string, newTime: string, newProId?: string): { ok: boolean; error?: string };
   setStatus(id: string, status: BookingStatus): void;
   removeBooking(id: string): void;
   markDepositPaid(id: string, method: PaymentMethod): void;
@@ -647,6 +651,7 @@ interface StoreApi {
   /* sincronización nube */
   isCloudSyncActive: boolean;
   fetchPageRemote(slug: string): Promise<boolean>;
+  syncUserDataFromCloud(userId: string): Promise<boolean>;
 }
 
 const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
@@ -661,6 +666,30 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (remote.data) {
       safeSet(dataKey(remote.user.id), JSON.stringify(remote.data));
     }
+    emit();
+    return true;
+  },
+  async syncUserDataFromCloud(userId: string) {
+    if (!isSupabaseConfigured) return false;
+    const remoteData = await fetchRemoteBizData(userId);
+    if (!remoteData) return false;
+
+    const localData = loadData(userId);
+    const bookingMap = new Map<string, Booking>();
+    (localData.bookings || []).forEach((b) => bookingMap.set(b.id, b));
+    (remoteData.bookings || []).forEach((b) => bookingMap.set(b.id, b));
+
+    const waitlistMap = new Map<string, WaitlistEntry>();
+    (localData.waitlist || []).forEach((w) => waitlistMap.set(w.id, w));
+    (remoteData.waitlist || []).forEach((w) => waitlistMap.set(w.id, w));
+
+    const merged: BizData = {
+      ...remoteData,
+      bookings: Array.from(bookingMap.values()),
+      waitlist: Array.from(waitlistMap.values()),
+    };
+
+    safeSet(dataKey(userId), JSON.stringify(merged));
     emit();
     return true;
   },
@@ -1002,15 +1031,19 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveData(sessionUserId, data);
     emit();
   },
-  addWaitlist({ date, serviceId, client, phone }) {
-    if (!sessionUserId) return "Necesitás una cuenta.";
-    const data = loadData(sessionUserId);
-    if (client.trim().length < 2) return "Poné un nombre.";
+  addWaitlist({ date, serviceId, client, phone }, ownerId) {
+    const targetId = ownerId || sessionUserId;
+    if (!targetId) return "No se encontró el negocio.";
+    const data = loadData(targetId);
+    if (client.trim().length < 2) return "Poné tu nombre completo.";
     if (phone.replace(/\D/g, "").length < 8) return "Necesitamos un teléfono válido para avisarte.";
-    if (data.waitlist.some((w) => w.date === date && w.phone.replace(/\D/g, "") === phone.replace(/\D/g, "")))
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (data.waitlist.some((w) => w.date === date && w.phone.replace(/\D/g, "") === cleanPhone))
       return "Ya estás en la lista de espera para ese día 😉";
-    data.waitlist = [...data.waitlist, { id: uid(), date, serviceId, client: client.trim(), phone: phone.trim(), createdAt: Date.now() }];
-    saveData(sessionUserId, data);
+    const entry: WaitlistEntry = { id: uid(), date, serviceId, client: client.trim(), phone: phone.trim(), createdAt: Date.now() };
+    data.waitlist = [...data.waitlist, entry];
+    saveData(targetId, data);
+    saveRemoteWaitlist(targetId, entry).catch(() => {});
     emit();
     return null;
   },
@@ -1034,8 +1067,10 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada");
     if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` };
     const id = uid();
-    data.bookings = [...data.bookings, { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId }];
+    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId };
+    data.bookings = [...data.bookings, newBooking];
     saveData(sessionUserId, data);
+    saveRemoteBooking(sessionUserId, newBooking).catch(() => {});
     emit();
     return { ok: true, id };
   },
@@ -1049,10 +1084,34 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       pro = data.professionals[dayCount % data.professionals.length].id;
     }
     const id = uid();
-    data.bookings = [...data.bookings, { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim }];
+    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim };
+    data.bookings = [...data.bookings, newBooking];
     saveData(ownerId, data);
+    saveRemoteBooking(ownerId, newBooking).catch(() => {});
     emit();
     return { ok: true, id };
+  },
+  rescheduleBooking(id, newDate, newTime, newProId) {
+    if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta." };
+    const data = loadData(sessionUserId);
+    const target = data.bookings.find((b) => b.id === id);
+    if (!target) return { ok: false, error: "No se encontró el turno." };
+    const clash = data.bookings.find((b) => b.id !== id && b.date === newDate && b.time === newTime && b.status !== "cancelada");
+    if (clash) return { ok: false, error: `El horario ${newTime} del ${newDate} ya está ocupado por ${clash.client}.` };
+
+    data.bookings = data.bookings.map((b) => {
+      if (b.id !== id) return b;
+      return {
+        ...b,
+        date: newDate,
+        time: newTime,
+        proId: newProId !== undefined ? newProId : b.proId,
+        status: b.status === "cancelada" ? "confirmada" : b.status,
+      };
+    });
+    saveData(sessionUserId, data);
+    emit();
+    return { ok: true };
   },
   setStatus(id, status) {
     if (!sessionUserId) return;
@@ -1138,6 +1197,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     safeSet(USERS_KEY, JSON.stringify(users));
     if (sessionUserId) safeSet(SESSION_KEY, sessionUserId);
   }, [memo]);
+
+  // Sincronización continua de datos frescos desde Supabase para el negocio logueado
+  useEffect(() => {
+    if (!sessionUserId || !isSupabaseConfigured) return;
+    api.syncUserDataFromCloud(sessionUserId);
+    const interval = setInterval(() => {
+      api.syncUserDataFromCloud(sessionUserId);
+    }, 6000);
+    const onFocus = () => api.syncUserDataFromCloud(sessionUserId);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [sessionUserId]);
 
   return (
     <Ctx.Provider value={memo}>

@@ -110,11 +110,12 @@ const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Vierne
 
 export default function Dashboard() {
   const store = useStore();
-  const { user, data, toast, setStatus, removeBooking, saveProfile, stopImpersonating, impersonating, requestReview } = store;
+  const { user, data, toast, setStatus, removeBooking, saveProfile, stopImpersonating, impersonating, requestReview, rescheduleBooking } = store;
   const [view, setView] = useState<View>("hoy");
   const [selDate, setSelDate] = useState(dateKey(new Date()));
   const [weekStart, setWeekStart] = useState(0);
   const [showNew, setShowNew] = useState(false);
+  const [rescheduling, setRescheduling] = useState<Booking | null>(null);
   const [prefill, setPrefill] = useState<{ client: string; phone: string; serviceId?: string } | null>(null);
   const [serviceModal, setServiceModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [filter, setFilter] = useState<"todas" | BookingStatus>("todas");
@@ -403,6 +404,7 @@ export default function Dashboard() {
                         onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
                         onVerify={(id) => { store.markDepositPaid(id, "transferencia"); toast("Seña acreditada ✓"); }}
                         onReject={(id) => { store.rejectDeposit(id); toast("Comprobante rechazado. El cliente puede reenviarlo.", "warn"); }}
+                        onReschedule={(b) => setRescheduling(b)}
                       />
                     ))}
                   </div>
@@ -477,6 +479,7 @@ export default function Dashboard() {
                               onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
                               onVerify={(id) => { store.markDepositPaid(id, "transferencia"); toast("Seña acreditada ✓"); }}
                               onReject={(id) => { store.rejectDeposit(id); toast("Comprobante rechazado.", "warn"); }}
+                              onReschedule={(b) => setRescheduling(b)}
                             />
                           ))}
                         </div>
@@ -628,6 +631,24 @@ export default function Dashboard() {
       {serviceModal.open && <ServiceModal service={serviceModal.id ? data.services.find((s) => s.id === serviceModal.id) : undefined} onClose={() => setServiceModal({ open: false })} />}
       {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => setCheckoutPlan(null)} />}
       {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} onGoToPlan={(p) => { setShowOnboarding(false); setCheckoutPlan(p); }} />}
+      {rescheduling && (
+        <RescheduleModal
+          b={rescheduling}
+          service={serviceOf(rescheduling.serviceId)}
+          professionals={data.professionals}
+          businessName={user.business}
+          onClose={() => setRescheduling(null)}
+          onSave={(newDate, newTime, newProId) => {
+            const res = rescheduleBooking(rescheduling.id, newDate, newTime, newProId);
+            if (!res.ok) {
+              toast(res.error || "No se pudo reprogramar el turno.", "warn");
+            } else {
+              toast(`Turno de ${rescheduling.client} reprogramado para el ${fmtLong(newDate)} a las ${newTime} hs 🎉`);
+              setRescheduling(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1018,7 +1039,7 @@ function StatusPill({ on, label, sub }: { on: boolean; label: string; sub: strin
   );
 }
 
-function BookingRow({ b, service, pro, products, businessName, onStatus, onDelete, onVerify, onReject }: {
+function BookingRow({ b, service, pro, products, businessName, onStatus, onDelete, onVerify, onReject, onReschedule }: {
   b: Booking;
   service?: Service;
   pro?: { id: string; name: string; color: string };
@@ -1028,6 +1049,7 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
   onDelete: (id: string) => void;
   onVerify: (id: string) => void;
   onReject: (id: string) => void;
+  onReschedule: (b: Booking) => void;
 }) {
   const st = STATUS[b.status];
   const claimPending = !!b.depositClaim && !b.paidDeposit && b.status !== "cancelada";
@@ -1058,6 +1080,15 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
         <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${st.cls}`}>{st.label}</span>
       </span>
       <span className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onReschedule(b)}
+          title="Reprogramar fecha u horario"
+          className="btn-press flex h-8 items-center gap-1 rounded-full border border-ink/20 bg-paper px-2.5 text-xs font-bold text-ink transition-colors hover:border-evergreen hover:text-evergreen"
+        >
+          <IconCalendar className="h-3.5 w-3.5 text-fern" />
+          <span className="hidden sm:inline">Reprogramar</span>
+        </button>
         {b.phone && (
           <a
             href={`https://wa.me/54${b.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName || "nuestro negocio"} para recordarte tu turno de ${service?.name || "atención"} el ${fmtLong(b.date)} a las ${b.time} hs. ¡Te esperamos!`)}`}
@@ -1174,6 +1205,122 @@ function BookingModal({ initialDate, initialClient, initialPhone, initialService
         </div>
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
         <button type="submit" className="w-full rounded-full bg-coral py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)]">Crear reserva</button>
+      </form>
+    </Modal>
+  );
+}
+
+function RescheduleModal({
+  b,
+  service,
+  professionals,
+  businessName,
+  onClose,
+  onSave,
+}: {
+  b: Booking;
+  service?: Service;
+  professionals: Professional[];
+  businessName: string;
+  onClose: () => void;
+  onSave: (newDate: string, newTime: string, newProId?: string) => void;
+}) {
+  const [date, setDate] = useState(b.date);
+  const [time, setTime] = useState(b.time);
+  const [proId, setProId] = useState(b.proId || "");
+  const [notifyWhatsapp, setNotifyWhatsapp] = useState(true);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!date || !time) return;
+    onSave(date, time, proId || undefined);
+
+    if (notifyWhatsapp && b.phone) {
+      const msg = `Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName}. Te confirmamos que tu turno de ${service?.name || "atención"} fue reprogramado para el ${fmtLong(date)} a las ${time} hs. ¡Te esperamos!`;
+      const waUrl = `https://wa.me/54${b.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`;
+      window.open(waUrl, "_blank");
+    }
+  };
+
+  return (
+    <Modal title="Reprogramar Turno" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4 text-ink">
+        <div className="rounded-2xl border-2 border-ink/10 bg-paper p-3.5 text-xs">
+          <p className="font-display font-extrabold text-sm text-ink">{b.client}</p>
+          <p className="mt-0.5 text-inkmute">
+            {service?.name || "Servicio"} · Horario actual: <strong className="text-ink font-bold">{fmtLong(b.date)} {b.time} hs</strong>
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Nueva fecha</label>
+            <input
+              type="date"
+              className="field !py-2.5"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Nuevo horario</label>
+            <input
+              type="time"
+              className="field !py-2.5 font-display font-bold text-sm"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+
+        {professionals.length > 0 && (
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Profesional a cargo</label>
+            <select
+              className="field !py-2.5"
+              value={proId}
+              onChange={(e) => setProId(e.target.value)}
+            >
+              <option value="">Cualquiera / Rotativo</option>
+              {professionals.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.role})</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {b.phone && (
+          <label className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-50/60 p-3 text-xs font-semibold text-emerald-900 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={notifyWhatsapp}
+              onChange={(e) => setNotifyWhatsapp(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="flex items-center gap-1.5">
+              <IconWhatsApp className="h-4 w-4 text-emerald-600" />
+              Abrir WhatsApp para notificar al cliente el cambio de horario
+            </span>
+          </label>
+        )}
+
+        <div className="flex items-center justify-end gap-2 border-t border-ink/10 pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-press rounded-full border-2 border-ink/15 px-4 py-2 font-display text-xs font-bold text-inkmute hover:text-ink"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="btn-press rounded-full bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime hover:bg-pine shadow-sm"
+          >
+            Guardar reprogramación →
+          </button>
+        </div>
       </form>
     </Modal>
   );

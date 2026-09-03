@@ -119,6 +119,20 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const [wlDone, setWlDone] = useState(false);
   const [wlError, setWlError] = useState<string | null>(null);
   const [showWlForm, setShowWlForm] = useState(false);
+  const [showAllSlots, setShowAllSlots] = useState(false);
+
+  useEffect(() => {
+    if (done) {
+      // Auto-scroll centrado suave para ver la confirmación sin tener que scrollear
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        const el = document.getElementById("booking-confirmed-ticket");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 50);
+    }
+  }, [done]);
 
   if (!user || !biz) return null;
 
@@ -158,7 +172,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
 
   const joinWaitlist = () => {
     if (!selectedDate || !serviceId) return;
-    const err = addWaitlist({ date: selectedDate, serviceId, client: wlClient, phone: wlPhone });
+    const err = addWaitlist({ date: selectedDate, serviceId, client: wlClient, phone: wlPhone }, user.id);
     if (err) return setWlError(err);
     setWlError(null);
     setWlDone(true);
@@ -343,8 +357,42 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
               <p className="rounded-xl border-2 border-dashed border-coral/40 bg-coral/5 p-4 text-sm text-inkmute">
                 Ese día <strong className="text-ink">{user.business}</strong> no atiende. Elegí otro día en el calendario.
               </p>
+            ) : time && !showAllSlots ? (
+              <div className="flex items-center justify-between rounded-2xl border-2 border-fern/30 bg-fern/10 p-3.5 text-ink shadow-sm">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-14 flex-col items-center justify-center rounded-xl bg-evergreen text-lime font-display font-extrabold text-sm leading-none shadow-sm">
+                    {time}
+                    <span className="mt-0.5 text-[9px] uppercase tracking-wider text-lime/70 font-semibold">{service?.duration ?? 30}m</span>
+                  </span>
+                  <div>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider text-fern">
+                      <IconCheck className="h-3.5 w-3.5" /> Horario elegido
+                    </span>
+                    <p className="font-display text-sm font-bold text-ink">{fmtLong(selectedDate)} a las {time} hs</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAllSlots(true)}
+                  className="btn-press rounded-full border border-ink/20 bg-white px-3 py-1.5 font-display text-xs font-bold text-ink hover:border-ink hover:bg-ink/5 shadow-sm"
+                >
+                  Cambiar horario
+                </button>
+              </div>
             ) : (
               <>
+                {time && showAllSlots && (
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-bold text-inkmute">Elegí otro horario:</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAllSlots(false)}
+                      className="text-xs font-bold text-fern hover:underline"
+                    >
+                      Mantener {time} hs ✕
+                    </button>
+                  </div>
+                )}
                 {hasBreak && breakInfo ? (
                   <div className="space-y-3">
                     <div>
@@ -426,7 +474,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
             )}
 
             {time && (
-              <div className="pop-in mt-4 space-y-3.5">
+              <div id="booking-client-form" className="pop-in mt-4 space-y-3.5">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Tu nombre *</label>
                   <input className="field" placeholder="Ana Torres" value={client} onChange={(e) => setClient(e.target.value)} />
@@ -518,7 +566,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
 
         {/* éxito */}
         {done && selectedDate && time && service && (
-          <div className="pop-in relative py-2 text-center">
+          <div id="booking-confirmed-ticket" className="pop-in relative py-2 text-center">
             <ConfettiBurst />
             <svg viewBox="0 0 56 56" className="mx-auto h-14 w-14">
               <circle cx="28" cy="28" r="25" fill="none" stroke="currentColor" strokeWidth="4" className={`circle-draw ${theme.accentText}`} strokeLinecap="round" transform="rotate(-90 28 28)" />
