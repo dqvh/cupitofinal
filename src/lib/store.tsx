@@ -13,6 +13,7 @@ import {
   fetchRemoteUserBySlug,
   fetchAllRemoteUsers,
   syncUserToRemote,
+  deleteUserFromRemote,
   fetchRemoteBizData,
   saveRemoteBooking,
   saveRemoteWaitlist,
@@ -299,7 +300,24 @@ const SESSION_KEY = "cupito_session";
 const ADMIN_HASH_KEY = "cupito_admin_hash";
 const ADMIN_SESSION_KEY = "cupito_admin_session";
 const IMPERSONATION_KEY = "cupito_impersonation";
+const DELETED_USERS_KEY = "cupito_deleted_users";
+const DEMO_DELETED_KEY = "cupito_demo_deleted";
 const dataKey = (uid: string) => `cupito_data_${uid}`;
+
+function getDeletedUserIds(): Set<string> {
+  try {
+    const raw = safeGet(DELETED_USERS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function markUserDeleted(id: string) {
+  const s = getDeletedUserIds();
+  s.add(id);
+  safeSet(DELETED_USERS_KEY, JSON.stringify(Array.from(s)));
+}
 
 const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -552,9 +570,12 @@ function normalizeData(p: Partial<BizData>): BizData {
 
 let users: User[] = (() => {
   try {
+    const deleted = getDeletedUserIds();
     const raw = safeGet(USERS_KEY);
     const parsed = raw ? (JSON.parse(raw) as User[]) : [];
-    return parsed.map((u) => ({ ...u, plan: u.plan ?? "semilla" }));
+    return parsed
+      .filter((u) => !deleted.has(u.id))
+      .map((u) => ({ ...u, plan: u.plan ?? "semilla" }));
   } catch { return []; }
 })();
 let sessionUserId: string | null = safeGet(SESSION_KEY);
@@ -601,9 +622,14 @@ function saveData(userId: string, data: BizData) {
 if (typeof window !== "undefined" && isSupabaseConfigured) {
   fetchAllRemoteUsers().then((remoteUsers) => {
     if (remoteUsers && remoteUsers.length > 0) {
+      const deleted = getDeletedUserIds();
       const map = new Map<string, User>();
-      users.forEach((u) => map.set(u.id, u));
-      remoteUsers.forEach((u) => map.set(u.id, u));
+      users.forEach((u) => {
+        if (!deleted.has(u.id)) map.set(u.id, u);
+      });
+      remoteUsers.forEach((u) => {
+        if (!deleted.has(u.id)) map.set(u.id, u);
+      });
       const combined = Array.from(map.values());
       users = combined;
       safeSet(USERS_KEY, JSON.stringify(combined));
@@ -767,9 +793,19 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   deleteAccount() {
     if (!sessionUserId) return;
     const id = sessionUserId;
-    saveUsers(users.filter((u) => u.id !== id));
+    markUserDeleted(id);
+    const targetUser = users.find((u) => u.id === id);
+    if (targetUser?.email === "demo@cupito.app") {
+      safeSet(DEMO_DELETED_KEY, "1");
+    }
+    const filtered = users.filter((u) => u.id !== id);
+    users = filtered;
+    safeSet(USERS_KEY, JSON.stringify(filtered));
     saveSession(null);
     safeRemove(dataKey(id));
+    if (isSupabaseConfigured) {
+      deleteUserFromRemote(id).catch(() => {});
+    }
     emit();
   },
   saveProfile(business, name) {
@@ -872,9 +908,19 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     return { ok: true, user: newUser };
   },
   adminDeleteUser(userId) {
-    saveUsers(users.filter((u) => u.id !== userId));
+    markUserDeleted(userId);
+    const targetUser = users.find((u) => u.id === userId);
+    if (targetUser?.email === "demo@cupito.app") {
+      safeSet(DEMO_DELETED_KEY, "1");
+    }
+    const filtered = users.filter((u) => u.id !== userId);
+    users = filtered;
+    safeSet(USERS_KEY, JSON.stringify(filtered));
     if (sessionUserId === userId) { saveSession(null); ssRemove(IMPERSONATION_KEY); }
     safeRemove(dataKey(userId));
+    if (isSupabaseConfigured) {
+      deleteUserFromRemote(userId).catch(() => {});
+    }
     emit();
   },
 
@@ -1343,7 +1389,10 @@ export function usePublicPage(slug: string): ({ user: User } & Record<"data", Bi
 
 /* ============ demo ============ */
 export function ensureDemo(): void {
+  if (safeGet(DEMO_DELETED_KEY) === "1") return;
+  const deleted = getDeletedUserIds();
   const existing = users.find((u) => u.email === "demo@cupito.app");
+  if (existing && deleted.has(existing.id)) return;
   if (!existing) {
     const demo: User = {
       id: uid(),

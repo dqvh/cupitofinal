@@ -146,6 +146,31 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
 }
 
 /**
+ * Elimina un usuario y su información asociada de Supabase.
+ */
+export async function deleteUserFromRemote(userId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { error: dErr } = await supabase
+      .from("cupito_data")
+      .delete()
+      .eq("user_id", userId);
+    if (dErr) console.warn("[Cupito Supabase] Error eliminando cupito_data remoto:", dErr);
+
+    const { error: uErr } = await supabase
+      .from("cupito_users")
+      .delete()
+      .eq("id", userId);
+    if (uErr) console.warn("[Cupito Supabase] Error eliminando cupito_users remoto:", uErr);
+
+    return !uErr;
+  } catch (err) {
+    console.warn("[Cupito Supabase] Error en deleteUserFromRemote:", err);
+    return false;
+  }
+}
+
+/**
  * Obtiene la información completa (BizData) de un negocio desde Supabase.
  */
 export async function fetchRemoteBizData(userId: string): Promise<BizData | null> {
