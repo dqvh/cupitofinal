@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
-  THEMES, type User, type BizData, type BizSettings, type Coupon, type ColorTheme,
+  THEMES, SEMILLA_MONTHLY_LIMIT, monthBookingCount,
+  type User, type BizData, type BizSettings, type Coupon, type ColorTheme,
 } from "../lib/store";
 import {
   IconCheck, IconCalendar, IconChevron, IconBag, IconTicket, IconPlus, IconUsers,
@@ -197,6 +198,7 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
   const slots = (selectedDate === todayKey ? rawSlots.filter((t) => t > currentHHMM) : rawSlots)
     .filter((t) => !blockedTimesForDate(selectedDate ?? "").includes(t));
   const allTaken = rawSlots.length > 0 && slots.every((t) => takenTimes(selectedDate ?? "").includes(t));
+  const monthLimitReached = !paid && monthBookingCount(biz) >= SEMILLA_MONTHLY_LIMIT;
   const hasBreak = selectedDate ? !!hoursFor(selectedDate).from2 : false;
   const breakInfo = selectedDate ? { to: hoursFor(selectedDate).to, from2: hoursFor(selectedDate).from2 } : null;
 
@@ -639,7 +641,21 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
               </div>
             )}
 
-            {time && (
+            {time && monthLimitReached && (
+              <div className="pop-in mt-4 rounded-2xl border-2 border-amber-500/40 bg-amber-50 p-5 text-center">
+                <p className="font-display text-base font-extrabold text-ink">Este mes el local completó sus reservas online</p>
+                <p className="mt-1 text-sm text-inkmute">Anotate en la lista de espera y te avisamos si se libera un lugar.</p>
+                <button
+                  type="button"
+                  onClick={() => { setShowWlForm(true); setWlClient(client); setWlPhone(phone); }}
+                  className="mt-3 w-full rounded-xl bg-evergreen py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine"
+                >
+                  Anotarme en la lista de espera
+                </button>
+              </div>
+            )}
+
+            {time && !monthLimitReached && (
               <div id="booking-client-form" className="pop-in mt-4 space-y-3.5">
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Tu nombre *</label>

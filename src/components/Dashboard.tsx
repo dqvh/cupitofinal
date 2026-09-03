@@ -16,6 +16,8 @@ import {
   THEMES,
   sortWaitlist,
   isRecurrentClient,
+  SEMILLA_MONTHLY_LIMIT,
+  monthBookingCount,
   type ThemeId,
   type Booking,
   type BookingStatus,
@@ -1405,7 +1407,7 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
         </button>
         {b.phone && (
           <a
-            href={`https://wa.me/54${b.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName || "nuestro negocio"} para recordarte tu turno de ${service?.name || "atención"} el ${fmtLong(b.date)} a las ${b.time} hs. ¡Te esperamos!`)}`}
+            href={createWhatsAppUrl(b.phone, `Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName || "nuestro negocio"} para recordarte tu turno de ${service?.name || "atención"} el ${fmtLong(b.date)} a las ${b.time} hs. ¡Te esperamos!`)}
             target="_blank"
             rel="noreferrer"
             title="Enviar recordatorio por WhatsApp"
@@ -2860,9 +2862,11 @@ function CouponModal({ onClose }: { onClose: () => void }) {
 
 /* ============ SUSCRIPCIÓN ============ */
 function SubscriptionView({ current, user, onSelect }: { current: Plan; user: NonNullable<ReturnType<typeof useStore>["user"]>; onSelect: (p: Plan) => void }) {
-  const { cancelSubscription, resumeSubscription, toast } = useStore();
+  const { cancelSubscription, resumeSubscription, toast, data } = useStore();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const sub = user.subscription;
+  const monthUsed = data ? monthBookingCount(data) : 0;
+  const monthPct = Math.min(100, Math.round((monthUsed / SEMILLA_MONTHLY_LIMIT) * 100));
 
   const plans: Plan[] = ["semilla", "crece", "escala"];
   const desc: Record<Plan, string[]> = {
@@ -2875,6 +2879,27 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
 
   return (
     <div className="pop-in mt-8 space-y-6">
+      {/* Uso del plan gratuito */}
+      {current === "semilla" && (
+        <div className="card border-2 border-ink/12 bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-display text-base font-extrabold text-ink">Reservas de este mes: {monthUsed}/{SEMILLA_MONTHLY_LIMIT}</p>
+              <p className="mt-0.5 text-xs text-inkmute">{monthUsed >= SEMILLA_MONTHLY_LIMIT ? "Llegaste al tope: las nuevas reservas se pausan hasta el mes que viene o subiendo a Crece." : "Al llegar al tope, las reservas online se pausan hasta el mes siguiente."}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onSelect("crece")}
+              className="rounded-full bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine"
+            >
+              Reservas ilimitadas con Crece
+            </button>
+          </div>
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-ink/8">
+            <div className={`h-full rounded-full transition-all ${monthPct >= 100 ? "bg-coral" : "bg-fern"}`} style={{ width: `${monthPct}%` }} />
+          </div>
+        </div>
+      )}
       {/* Detalle de la suscripción actual si es de pago */}
       {current !== "semilla" && (
         <div className="card border-2 border-evergreen/30 bg-card p-6 shadow-sm">

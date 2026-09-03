@@ -275,7 +275,20 @@ export const PLAN_META: Record<Plan, { name: string; price: string }> = {
   crece: { name: "Crece", price: "$9.900/mes" },
   escala: { name: "Escala", price: "$23.000/mes" },
 };
+/* Límite del plan gratuito: reservas activas por mes calendario */
+export const SEMILLA_MONTHLY_LIMIT = 25;
+export function monthBookingCount(data: Pick<BizData, "bookings">, ref = new Date()): number {
+  const prefix = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}`;
+  return (data.bookings || []).filter((b) => b.date.startsWith(prefix) && b.status !== "cancelada").length;
+}
+export function semillaLimitReached(owner: Pick<User, "plan"> | undefined, data: Pick<BizData, "bookings">): boolean {
+  if (!owner || owner.plan !== "semilla") return false;
+  return monthBookingCount(data) >= SEMILLA_MONTHLY_LIMIT;
+}
 export const isPaid = (u: User) => u.plan !== "semilla";
+/* La cuenta demo vive solo en cada dispositivo: jamás se sube ni se trae de la nube */
+export const DEMO_EMAIL = "demo@cupito.app";
+export const isDemoUser = (u: Pick<User, "email"> | undefined | null) => !!u && u.email === DEMO_EMAIL;
 export const PRO_LIMIT: Record<Plan, number> = { semilla: 1, crece: 3, escala: 99 };
 export const PRO_COLORS = ["#cdf463", "#ff7a59", "#93e6c3", "#b7e33f", "#f4b863"];
 
@@ -644,6 +657,7 @@ function saveUsers(list: User[]) {
   safeSet(USERS_KEY, JSON.stringify(list));
   if (isSupabaseConfigured) {
     list.forEach((u) => {
+      if (isDemoUser(u)) return; // la demo no sale de este dispositivo
       syncUserToRemote(u).catch(() => {});
     });
   }
@@ -668,7 +682,7 @@ function saveData(userId: string, data: BizData) {
   safeSet(dataKey(userId), JSON.stringify(data));
   if (isSupabaseConfigured) {
     const u = users.find((x) => x.id === userId);
-    if (u) {
+    if (u && !isDemoUser(u)) {
       // Encadenar los upserts por usuario para que dos guardados rápidos
       // (ej: crear turno + borrar de lista de espera) no se pisen entre sí.
       // Sin esto, el upsert viejo podía terminar último y "resucitar" la entrada borrada.
@@ -692,7 +706,7 @@ if (typeof window !== "undefined" && isSupabaseConfigured) {
     const prevSession = sessionUserId;
     const remoteByEmail = new Map<string, User>();
     (remoteUsers || []).forEach((u) => {
-      if (!deleted.has(u.id)) remoteByEmail.set(u.email, u);
+      if (!deleted.has(u.id) && !isDemoUser(u)) remoteByEmail.set(u.email, u);
     });
     const map = new Map<string, User>();
     prevUsers.forEach((u) => {
@@ -706,7 +720,7 @@ if (typeof window !== "undefined" && isSupabaseConfigured) {
       if (u && r && r.id !== id) map.delete(id);
     });
     (remoteUsers || []).forEach((u) => {
-      if (!deleted.has(u.id)) map.set(u.id, u);
+      if (!deleted.has(u.id) && !isDemoUser(u)) map.set(u.id, u);
     });
     const combined = Array.from(map.values());
     const remoteIds = new Set((remoteUsers || []).map((u) => u.id));
@@ -722,7 +736,7 @@ if (typeof window !== "undefined" && isSupabaseConfigured) {
     // Subir a la nube las cuentas creadas en este dispositivo cuando no había
     // conexión (si no, la compu nunca aparece en el celu y viceversa).
     combined.forEach((u) => {
-      if (!remoteIds.has(u.id) && !deleted.has(u.id)) {
+      if (!remoteIds.has(u.id) && !deleted.has(u.id) && !isDemoUser(u)) {
         try {
           syncUserToRemote(u, loadData(u.id)).catch(() => {});
         } catch { /* noop */ }
@@ -806,7 +820,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   async fetchPageRemote(slug: string) {
     if (!isSupabaseConfigured) return false;
     const remote = await fetchRemoteUserBySlug(slug);
-    if (!remote) return false;
+    if (!remote || isDemoUser(remote.user)) return false;
     // Si hay un duplicado local con el mismo email, lo reemplaza la nube.
     const currentUsers = users.filter((u) => u.id !== remote.user.id && u.email !== remote.user.email);
     users = [...currentUsers, remote.user];
@@ -828,6 +842,8 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   async syncUserDataFromCloud(userId: string) {
     if (!isSupabaseConfigured) return false;
+    const me = users.find((u) => u.id === userId);
+    if (me && isDemoUser(me)) return false; // la demo es 100% local
     const remoteData = await fetchRemoteBizData(userId);
     if (!remoteData) {
       // La nube no tiene fila para este negocio (cuenta creada sin conexión):
@@ -1363,6 +1379,9 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta para crear reservas." } as const;
     addTombstone(TOMBSTONE_WAITLIST_KEY, waitlistId);
     const data = loadData(sessionUserId);
+    const owner = users.find((u) => u.id === sessionUserId);
+    if (semillaLimitReached(owner, data))
+      return { ok: false, error: `Llegaste a las ${SEMILLA_MONTHLY_LIMIT} reservas del mes del plan Semilla. Subí a Crece para reservas ilimitadas.` } as const;
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." } as const;
     const isBlocked = (data.blockedSlots || []).some((bs) => bs.date === date && (!bs.time || bs.time === time) && (!bs.proId || !proId || bs.proId === proId));
@@ -1393,6 +1412,9 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   addBooking({ client, phone, serviceId, date, time, source, items, proId }) {
     if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta para crear reservas." };
     const data = loadData(sessionUserId);
+    const owner = users.find((u) => u.id === sessionUserId);
+    if (semillaLimitReached(owner, data))
+      return { ok: false, error: `Llegaste a las ${SEMILLA_MONTHLY_LIMIT} reservas del mes del plan Semilla. Subí a Crece para reservas ilimitadas.` };
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
     const isBlocked = (data.blockedSlots || []).some((bs) => bs.date === date && (!bs.time || bs.time === time) && (!bs.proId || !proId || bs.proId === proId));
@@ -1409,6 +1431,9 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   addBookingFor(ownerId, { client, phone, email, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
     const data = loadData(ownerId);
+    const owner = users.find((u) => u.id === ownerId);
+    if (semillaLimitReached(owner, data))
+      return { ok: false, error: "Este negocio alcanzó el límite de reservas online de este mes. Anotate en la lista de espera y te avisamos si se libera un lugar." };
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
     let pro = proId;

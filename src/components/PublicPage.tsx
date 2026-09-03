@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { usePublicPage, useStore, fmtLong, fmtMoney, isPaid, THEMES, dateKey, type BizData } from "../lib/store";
 import PublicBooking from "./PublicBooking";
+import { createWhatsAppUrl } from "../lib/phone";
 import { Reveal, LogoMark, IconCheck, IconClock, IconCalendar, IconBag, IconStar, IconWhatsApp, IconChat, IconChevron, IconBell, CopyButton } from "./kit";
 
 /* Página pública de reservas: cupito.app/{slug} — la ve cualquier cliente */
@@ -110,7 +111,7 @@ export default function PublicPage({ slug }: { slug: string }) {
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             {s.whatsapp && (
-              <a href={`https://wa.me/54${s.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+              <a href={createWhatsAppUrl(s.whatsapp, `Hola! Vengo de la página de ${user.business} y quiero hacer una consulta 🙌`)} target="_blank" rel="noreferrer"
                 className={`inline-flex items-center gap-2 rounded-full ${theme.accentBg} ${theme.badgeText} px-5 py-2.5 font-display text-sm font-bold transition-all hover:-translate-y-0.5 shadow-sm`}>
                 <IconWhatsApp className="h-4 w-4" /> Escribinos por WhatsApp
               </a>
