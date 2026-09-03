@@ -11,9 +11,12 @@ import {
 import {
   isSupabaseConfigured,
   fetchRemoteUserBySlug,
+  fetchRemoteUserByEmail,
   fetchAllRemoteUsers,
   syncUserToRemote,
   deleteUserFromRemote,
+  deleteRemoteWaitlist,
+  deleteRemoteBooking,
   fetchRemoteBizData,
   saveRemoteBooking,
   saveRemoteWaitlist,
@@ -302,7 +305,28 @@ const ADMIN_SESSION_KEY = "cupito_admin_session";
 const IMPERSONATION_KEY = "cupito_impersonation";
 const DELETED_USERS_KEY = "cupito_deleted_users";
 const DEMO_DELETED_KEY = "cupito_demo_deleted";
+const TOMBSTONE_WAITLIST_KEY = "cupito_tombstones_waitlist";
+const TOMBSTONE_BOOKING_KEY = "cupito_tombstones_booking";
 const dataKey = (uid: string) => `cupito_data_${uid}`;
+
+function getTombstones(key: string): Set<string> {
+  try {
+    const raw = safeGet(key);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function addTombstone(key: string, id: string) {
+  try {
+    const s = getTombstones(key);
+    s.add(id);
+    // acotar a los últimos 500 para no crecer sin límite
+    const arr = Array.from(s).slice(-500);
+    safeSet(key, JSON.stringify(arr));
+  } catch { /* noop */ }
+}
 
 function getDeletedUserIds(): Set<string> {
   try {
@@ -613,10 +637,20 @@ function saveData(userId: string, data: BizData) {
   if (isSupabaseConfigured) {
     const u = users.find((x) => x.id === userId);
     if (u) {
-      syncUserToRemote(u, data).catch(() => {});
+      // Encadenar los upserts por usuario para que dos guardados rápidos
+      // (ej: crear turno + borrar de lista de espera) no se pisen entre sí.
+      // Sin esto, el upsert viejo podía terminar último y "resucitar" la entrada borrada.
+      const prev = remoteSaveQueue.get(userId) ?? Promise.resolve();
+      const next = prev
+        .then(() => syncUserToRemote(u, data))
+        .catch(() => {});
+      remoteSaveQueue.set(userId, next);
     }
   }
 }
+
+// Cola de guardados remotos por usuario (evita condiciones de carrera)
+const remoteSaveQueue = new Map<string, Promise<unknown>>();
 
 // Sincronización automática inicial desde Supabase para traer negocios creados en otros dispositivos
 if (typeof window !== "undefined" && isSupabaseConfigured) {
@@ -646,6 +680,8 @@ interface StoreApi {
   toast: (text: string, kind?: "ok" | "warn") => void;
   register(input: { name: string; business: string; email: string; password: string }): string | null;
   login(email: string, password: string): string | null;
+  loginAsync(email: string, password: string): Promise<string | null>;
+  registerAsync(input: { name: string; business: string; email: string; password: string }): Promise<string | null>;
   loginDemo(): void;
   logout(): void;
   deleteAccount(): void;
@@ -684,6 +720,7 @@ interface StoreApi {
   removeProfessional(id: string): void;
   addWaitlist(e: { date: string; serviceId: string; client: string; phone: string }, ownerId?: string): string | null;
   removeWaitlist(id: string): void;
+  createBookingFromWaitlist(waitlistId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   requestReview(bookingId: string): void;
   addBooking(b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   addBookingFor(ownerId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): { ok: true; id: string } | { ok: false; error: string };
@@ -725,22 +762,42 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const remoteData = await fetchRemoteBizData(userId);
     if (!remoteData) return false;
 
+    const tombWait = getTombstones(TOMBSTONE_WAITLIST_KEY);
+    const tombBook = getTombstones(TOMBSTONE_BOOKING_KEY);
     const localData = loadData(userId);
+
+    // Merge: lo local gana ante el mismo id (así un cambio de estado hecho
+    // en esta compu no lo pisa el dato viejo de la nube), y los ids borrados
+    // (tombstones) nunca resucitan aunque sigan dando vueltas en la nube.
     const bookingMap = new Map<string, Booking>();
-    (localData.bookings || []).forEach((b) => bookingMap.set(b.id, b));
-    (remoteData.bookings || []).forEach((b) => bookingMap.set(b.id, b));
+    (remoteData.bookings || []).forEach((b) => {
+      if (!tombBook.has(b.id)) bookingMap.set(b.id, b);
+    });
+    (localData.bookings || []).forEach((b) => {
+      if (!tombBook.has(b.id)) bookingMap.set(b.id, b);
+    });
 
     const waitlistMap = new Map<string, WaitlistEntry>();
-    (localData.waitlist || []).forEach((w) => waitlistMap.set(w.id, w));
-    (remoteData.waitlist || []).forEach((w) => waitlistMap.set(w.id, w));
+    (remoteData.waitlist || []).forEach((w) => {
+      if (!tombWait.has(w.id)) waitlistMap.set(w.id, w);
+    });
+    (localData.waitlist || []).forEach((w) => {
+      if (!tombWait.has(w.id)) waitlistMap.set(w.id, w);
+    });
 
-    const merged: BizData = {
-      ...remoteData,
+    const finalMerged: BizData = {
+      services: (remoteData.services?.length ? remoteData.services : localData.services) ?? [],
       bookings: Array.from(bookingMap.values()),
+      products: remoteData.products?.length ? remoteData.products : localData.products,
+      reviews: [...new Map([...(localData.reviews || []), ...(remoteData.reviews || [])].map((r) => [r.id, r])).values()],
+      coupons: remoteData.coupons ?? localData.coupons,
+      professionals: remoteData.professionals?.length ? remoteData.professionals : localData.professionals,
       waitlist: Array.from(waitlistMap.values()),
+      blockedSlots: remoteData.blockedSlots ?? localData.blockedSlots ?? [],
+      settings: remoteData.settings ?? localData.settings,
     };
 
-    safeSet(dataKey(userId), JSON.stringify(merged));
+    safeSet(dataKey(userId), JSON.stringify(finalMerged));
     emit();
     return true;
   },
@@ -766,11 +823,60 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   login(email, password) {
     const em = email.trim().toLowerCase();
     const u = users.find((x) => x.email === em);
-    if (!u) return "No encontramos ninguna cuenta con ese email.";
+    if (!u) {
+      // Si la nube está activa, puede que la cuenta exista pero aún no se haya
+      // sincronizado a este dispositivo. Avisamos para que la UI intente loginAsync.
+      if (isSupabaseConfigured) return "BUSCANDO_EN_NUBE";
+      return "No encontramos ninguna cuenta con ese email.";
+    }
     if (u.password !== password) return "La contraseña no coincide. Probá de nuevo.";
     saveSession(u.id);
     emit();
+    // Traer datos frescos de la nube en segundo plano
+    if (isSupabaseConfigured) api.syncUserDataFromCloud(u.id).catch(() => {});
     return null;
+  },
+  async loginAsync(email, password) {
+    const em = email.trim().toLowerCase();
+    const local = users.find((x) => x.email === em);
+    if (local && local.password === password) {
+      saveSession(local.id);
+      emit();
+      if (isSupabaseConfigured) api.syncUserDataFromCloud(local.id).catch(() => {});
+      return null;
+    }
+    if (local && local.password !== password) return "La contraseña no coincide. Probá de nuevo.";
+    // Fallback nube: la cuenta se creó en otro dispositivo (celu/compu)
+    if (isSupabaseConfigured) {
+      const remote = await fetchRemoteUserByEmail(em);
+      if (!remote) return "No encontramos ninguna cuenta con ese email.";
+      if (remote.user.password !== password) return "La contraseña no coincide. Probá de nuevo.";
+      // Importar cuenta + datos a este dispositivo para que quede igual que en el otro
+      const withoutDup = users.filter((u) => u.id !== remote.user.id && u.email !== em);
+      users = [...withoutDup, remote.user];
+      safeSet(USERS_KEY, JSON.stringify(users));
+      if (remote.data) {
+        safeSet(dataKey(remote.user.id), JSON.stringify(normalizeData(remote.data)));
+      } else {
+        loadData(remote.user.id);
+        await api.syncUserDataFromCloud(remote.user.id).catch(() => {});
+      }
+      saveSession(remote.user.id);
+      emit();
+      return null;
+    }
+    return "No encontramos ninguna cuenta con ese email.";
+  },
+  async registerAsync({ name, business, email, password }) {
+    const em = email.trim().toLowerCase();
+    if (users.some((u) => u.email === em)) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+    // Evitar duplicados entre dispositivos: si el email ya existe en la nube,
+    // no crear una tienda nueva vacía (era lo que dejaba "para configurar de 0").
+    if (isSupabaseConfigured) {
+      const remote = await fetchRemoteUserByEmail(em).catch(() => null);
+      if (remote) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+    }
+    return api.register({ name, business, email, password });
   },
   loginDemo() {
     const existing = users.find((u) => u.email === "demo@cupito.app");
@@ -1120,10 +1226,39 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   removeWaitlist(id) {
     if (!sessionUserId) return;
+    addTombstone(TOMBSTONE_WAITLIST_KEY, id);
     const data = loadData(sessionUserId);
     data.waitlist = data.waitlist.filter((w) => w.id !== id);
     saveData(sessionUserId, data);
+    // Propagar el borrado a la nube para que no resucite en el próximo pull
+    if (isSupabaseConfigured && sessionUserId) {
+      deleteRemoteWaitlist(sessionUserId, id).catch(() => {});
+    }
     emit();
+  },
+  createBookingFromWaitlist(waitlistId, { client, phone, serviceId, date, time, source, items, proId }) {
+    if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta para crear reservas." } as const;
+    addTombstone(TOMBSTONE_WAITLIST_KEY, waitlistId);
+    const data = loadData(sessionUserId);
+    const isClosedDate = (data.settings.closedDates || []).includes(date);
+    if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." } as const;
+    const isBlocked = (data.blockedSlots || []).some((bs) => bs.date === date && (!bs.time || bs.time === time) && (!bs.proId || !proId || bs.proId === proId));
+    if (isBlocked) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." } as const;
+    const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !proId || b.proId === proId));
+    if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` } as const;
+    const id = uid();
+    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId };
+    // UN solo guardado atómico: crea el turno Y borra de la lista juntos.
+    // Antes eran dos guardados separados y el sync a la nube los pisaba → turnos infinitos.
+    data.bookings = [...data.bookings, newBooking];
+    data.waitlist = data.waitlist.filter((w) => w.id !== waitlistId);
+    saveData(sessionUserId, data);
+    if (isSupabaseConfigured && sessionUserId) {
+      saveRemoteBooking(sessionUserId, newBooking).catch(() => {});
+      deleteRemoteWaitlist(sessionUserId, waitlistId).catch(() => {});
+    }
+    emit();
+    return { ok: true, id } as const;
   },
   requestReview(bookingId) {
     if (!sessionUserId) return;
@@ -1201,9 +1336,13 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   removeBooking(id) {
     if (!sessionUserId) return;
+    addTombstone(TOMBSTONE_BOOKING_KEY, id);
     const data = loadData(sessionUserId);
     data.bookings = data.bookings.filter((b) => b.id !== id);
     saveData(sessionUserId, data);
+    if (isSupabaseConfigured && sessionUserId) {
+      deleteRemoteBooking(sessionUserId, id).catch(() => {});
+    }
     emit();
   },
   markDepositPaid(id, method) {

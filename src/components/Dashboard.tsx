@@ -27,6 +27,7 @@ import {
   type Professional,
 } from "../lib/store";
 import { createWhatsAppUrl, formatArgentinaPhone, cleanPhoneDigits } from "../lib/phone";
+import { getSupabaseStatus } from "../lib/supabase";
 import { sound } from "../lib/audio";
 import { sendSubscriptionWelcomeEmail } from "../lib/email";
 import PublicBooking from "./PublicBooking";
@@ -267,6 +268,11 @@ export default function Dashboard() {
 
   return (
     <div className="app-bg flex min-h-screen flex-col">
+      {!store.isCloudSyncActive && (
+        <div className="sticky top-0 z-50 flex w-full items-center justify-center gap-3 bg-amber-400 px-4 py-2 text-center text-ink">
+          <p className="text-sm font-bold">⚠️ Estás en modo local (nube no conectada: {getSupabaseStatus().reason}). Lo que cargues acá NO se ve en el celu. Hacé Redeploy en Vercel después de agregar las variables.</p>
+        </div>
+      )}
       {impersonating && (
         <div className="sticky top-0 z-50 flex w-full items-center justify-center gap-3 bg-coral px-4 py-2 text-center text-white">
           <IconUsers className="h-4 w-4 shrink-0" />
@@ -1402,7 +1408,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 }
 
 function BookingModal({ initialDate, initialClient, initialPhone, initialServiceId, waitlistId, onClose }: { initialDate: string; initialClient?: string; initialPhone?: string; initialServiceId?: string; waitlistId?: string; onClose: () => void }) {
-  const { data, addBooking, removeWaitlist, toast } = useStore();
+  const { data, addBooking, createBookingFromWaitlist, toast } = useStore();
   const [client, setClient] = useState(initialClient ?? "");
   const [phone, setPhone] = useState(initialPhone ?? "");
   const [serviceId, setServiceId] = useState(initialServiceId ?? data?.services[0]?.id ?? "");
@@ -1421,11 +1427,12 @@ function BookingModal({ initialDate, initialClient, initialPhone, initialService
     if (client.trim().length < 2) return setError("El nombre del cliente es obligatorio.");
     if (!serviceId) return setError("Elegí un servicio.");
     if (!time) return setError("Elegí un horario.");
-    const res = addBooking({ client, phone, serviceId, date, time, source: "manual", proId: proId || undefined });
+    // Si viene de la lista de espera, crear el turno y borrar de la lista
+    // en UNA sola operación atómica (si no, la entrada "resucita" y da turnos infinitos).
+    const res = waitlistId
+      ? createBookingFromWaitlist(waitlistId, { client, phone, serviceId, date, time, source: "manual", proId: proId || undefined })
+      : addBooking({ client, phone, serviceId, date, time, source: "manual", proId: proId || undefined });
     if (!res.ok) return setError(res.error);
-    if (waitlistId) {
-      removeWaitlist(waitlistId);
-    }
     toast(`Reserva creada: ${client.trim()} · ${date} ${time}`);
     onClose();
   };

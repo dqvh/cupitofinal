@@ -1,19 +1,30 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { User, BizData, Booking, WaitlistEntry } from "./store";
 
-const supabaseUrl =
-  (import.meta.env.VITE_SUPABASE_URL as string) ||
-  (import.meta.env.SUPABASE_URL as string) ||
-  (import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string) ||
-  "";
+const pickEnv = (...keys: string[]): string => {
+  const env = (import.meta as unknown as { env?: Record<string, unknown> }).env ?? {};
+  for (const k of keys) {
+    const v = env[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+};
 
-const supabaseAnonKey =
-  (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ||
-  (import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) ||
-  (import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as string) ||
-  (import.meta.env.SUPABASE_PUBLISHABLE_KEY as string) ||
-  (import.meta.env.SUPABASE_ANON_KEY as string) ||
-  "";
+// Acepta todos los nombres que crea la integración de Vercel + Supabase:
+// VITE_*, NEXT_PUBLIC_* y SUPABASE_* (ver envPrefix en vite.config.js).
+const supabaseUrl = pickEnv(
+  "VITE_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "SUPABASE_URL"
+);
+
+const supabaseAnonKey = pickEnv(
+  "VITE_SUPABASE_ANON_KEY",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_PUBLISHABLE_KEY",
+  "SUPABASE_ANON_KEY"
+);
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -21,6 +32,22 @@ export const isSupabaseConfigured = Boolean(
     !supabaseUrl.includes("your-project") &&
     supabaseUrl.startsWith("https://")
 );
+
+/** Diagnóstico para mostrar en el Dashboard por qué no conecta (sin exponer la key). */
+export function getSupabaseStatus(): { ok: boolean; reason: string } {
+  if (isSupabaseConfigured) return { ok: true, reason: "conectado" };
+  if (!supabaseUrl && !supabaseAnonKey)
+    return { ok: false, reason: "sin variables en el build (hay que hacer Redeploy en Vercel después de agregarlas)" };
+  if (!supabaseUrl) return { ok: false, reason: "falta la URL (SUPABASE_URL / VITE_SUPABASE_URL)" };
+  if (!supabaseAnonKey) return { ok: false, reason: "falta la key pública (NEXT_PUBLIC_SUPABASE_ANON_KEY o SUPABASE_PUBLISHABLE_KEY)" };
+  if (!supabaseUrl.startsWith("https://"))
+    return { ok: false, reason: `la URL no es https:// (vale "${supabaseUrl.slice(0, 20)}…")` };
+  return { ok: false, reason: "config inválida" };
+}
+
+if (typeof window !== "undefined" && !isSupabaseConfigured) {
+  console.warn("[Cupito Supabase] Nube NO configurada:", getSupabaseStatus().reason);
+}
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, {
@@ -145,6 +172,105 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
   }
 }
 
+/**
+ * Busca un negocio por email (para login multi-dispositivo).
+ */
+export async function fetchRemoteUserByEmail(
+  email: string
+): Promise<{ user: User; data: BizData | null } | null> {
+  if (!supabase) return null;
+  try {
+    const { data: userData, error: userErr } = await supabase
+      .from("cupito_users")
+      .select("*")
+      .eq("email", email.toLowerCase().trim())
+      .maybeSingle();
+
+    if (userErr || !userData) return null;
+
+    const user: User = {
+      id: userData.id,
+      name: userData.name,
+      business: userData.business,
+      email: userData.email,
+      password: userData.password,
+      slug: userData.slug,
+      plan: userData.plan,
+      createdAt: Number(userData.created_at || Date.now()),
+      subscription: userData.subscription || undefined,
+    };
+
+    const { data: rowData } = await supabase
+      .from("cupito_data")
+      .select("data")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    return { user, data: (rowData?.data as BizData) ?? null };
+  } catch (err) {
+    console.warn("[Cupito Supabase] Error consultando negocio por email:", err);
+    return null;
+  }
+}
+
+/**
+ * Elimina una entrada de lista de espera directamente en Supabase.
+ * Necesario para que el borrado se propague y no "resucite" en otros dispositivos.
+ */
+export async function deleteRemoteWaitlist(userId: string, waitlistId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data: row } = await supabase
+      .from("cupito_data")
+      .select("data")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!row?.data) return true; // nada que borrar
+    const currentData = row.data as BizData;
+    const updatedWaitlist = (currentData.waitlist || []).filter((w) => w.id !== waitlistId);
+    if (updatedWaitlist.length === (currentData.waitlist || []).length) return true;
+
+    const { error } = await supabase.from("cupito_data").upsert({
+      user_id: userId,
+      data: { ...currentData, waitlist: updatedWaitlist },
+      updated_at: Date.now(),
+    });
+    return !error;
+  } catch (err) {
+    console.warn("[Cupito Supabase] Error eliminando waitlist remota:", err);
+    return false;
+  }
+}
+
+/**
+ * Elimina una reserva directamente en Supabase (para que no resucite con el merge).
+ */
+export async function deleteRemoteBooking(userId: string, bookingId: string): Promise<boolean> {
+  if (!supabase) return false;
+  try {
+    const { data: row } = await supabase
+      .from("cupito_data")
+      .select("data")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!row?.data) return true;
+    const currentData = row.data as BizData;
+    const updated = (currentData.bookings || []).filter((b) => b.id !== bookingId);
+    if (updated.length === (currentData.bookings || []).length) return true;
+
+    const { error } = await supabase.from("cupito_data").upsert({
+      user_id: userId,
+      data: { ...currentData, bookings: updated },
+      updated_at: Date.now(),
+    });
+    return !error;
+  } catch (err) {
+    console.warn("[Cupito Supabase] Error eliminando booking remoto:", err);
+    return false;
+  }
+}
 /**
  * Elimina un usuario y su información asociada de Supabase.
  */

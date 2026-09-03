@@ -4,16 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Vite expone a import.meta.env todas las vars con estos prefijos.
+  // No usar `define` para inyectarlas: pisaba los valores y dejaba "" quemado en el build.
   envPrefix: ["VITE_", "NEXT_PUBLIC_", "SUPABASE_"],
-  define: {
-    "import.meta.env.SUPABASE_URL": JSON.stringify(process.env.SUPABASE_URL || ""),
-    "import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY": JSON.stringify(
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-      process.env.SUPABASE_PUBLISHABLE_KEY ||
-      ""
-    ),
-  },
   server: {
     host: "0.0.0.0",
     port: 3000,

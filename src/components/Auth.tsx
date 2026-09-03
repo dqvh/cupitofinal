@@ -18,7 +18,7 @@ const PLAN_BLURBS: Record<Plan, string> = {
 };
 
 export default function Auth({ initialMode = "registro" }: { initialMode?: Mode }) {
-  const { register, login, toast } = useStore();
+  const { registerAsync, loginAsync, toast } = useStore();
   const presetPlan = ((): Plan | null => {
     const p = hashQuery().get("plan");
     if (p === "semilla" || p === "crece" || p === "escala") return p;
@@ -66,10 +66,17 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
       if (password.length === 0) return fail("Falta la contraseña.");
     }
     setLoading(true);
-    setTimeout(() => {
-      const err = mode === "registro" ? register({ name, business, email, password }) : login(email, password);
-      setLoading(false);
-      if (err) return fail(err);
+    setTimeout(async () => {
+      try {
+        const err = mode === "registro"
+          ? await registerAsync({ name, business, email, password })
+          : await loginAsync(email, password);
+        setLoading(false);
+        if (err) return fail(err);
+      } catch {
+        setLoading(false);
+        return fail("No pudimos conectar con la nube. Revisá tu internet e intentá de nuevo.");
+      }
       if (mode === "login") {
         toast("¡Hola de nuevo!");
         window.location.hash = "#/app";
