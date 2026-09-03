@@ -166,11 +166,12 @@ function Gate({ hasCode }: { hasCode: boolean }) {
 
 function Console() {
   const store = useStore();
-  const { users, adminLogout, adminDeleteUser, loginAs, getData, toast } = store;
+  const { users, adminLogout, adminDeleteUser, loginAs, getData, toast, isCloudSyncActive } = store;
   const [q, setQ] = useState("");
   const [planFilter, setPlanFilter] = useState<"todos" | Plan | "expiring">("todos");
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
 
@@ -236,6 +237,18 @@ function Console() {
             </div>
           </div>
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setShowSyncModal(true)}
+              className={`btn-press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
+                isCloudSyncActive
+                  ? "border border-emerald-400/40 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                  : "border border-amber-400/50 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+              }`}
+              title="Estado de conexión con Supabase"
+            >
+              <span className={`h-2 w-2 rounded-full ${isCloudSyncActive ? "bg-emerald-400" : "bg-amber-400 animate-pulse"}`} />
+              {isCloudSyncActive ? "Nube activa ☁️" : "Modo Local (Activar Nube)"}
+            </button>
             <button
               onClick={() => setShowNewModal(true)}
               className="btn-press inline-flex items-center gap-1.5 rounded-full bg-lime px-4 py-2 font-display text-xs font-bold text-ink hover:bg-limedeep shadow-sm"
@@ -480,6 +493,14 @@ function Console() {
       {showNewModal && (
         <NewBusinessModal
           onClose={() => setShowNewModal(false)}
+        />
+      )}
+
+      {/* Modal informativo de Sincronización Supabase */}
+      {showSyncModal && (
+        <SyncInfoModal
+          isConfigured={isCloudSyncActive}
+          onClose={() => setShowSyncModal(false)}
         />
       )}
     </div>
@@ -747,6 +768,106 @@ function NewBusinessModal({ onClose }: { onClose: () => void }) {
             <button type="submit" className="btn-press rounded-full bg-lime px-6 py-2.5 font-display text-sm font-bold text-ink hover:bg-limedeep shadow-sm">Crear Negocio →</button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/* ============ MODAL: INFORMACIÓN SUPABASE ============ */
+function SyncInfoModal({ isConfigured, onClose }: { isConfigured: boolean; onClose: () => void }) {
+  const sqlSnippet = `-- 1. Tabla de Usuarios
+CREATE TABLE IF NOT EXISTS cupito_users (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  business TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  plan TEXT DEFAULT 'semilla',
+  created_at BIGINT,
+  subscription JSONB
+);
+
+-- 2. Tabla de Datos de Negocio
+CREATE TABLE IF NOT EXISTS cupito_data (
+  user_id TEXT PRIMARY KEY REFERENCES cupito_users(id) ON DELETE CASCADE,
+  data JSONB NOT NULL,
+  updated_at BIGINT
+);
+
+-- 3. Habilitar RLS público para sincronización
+ALTER TABLE cupito_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cupito_data ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Permitir lectura publica usuarios" ON cupito_users FOR SELECT USING (true);
+CREATE POLICY "Permitir escritura publica usuarios" ON cupito_users FOR ALL USING (true);
+CREATE POLICY "Permitir lectura publica datos" ON cupito_data FOR SELECT USING (true);
+CREATE POLICY "Permitir escritura publica datos" ON cupito_data FOR ALL USING (true);`;
+
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="pop-in max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border-2 border-ink/15 bg-card p-6 shadow-2xl sm:p-7" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-ink/10 pb-4">
+          <div className="flex items-center gap-3">
+            <span className={`flex h-10 w-10 items-center justify-center rounded-xl font-bold text-base ${isConfigured ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+              {isConfigured ? "☁️" : "⚠️"}
+            </span>
+            <div>
+              <h3 className="font-display text-xl font-extrabold text-ink">Sincronización en la Nube (Supabase)</h3>
+              <p className="text-xs text-inkmute">Conexión en tiempo real entre computadoras y celulares</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute hover:border-coral hover:text-coral font-bold">✕</button>
+        </div>
+
+        <div className="mt-5 space-y-4 text-sm text-ink">
+          {isConfigured ? (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-50 p-4 text-emerald-900">
+              <p className="font-bold flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-600 animate-pulse" />
+                ¡Supabase está conectado y sincronizando!
+              </p>
+              <p className="mt-1 text-xs text-emerald-800 leading-relaxed">
+                Cualquier negocio que crees o edites se guardará en la base de datos central. Cuando alguien abra el link desde su celular o cualquier otro navegador, verá la página inmediatamente.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-50 p-4 text-amber-900">
+              <p className="font-bold">⚠️ Actualmente estás en Modo Local (localStorage)</p>
+              <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                Los datos que creás se guardan únicamente en la memoria de este navegador. Por eso, al entrar desde el celular, te dice que el negocio todavía no tiene su página.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <p className="font-display text-xs font-bold uppercase tracking-wider text-inkmute">Pasos para conectar Supabase en 2 minutos:</p>
+
+            <div className="rounded-xl border border-ink/10 bg-paper p-3 text-xs space-y-1.5">
+              <p className="font-bold text-ink">1. Variables de entorno en Vercel:</p>
+              <p className="text-inkmute">En tu proyecto de Vercel ➔ <strong>Settings</strong> ➔ <strong>Environment Variables</strong>, agregá:</p>
+              <ul className="list-disc pl-5 font-mono text-[11px] text-fern space-y-0.5">
+                <li>VITE_SUPABASE_URL = (tu Project URL de Supabase)</li>
+                <li>VITE_SUPABASE_ANON_KEY = (tu anon public API key)</li>
+              </ul>
+            </div>
+
+            <div className="rounded-xl border border-ink/10 bg-paper p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-ink">2. Tablas en Supabase (SQL Editor):</p>
+                <CopyButton text={sqlSnippet} label="Copiar SQL" copiedLabel="¡Copiado!" className="!py-1 !px-2.5 !text-[11px]" />
+              </div>
+              <p className="text-inkmute">En Supabase ➔ <strong>SQL Editor</strong> ➔ Pegá el script y dale a <strong>Run</strong>.</p>
+              <pre className="max-h-28 overflow-y-auto rounded-lg bg-ink/5 p-2 font-mono text-[10px] text-ink/70">
+                {sqlSnippet}
+              </pre>
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end border-t border-ink/10 pt-4">
+            <button onClick={onClose} className="btn-press rounded-full bg-evergreen px-6 py-2.5 font-display text-xs font-bold text-lime">Entendido</button>
+          </div>
+        </div>
       </div>
     </div>
   );

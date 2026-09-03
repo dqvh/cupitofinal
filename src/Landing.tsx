@@ -96,22 +96,79 @@ function Nav() {
               </a>
             </>
           )}
-          <button onClick={() => setOpen((o) => !o)} aria-label="Abrir menú"
-            className="flex h-10 w-10 flex-col items-center justify-center gap-1.5 rounded-full border-2 border-paper/25 text-paper transition-colors hover:border-lime lg:hidden">
-            <span className={`h-0.5 rounded bg-current transition-all duration-300 ${open ? "translate-y-1 rotate-45" : ""}`} style={{ width: 18 }} />
-            <span className={`h-0.5 rounded bg-current transition-all duration-300 ${open ? "opacity-0" : ""}`} style={{ width: 18 }} />
-            <span className={`h-0.5 rounded bg-current transition-all duration-300 ${open ? "-translate-y-1 -rotate-45" : ""}`} style={{ width: 18 }} />
+          <button
+            onClick={() => setOpen((o) => !o)}
+            aria-label={open ? "Cerrar menú" : "Abrir menú"}
+            className="btn-press relative flex h-10 w-10 items-center justify-center rounded-full border-2 border-paper/30 bg-evergreen/80 text-paper transition-all hover:border-lime active:scale-95 lg:hidden"
+          >
+            <div className="flex h-3.5 w-4 flex-col justify-between">
+              <span
+                className={`h-0.5 w-full rounded-full bg-current transition-all duration-300 ${
+                  open ? "translate-y-[6px] rotate-45 bg-lime" : ""
+                }`}
+              />
+              <span
+                className={`h-0.5 w-full rounded-full bg-current transition-all duration-200 ${
+                  open ? "scale-0 opacity-0" : ""
+                }`}
+              />
+              <span
+                className={`h-0.5 w-full rounded-full bg-current transition-all duration-300 ${
+                  open ? "-translate-y-[6px] -rotate-45 bg-lime" : ""
+                }`}
+              />
+            </div>
           </button>
         </div>
       </div>
-      <div className={`overflow-hidden bg-evergreen/98 backdrop-blur transition-all duration-300 lg:hidden ${open ? "max-h-96 border-t border-paper/10" : "max-h-0"}`}>
-        <nav className="flex flex-col gap-1 px-5 py-4">
-          {links.map((l) => (
-            <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="rounded-xl px-4 py-3 font-display text-lg font-bold text-paper transition-colors hover:bg-paper/10 hover:text-lime">{l.label}</a>
-          ))}
-          <a href="#/b/studio-nails" onClick={() => setOpen(false)} className="rounded-xl px-4 py-3 font-display text-lg font-bold text-lime transition-colors hover:bg-paper/10">Ver ejemplo en vivo</a>
-          {!user && <a href="#/auth?modo=login" onClick={() => setOpen(false)} className="rounded-xl px-4 py-3 font-display text-lg font-bold text-paper transition-colors hover:bg-paper/10 hover:text-lime">Entrar</a>}
-        </nav>
+
+      {/* Menú desplegable fluido para celular */}
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out lg:hidden ${
+          open ? "grid-rows-[1fr] opacity-100 border-b-2 border-paper/15 shadow-2xl" : "grid-rows-[0fr] opacity-0 pointer-events-none"
+        }`}
+      >
+        <div className="overflow-hidden bg-evergreen/98 backdrop-blur-md">
+          <nav className="flex flex-col gap-1.5 px-5 py-4">
+            {links.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="btn-press flex items-center justify-between rounded-xl px-4 py-3 font-display text-base font-bold text-paper transition-colors hover:bg-paper/10 hover:text-lime"
+              >
+                <span>{l.label}</span>
+                <span className="text-xs text-paper/30 font-mono">→</span>
+              </a>
+            ))}
+            <a
+              href="/studio-nails"
+              onClick={() => setOpen(false)}
+              className="btn-press flex items-center justify-between rounded-xl bg-lime/10 px-4 py-3 font-display text-base font-bold text-lime transition-colors hover:bg-lime/20"
+            >
+              <span>Ver ejemplo en vivo 💅</span>
+              <span className="text-xs">↗</span>
+            </a>
+            {!user && (
+              <div className="mt-2 flex gap-2 border-t border-paper/10 pt-3">
+                <a
+                  href="#/auth?modo=login"
+                  onClick={() => setOpen(false)}
+                  className="btn-press flex-1 rounded-full border-2 border-paper/25 py-2.5 text-center font-display text-xs font-bold text-paper transition-all hover:border-lime hover:text-lime"
+                >
+                  Entrar
+                </a>
+                <a
+                  href="#/auth"
+                  onClick={() => setOpen(false)}
+                  className="btn-press flex-1 rounded-full bg-lime py-2.5 text-center font-display text-xs font-bold text-ink transition-all hover:bg-limedeep shadow-sm"
+                >
+                  Crear cuenta gratis
+                </a>
+              </div>
+            )}
+          </nav>
+        </div>
       </div>
     </header>
   );

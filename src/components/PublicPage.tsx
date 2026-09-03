@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePublicPage, useStore, fmtLong, fmtMoney, isPaid, THEMES, dateKey, type BizData } from "../lib/store";
 import PublicBooking from "./PublicBooking";
 import { Reveal, LogoMark, IconCheck, IconClock, IconCalendar, IconBag, IconStar, IconWhatsApp, IconChat, IconChevron, IconBell, CopyButton } from "./kit";
@@ -6,8 +6,34 @@ import { Reveal, LogoMark, IconCheck, IconClock, IconCalendar, IconBag, IconStar
 /* Página pública de reservas: cupito.app/{slug} — la ve cualquier cliente */
 export default function PublicPage({ slug }: { slug: string }) {
   const page = usePublicPage(slug);
-  const { addReviewFor, toast } = useStore();
+  const { addReviewFor, toast, fetchPageRemote } = useStore();
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [loadingRemote, setLoadingRemote] = useState(!page);
+  const [triedRemote, setTriedRemote] = useState(false);
+
+  useEffect(() => {
+    if (!page && !triedRemote) {
+      setLoadingRemote(true);
+      fetchPageRemote(slug).then(() => {
+        setLoadingRemote(false);
+        setTriedRemote(true);
+      });
+    } else if (page) {
+      setLoadingRemote(false);
+    }
+  }, [slug, page, triedRemote, fetchPageRemote]);
+
+  if (loadingRemote) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-evergreen px-6 text-center text-paper">
+        <LogoMark className="h-16 w-16 animate-pulse text-lime" />
+        <div className="space-y-1">
+          <p className="font-display text-2xl font-extrabold sm:text-3xl">Buscando {slug}...</p>
+          <p className="text-xs text-paper/60">Cargando agenda en vivo desde la nube ☁️</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!page) {
     return (
@@ -15,7 +41,7 @@ export default function PublicPage({ slug }: { slug: string }) {
         <LogoMark className="h-14 w-14 text-fern" />
         <p className="font-display text-3xl font-extrabold sm:text-4xl">Ese negocio todavía no tiene su página <span className="text-lime">:(</span></p>
         <p className="max-w-sm text-paper/70">Probá con la página de ejemplo para ver cómo funciona.</p>
-        <a href="#/b/studio-nails" className="rounded-full bg-lime px-7 py-3.5 font-display text-base font-bold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:bg-limedeep">Ver página de ejemplo</a>
+        <a href="/studio-nails" className="rounded-full bg-lime px-7 py-3.5 font-display text-base font-bold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:bg-limedeep">Ver página de ejemplo</a>
         <a href="#/" className="text-sm text-paper/50 underline-offset-4 transition-colors hover:text-lime hover:underline">← Volver al inicio</a>
       </div>
     );

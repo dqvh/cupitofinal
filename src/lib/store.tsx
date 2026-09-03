@@ -8,6 +8,12 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import {
+  isSupabaseConfigured,
+  fetchRemoteUserBySlug,
+  fetchAllRemoteUsers,
+  syncUserToRemote,
+} from "./supabase";
 
 /* ================= tipos ================= */
 
@@ -534,11 +540,21 @@ let storeVersion = 0;
 const listeners = new Set<() => void>();
 function emit() { storeVersion++; listeners.forEach((l) => l()); }
 
-function saveUsers(list: User[]) { users = list; safeSet(USERS_KEY, JSON.stringify(list)); }
+function saveUsers(list: User[]) {
+  users = list;
+  safeSet(USERS_KEY, JSON.stringify(list));
+  if (isSupabaseConfigured) {
+    list.forEach((u) => {
+      syncUserToRemote(u).catch(() => {});
+    });
+  }
+}
+
 function saveSession(id: string | null) {
   sessionUserId = id;
   if (id) safeSet(SESSION_KEY, id); else safeRemove(SESSION_KEY);
 }
+
 function loadData(userId: string): BizData {
   try {
     const raw = safeGet(dataKey(userId));
@@ -548,8 +564,30 @@ function loadData(userId: string): BizData {
   safeSet(dataKey(userId), JSON.stringify(seeded));
   return seeded;
 }
+
 function saveData(userId: string, data: BizData) {
   safeSet(dataKey(userId), JSON.stringify(data));
+  if (isSupabaseConfigured) {
+    const u = users.find((x) => x.id === userId);
+    if (u) {
+      syncUserToRemote(u, data).catch(() => {});
+    }
+  }
+}
+
+// Sincronización automática inicial desde Supabase para traer negocios creados en otros dispositivos
+if (typeof window !== "undefined" && isSupabaseConfigured) {
+  fetchAllRemoteUsers().then((remoteUsers) => {
+    if (remoteUsers && remoteUsers.length > 0) {
+      const map = new Map<string, User>();
+      users.forEach((u) => map.set(u.id, u));
+      remoteUsers.forEach((u) => map.set(u.id, u));
+      const combined = Array.from(map.values());
+      users = combined;
+      safeSet(USERS_KEY, JSON.stringify(combined));
+      emit();
+    }
+  }).catch((e) => console.warn("[Cupito] Error en sync inicial de Supabase:", e));
 }
 
 /* ================= store ================= */
@@ -606,9 +644,26 @@ interface StoreApi {
   markDepositPaid(id: string, method: PaymentMethod): void;
   rejectDeposit(id: string): void;
   setBookingPro(id: string, proId: string | undefined): void;
+  /* sincronización nube */
+  isCloudSyncActive: boolean;
+  fetchPageRemote(slug: string): Promise<boolean>;
 }
 
 const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
+  isCloudSyncActive: isSupabaseConfigured,
+  async fetchPageRemote(slug: string) {
+    if (!isSupabaseConfigured) return false;
+    const remote = await fetchRemoteUserBySlug(slug);
+    if (!remote) return false;
+    const currentUsers = users.filter((u) => u.id !== remote.user.id);
+    users = [...currentUsers, remote.user];
+    safeSet(USERS_KEY, JSON.stringify(users));
+    if (remote.data) {
+      safeSet(dataKey(remote.user.id), JSON.stringify(remote.data));
+    }
+    emit();
+    return true;
+  },
   register({ name, business, email, password }) {
     const em = email.trim().toLowerCase();
     if (users.some((u) => u.email === em)) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
