@@ -821,8 +821,9 @@ async function adoptAuthAccount(authId: string): Promise<string | null> {
     const created = await createBizRowFromPending(pending);
     if (created) return null;
   }
-  await sbSignOut().catch(() => {});
-  return "Tu login está listo pero no encontramos tu negocio. Escribinos a hola@cupito.app y lo resolvemos.";
+  // Login válido pero sin negocio (ej: confirmó el email en otro dispositivo).
+  // No cerramos sesión: la UI pide nombre+negocio y lo crea (NEEDS_SETUP).
+  return "NEEDS_SETUP";
 }
 
 /* Registro que quedó pendiente de confirmación de email */
@@ -856,6 +857,50 @@ async function ensureUniqueSlug(base: string): Promise<string> {
   return slug;
 }
 
+/* Crea el negocio cuando el login es válido pero no hay fila (NEEDS_SETUP).
+   Pasa si se confirmó el email en otro dispositivo. */
+async function completeBizSetupCore(name: string, business: string): Promise<string | null> {
+  try {
+    const sess = await sbValidateSession().catch(() => null);
+    if (!sess) return "Tu sesión venció. Entrá de nuevo.";
+    const deleted = getDeletedUserIds();
+    const hit = users.find((u) => u.auth_id === sess.authId && !deleted.has(u.id));
+    if (hit) {
+      saveSession(hit.id);
+      emit();
+      return null;
+    }
+    const remote = await fetchRemoteUserByAuthId(sess.authId).catch(() => null);
+    if (remote && !deleted.has(remote.user.id)) {
+      importRemoteAccount(remote);
+      return null;
+    }
+    if (name.trim().length < 2) return "Contanos tu nombre.";
+    if (business.trim().length < 2) return "¿Cómo se llama tu negocio?";
+    const em = sess.email.toLowerCase().trim();
+    const slug = await ensureUniqueSlug(slugify(business));
+    const user: User = {
+      id: sess.authId,
+      auth_id: sess.authId,
+      name: name.trim(),
+      business: business.trim(),
+      email: em,
+      password: "",
+      slug,
+      plan: "semilla",
+      createdAt: Date.now(),
+    };
+    const withoutDup = users.filter((u) => u.email !== em);
+    saveUsers([...withoutDup, user]);
+    saveSession(user.id);
+    saveData(user.id, defaultData());
+    clearPendingBiz();
+    emit();
+    return null;
+  } catch {
+    return "No pudimos crear tu negocio. Escribinos a hola@cupito.app y lo resolvemos.";
+  }
+}
 /* Crea la fila del negocio para un registro pendiente ya confirmado */
 async function createBizRowFromPending(pending: PendingBiz): Promise<boolean> {
   try {
@@ -1036,6 +1081,7 @@ interface StoreApi {
   login(email: string, password: string): string | null;
   loginAsync(email: string, password: string): Promise<string | null>;
   registerAsync(input: { name: string; business: string; email: string; password: string }): Promise<string | null>;
+  completeBizSetup(input: { name: string; business: string }): Promise<string | null>;
   loginDemo(): void;
   logout(): void;
   deleteAccount(): void;
@@ -1326,6 +1372,9 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveData(user.id, fresh);
     emit();
     return null;
+  },
+  async completeBizSetup(input) {
+    return completeBizSetupCore(input.name, input.business);
   },
   loginDemo() {
     const existing = users.find((u) => u.email === "demo@cupito.app");

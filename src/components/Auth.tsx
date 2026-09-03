@@ -18,7 +18,7 @@ const PLAN_BLURBS: Record<Plan, string> = {
 };
 
 export default function Auth({ initialMode = "registro" }: { initialMode?: Mode }) {
-  const { registerAsync, loginAsync, toast } = useStore();
+  const { registerAsync, loginAsync, completeBizSetup, toast } = useStore();
   const presetPlan = ((): Plan | null => {
     const p = hashQuery().get("plan");
     if (p === "semilla" || p === "crece" || p === "escala") return p;
@@ -36,10 +36,11 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const [shakeKey, setShakeKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [pickPlan, setPickPlan] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   const [chosen, setChosen] = useState<Plan>(presetPlan ?? "crece");
 
-  const switchMode = (m: Mode) => { setMode(m); setError(null); setNotice(null); setPickPlan(false); };
+  const switchMode = (m: Mode) => { setMode(m); setError(null); setNotice(null); setPickPlan(false); setNeedsSetup(false); };
   const fail = (msg: string) => { setError(msg); setNotice(null); setShakeKey((k) => k + 1); setLoading(false); };
   const info = (msg: string) => { setNotice(msg); setError(null); setShakeKey((k) => k + 1); setLoading(false); };
 
@@ -55,6 +56,27 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
       }).catch(() => {});
     }
     window.location.hash = plan === "semilla" ? "#/app?onboarding=1" : `#/app?checkout=${plan}&onboarding=1`;
+  };
+
+  const submitSetup = (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setNotice(null);
+    if (name.trim().length < 2) return fail("Contanos tu nombre.");
+    if (business.trim().length < 2) return fail("¿Cómo se llama tu negocio?");
+    setLoading(true);
+    setTimeout(async () => {
+      try {
+        const err = await completeBizSetup({ name, business });
+        setLoading(false);
+        if (err) return fail(err);
+      } catch {
+        setLoading(false);
+        return fail("No pudimos conectar con la nube. Revisá tu internet e intentá de nuevo.");
+      }
+      toast("¡Listo! Tu negocio quedó vinculado ✓");
+      window.location.hash = "#/app?onboarding=1";
+    }, 400);
   };
 
   const submit = (e: FormEvent) => {
@@ -79,6 +101,13 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
           : await loginAsync(email, password);
         setLoading(false);
         if (err) {
+          // Login válido pero sin negocio (confirmó el email en otro lado):
+          // pedir los datos para crearlo en vez de trabarse.
+          if (err === "NEEDS_SETUP") {
+            setNeedsSetup(true);
+            setMode("login");
+            return info("Tu email ya está confirmado ✓ Contanos tu nombre y tu negocio para terminar.");
+          }
           // Avisos informativos (confirmar email, cuenta migrada) van en verde, no en rojo
           if (/confirmaci|revisá tu email|entrá de nuevo|migrada/i.test(err)) return info(err);
           return fail(err);
@@ -138,7 +167,31 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
             <span className="font-display text-2xl font-bold tracking-tight">cupito<span className="text-coral">.</span></span>
           </a>
           <div className="rounded-[24px] border-2 border-ink/12 bg-card p-7 shadow-block-ink sm:p-9">
-            {pickPlan ? (
+            {needsSetup ? (
+              <div className="pop-in">
+                <div className="inline-flex items-center gap-2 rounded-full bg-lime/20 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-evergreen">
+                  Último paso · Tu negocio
+                </div>
+                <h2 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Vinculá tu negocio</h2>
+                <p className="mt-1 text-sm text-inkmute">Tu login ya funciona. Completá estos datos y entras a tu panel.</p>
+                {error && <div key={shakeKey} className="shake mt-5 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">{error}</div>}
+                {notice && <div key={shakeKey} className="mt-5 rounded-xl border-2 border-fern/40 bg-fern/10 px-4 py-3 text-sm font-semibold text-fern">{notice}</div>}
+                <form onSubmit={submitSetup} className="mt-6 space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Tu nombre</label>
+                    <input className="field" placeholder="Caro Méndez" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Nombre del negocio</label>
+                    <input className="field" placeholder="Studio Nails" value={business} onChange={(e) => setBusiness(e.target.value)} />
+                  </div>
+                  <button type="submit" disabled={loading}
+                    className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-evergreen px-6 py-4 font-display text-lg font-bold text-lime transition-all duration-200 hover:-translate-y-0.5 hover:bg-pine disabled:cursor-wait disabled:opacity-70">
+                    {loading ? "Creando tu negocio…" : <>Crear mi negocio <IconArrow className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" /></>}
+                  </button>
+                </form>
+              </div>
+            ) : pickPlan ? (
               <div className="pop-in">
                 <div className="inline-flex items-center gap-2 rounded-full bg-lime/20 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-evergreen">
                   Paso 2 de 2 · Elegí tu plan
