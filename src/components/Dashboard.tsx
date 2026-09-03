@@ -249,6 +249,7 @@ export default function Dashboard() {
   const title: Record<View, [string, string]> = {
     hoy: ["Agenda del día", "Lo que pasa hoy en tu negocio, en una mirada."],
     reservas: ["Todas las reservas", "Próximos turnos, ordenados y filtrables."],
+    clientes: ["Ficha de Clientes", "Historial consolidado, datos de contacto y notas privadas."],
     lista: ["Lista de espera", "Clientes que quieren venir pero encontraron el día lleno."],
     stats: ["Estadísticas", "Cómo le va a tu negocio, en tiempo real."],
     servicios: ["Servicios", "Lo que ofrecés y cuánto cobrás."],
@@ -259,6 +260,8 @@ export default function Dashboard() {
     suscripcion: ["Plan y suscripción", "Tu plan actual y cómo lo pagás."],
     ajustes: ["Ajustes", "Tu negocio, tu cuenta, tus reglas."],
   };
+
+  const viewTitle = title[view] || ["Panel de Control", "Administrá tu negocio."];
 
   const sectionOf = (v: View) => SECTIONS.find((s) => s.items.some((i) => i.id === v))?.label ?? "";
 
@@ -351,8 +354,8 @@ export default function Dashboard() {
                     className="border border-ink/15 shadow-none hover:border-ink/40"
                   />
                 </div>
-                <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">{title[view][0]}</h1>
-                <p className="mt-1 text-sm text-inkmute">{title[view][1]}</p>
+                <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">{viewTitle[0]}</h1>
+                <p className="mt-1 text-sm text-inkmute">{viewTitle[1]}</p>
               </div>
               <div className="flex items-center gap-2">
                 <a
@@ -1974,7 +1977,7 @@ function ClientsCRMView({
                     <p className="font-mono text-xs font-semibold text-inkmute">{formatArgentinaPhone(c.cleanPhone)}</p>
                   </div>
                   <a
-                    href={createWhatsAppUrl(c.phone, `Hola ${c.name.split(" ")[0]}! Te escribimos de ${businessName}.`)}
+                    href={createWhatsAppUrl(c.phone, `Hola ${(c.name || "cliente").trim().split(" ")[0]}! Te escribimos de ${businessName}.`)}
                     target="_blank"
                     rel="noreferrer"
                     className="btn-press flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-600/30 px-3 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
