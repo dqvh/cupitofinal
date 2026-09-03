@@ -59,6 +59,52 @@ export const IconInstagram = ({ className }: IconProps) => (
     <circle cx="17.2" cy="6.8" r="1.4" fill="currentColor" />
   </svg>
 );
+
+/* ---------- legales (Términos y Privacidad) ---------- */
+export const TERMS_DOC: { title: string; body: string[] } = {
+  title: "Términos del servicio",
+  body: [
+    "Cupito es una plataforma de reservas online para negocios con turno. Al crear una cuenta aceptás estos términos.",
+    "Plan Semilla: gratuito para siempre, con hasta 25 reservas por mes y 1 profesional. Sin tarjeta.",
+    "Planes Crece y Escala: suscripción mensual o anual cobrada por Mercado Pago. El plan se activa cuando el pago queda autorizado y se cancela cuando quieras desde tu panel (la cancelación frena los próximos cobros).",
+    "Vos sos responsable de los servicios, precios, horarios y señas que publiques en tu página. Cupito no interviene en la relación comercial entre tu negocio y tus clientes.",
+    "Política de cancelación sugerida: el cliente puede cancelar gratis hasta 24 h antes del turno. Dentro de las 24 h, la seña no se devuelve.",
+    "Podemos suspender cuentas con uso fraudulento, spam o contenido ilegal.",
+    "Contacto: hola@cupito.app · WhatsApp +54 9 11 3199-6205.",
+  ],
+};
+export const PRIVACY_DOC: { title: string; body: string[] } = {
+  title: "Política de privacidad",
+  body: [
+    "Guardamos los datos mínimos para que Cupito funcione: tu cuenta (nombre, negocio, email), tu configuración y las reservas de tus clientes (nombre, teléfono y email si lo dan).",
+    "Los datos de tus clientes solo los ves vos desde tu panel. No los vendemos ni los compartimos con terceros, salvo los servicios técnicos necesarios (hosting, base de datos y envío de emails).",
+    "Usamos tu email para avisos operativos (confirmaciones, recordatorios, pagos). Nunca spam.",
+    "Podés pedir la eliminación total de tus datos escribiendo a hola@cupito.app o eliminando tu cuenta desde Ajustes.",
+    "Al reservar, el cliente acepta que sus datos se usen para gestionar su turno (confirmación, recordatorio y aviso de cambios).",
+  ],
+};
+
+export function LegalModal({ doc, onClose }: { doc: { title: string; body: string[] }; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-[2px]" onClick={onClose}>
+      <div className="pop-in max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-8" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-display text-2xl font-extrabold">{doc.title}</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral">✕</button>
+        </div>
+        <ul className="mt-5 space-y-3">
+          {doc.body.map((p, i) => (
+            <li key={i} className="flex items-start gap-2.5 text-sm leading-relaxed text-ink/80">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime font-display text-[10px] font-extrabold text-ink">{i + 1}</span>
+              {p}
+            </li>
+          ))}
+        </ul>
+        <button onClick={onClose} className="mt-6 w-full rounded-full bg-evergreen py-3.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5">Entendido</button>
+      </div>
+    </div>
+  );
+}
 export const IconChart = ({ className }: IconProps) => <S className={className} d="M4 20V10m5.3 10V4m5.4 16v-7m5.3 7v-4M2 20h20" />;
 export const IconGear = ({ className }: IconProps) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
@@ -120,8 +166,11 @@ export const IconTrash = ({ className }: IconProps) => (
 );
 export const IconPencil = ({ className }: IconProps) => <S className={className} d="M16.5 3.5l4 4L8 20l-5 1.2L4.2 16 16.5 3.5zM14 6l4 4" />;
 export const IconWhatsApp = ({ className }: IconProps) => (
-  <svg viewBox="0 0 20 20" className={className} aria-hidden="true">
-    <path d="M10 1.8a8.2 8.2 0 00-7 12.4L1.8 18l3.9-1.2A8.2 8.2 0 1010 1.8zm3.7 11.7c-.2.5-1.1 1-1.6 1s-.9.1-3.4-.9c-2.6-1.1-4.2-3.6-4.3-3.8-.1-.2-1-1.4-1-2.7s.7-1.9.9-2.2c.2-.2.5-.3.7-.3h.5c.2 0 .4-.1.6.5l.8 2c.1.2.1.4 0 .6l-.4.6c-.1.2-.2.4 0 .7a7.6 7.6 0 001.4 1.8 8.7 8.7 0 002 1.3c.3.1.4.1.6-.1l.6-.7c.2-.2.4-.2.7-.1l1.9.9c.3.1.5.2.5.4 0 .1 0 .6-.2 1z" fill="currentColor" />
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <path
+      d="M12 2.5a9.5 9.5 0 00-8.1 14.6L2.5 21.5l4.5-1.3A9.5 9.5 0 1012 2.5zm0 1.8a7.7 7.7 0 110 15.4 7.6 7.6 0 01-3.9-1.1l-.3-.2-2.7.8.8-2.6-.2-.3a7.7 7.7 0 015.9-11.9l.4-.1zm-3.1 3.8c-.2 0-.5 0-.7.3-.2.3-.9.9-.9 2.1s.9 2.5 1 2.6c.1.2 1.8 2.9 4.5 3.9 2.2.8 2.7.7 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.2-.2-.5-.3l-1.9-.9c-.3-.1-.5-.2-.7.1l-.8 1c-.1.2-.3.2-.5.1a7.5 7.5 0 01-2.2-1.4 8.2 8.2 0 01-1.5-1.9c-.2-.3 0-.4.1-.6l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5L9.3 8.6c-.2-.3-.4-.5-.4-.5z"
+      fill="currentColor"
+    />
   </svg>
 );
 export const IconChat = ({ className }: IconProps) => (

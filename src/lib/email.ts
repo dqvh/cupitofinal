@@ -25,6 +25,7 @@ interface SubscriptionEmailParams {
   planName: string;
   planPrice: string;
   slug: string;
+  benefits?: string[];
 }
 
 interface WelcomeAccountEmailParams {
@@ -32,6 +33,64 @@ interface WelcomeAccountEmailParams {
   ownerName: string;
   businessName: string;
   slug: string;
+}
+
+interface ReviewRequestEmailParams {
+  toEmail: string;
+  clientName: string;
+  businessName: string;
+  serviceName: string;
+  slug: string;
+}
+
+/**
+ * 1c. Pedido de reseña por email (se manda al marcar "Atendida" si hay email).
+ * El botón abre directo el modal de reseña en la página pública (?resena=1).
+ */
+export async function sendReviewRequestEmail(params: ReviewRequestEmailParams) {
+  if (!params.toEmail || !params.toEmail.includes("@")) return;
+
+  const subject = `¿Cómo te fue en ${params.businessName}? Contanos ⭐`;
+  const reviewUrl = `https://cupito.app/${params.slug}?resena=1`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f5;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:520px;background-color:#ffffff;border-radius:20px;border:1px solid #e4e4e7;overflow:hidden;" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="padding:32px 36px;text-align:center;">
+              <p style="margin:0;font-size:40px;">⭐</p>
+              <h1 style="margin:12px 0 8px;font-size:22px;font-weight:800;color:#09090b;">
+                ¡Hola ${escapeHtml(params.clientName.trim().split(" ")[0])}!
+              </h1>
+              <p style="margin:0 0 24px;font-size:14.5px;line-height:1.6;color:#52525b;">
+                Gracias por tu ${escapeHtml(params.serviceName)} en <strong style="color:#09090b;">${escapeHtml(params.businessName)}</strong>.
+                ¿Nos dejás una reseña? Te toma 30 segundos y nos ayuda un montón.
+              </p>
+              <a href="${reviewUrl}" target="_blank" style="display:inline-block;width:100%;box-sizing:border-box;background-color:#0c241c;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:14px 24px;border-radius:12px;text-align:center;">
+                ⭐ Dejar mi reseña
+              </a>
+              <p style="margin:16px 0 0;font-size:11px;color:#a1a1aa;">Se abre directo el formulario, sin registrarte.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+  return sendViaApi({ to: params.toEmail, subject, html });
 }
 
 /**
@@ -474,6 +533,18 @@ export async function sendSubscriptionWelcomeEmail(params: SubscriptionEmailPara
                   </td>
                 </tr>
               </table>
+
+              ${(params.benefits || []).length > 0 ? `
+              <p style="margin:0 0 12px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#71717a;">Lo que se activa en tu cuenta:</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="6" style="margin-bottom:28px;">
+                ${(params.benefits || []).map((b) => `
+                <tr>
+                  <td style="vertical-align:top;width:26px;padding-left:0;">
+                    <div style="width:22px;height:22px;border-radius:50%;background-color:#ecfdf5;color:#059669;font-weight:700;font-size:12px;text-align:center;line-height:22px;">✓</div>
+                  </td>
+                  <td style="font-size:13.5px;color:#3f3f46;line-height:1.5;">${escapeHtml(b)}</td>
+                </tr>`).join("")}
+              </table>` : ""}
 
               <!-- Botón Ir al Panel -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:24px;">

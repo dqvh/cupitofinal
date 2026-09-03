@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { PLAN_META, type Plan, useStore } from "../lib/store";
-import { LogoMark, IconCheck, IconArrow } from "./kit";
+import { LogoMark, IconCheck, IconArrow, LegalModal, TERMS_DOC, PRIVACY_DOC } from "./kit";
 import { sendWelcomeAccountEmail } from "../lib/email";
 
 type Mode = "registro" | "login";
@@ -34,6 +34,7 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const [shakeKey, setShakeKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [pickPlan, setPickPlan] = useState(false);
+  const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   const [chosen, setChosen] = useState<Plan>(presetPlan ?? "crece");
 
   const switchMode = (m: Mode) => { setMode(m); setError(null); setPickPlan(false); };
@@ -118,7 +119,7 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
             <p className="mt-3 text-sm text-paper/55">Marcos Ledesma · Barbería La 9</p>
           </div>
         </div>
-        <p className="relative text-sm text-paper/45">Hecho para negocios de barrio · 14 días gratis · Sin tarjeta</p>
+        <p className="relative text-sm text-paper/45">Hecho para negocios de barrio · Gratis para empezar · Sin tarjeta</p>
       </aside>
 
       <main className="flex min-h-screen items-center justify-center px-5 py-14 sm:px-10">
@@ -226,11 +227,12 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
 
             {!pickPlan && (
               <p className="mt-6 text-center text-xs leading-relaxed text-inkmute">
-                Al continuar aceptás nuestros <a href="#/" className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-2">términos</a> y{" "}
-                <a href="#/" className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-2">política de privacidad</a>.
+                Al continuar aceptás nuestros <button type="button" onClick={() => setLegal("terms")} className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-2">términos</button> y{" "}
+                <button type="button" onClick={() => setLegal("privacy")} className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-2">política de privacidad</button>.
               </p>
             )}
           </div>
+          {legal && <LegalModal doc={legal === "terms" ? TERMS_DOC : PRIVACY_DOC} onClose={() => setLegal(null)} />}
           {!pickPlan && (
             <p className="mt-6 text-center text-sm text-inkmute">
               {mode === "registro" ? "¿Ya tenés cuenta? " : "¿Todavía no tenés cuenta? "}

@@ -802,9 +802,9 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
 
             {/* Tarjeta de comprobante limpio */}
             <div className="mx-auto mt-4 max-w-sm rounded-2xl border-2 border-dashed border-ink/15 bg-white p-4 text-left shadow-sm">
-              <div className="flex items-center justify-between border-b border-ink/10 pb-2">
-                <span className="inline-flex items-center gap-1.5 font-display text-[11px] font-extrabold uppercase tracking-wider text-fern">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" /> Turno agendado
+              <div className="flex items-center justify-between gap-2 border-b border-ink/10 pb-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 font-display text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">
+                  <IconCheck className="h-3 w-3 stroke-[3]" /> Turno agendado
                 </span>
                 <CopyButton
                   text={`Turno en ${user.business}: ${service.name} para ${client} el ${fmtLong(selectedDate)} a las ${time} hs.`}

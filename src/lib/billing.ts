@@ -11,6 +11,25 @@ export const PLAN_AMOUNTS: Record<PaidPlan, Record<BillingCycle, number>> = {
   escala: { mensual: 22000, anual: 18300 },
 };
 
+/* Beneficios que se listan en el email de bienvenida al plan */
+export const PLAN_BENEFITS: Record<PaidPlan, string[]> = {
+  crece: [
+    "Reservas ilimitadas (chau tope de 25)",
+    "Hasta 3 profesionales con agenda propia",
+    "Seña por transferencia con verificación en 1 clic",
+    "Tienda de productos y cupones de descuento",
+    "Página con los colores de tu marca",
+    "Confirmación y recordatorio por email a tus clientes",
+  ],
+  escala: [
+    "Todo lo del plan Crece",
+    "Profesionales y equipos ilimitados",
+    "Lista de espera inteligente con prioridad",
+    "Estadísticas avanzadas y exportación a Excel",
+    "Soporte preferencial",
+  ],
+};
+
 const PENDING_KEY = "cupito_mp_pending";
 
 export function requestCheckout(plan: Plan) {

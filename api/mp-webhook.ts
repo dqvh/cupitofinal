@@ -53,6 +53,30 @@ export default async function handler(req: Request): Promise<Response> {
       const supabase = createClient(sUrl, sKey);
       if (status === "authorized") {
         await supabase.from("cupito_users").update({ plan: planId }).eq("email", email);
+        // Bienvenida por email (cubre al que pagó y cerró la pestaña sin volver).
+        // El flujo normal ya la manda desde el front; acá es respaldo.
+        const resendKey = process.env.RESEND_API_KEY;
+        if (resendKey && email.includes("@")) {
+          const benefits =
+            planId === "escala"
+              ? ["Todo lo del plan Crece", "Profesionales ilimitados", "Lista de espera con prioridad", "Estadísticas avanzadas y Excel", "Soporte preferencial"]
+              : ["Reservas ilimitadas", "Hasta 3 profesionales", "Seña por transferencia", "Tienda y cupones", "Página con tus colores", "Confirmación y recordatorio por email"];
+          const planName = planId === "escala" ? "Escala" : "Crece";
+          try {
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                from: process.env.RESEND_FROM || "Cupito <hola@cupito.app>",
+                to: [email],
+                subject: `Tu suscripción a Cupito ${planName} está activa 🚀`,
+                html: `<!DOCTYPE html><html lang="es"><body style="margin:0;padding:0;background-color:#f4f4f5;font-family:sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 16px;"><tr><td align="center"><table width="100%" style="max-width:520px;background-color:#ffffff;border-radius:20px;padding:32px 36px;" cellpadding="0" cellspacing="0"><tr><td><h1 style="font-size:22px;color:#09090b;">¡Suscripción confirmada! 🎉</h1><p style="font-size:14.5px;color:#52525b;">Tu plan <strong>${planName}</strong> ya está activo. Entrá a tu panel: <a href="https://cupito.app/#/app">cupito.app/#/app</a></p><p style="font-size:13px;font-weight:700;color:#71717a;">LO QUE SE ACTIVA:</p><ul style="font-size:13.5px;color:#3f3f46;">${benefits.map((b) => `<li>${b}</li>`).join("")}</ul></td></tr></table></td></tr></table></body></html>`,
+              }),
+            });
+          } catch {
+            /* el plan ya quedó activo; el email es cortesía */
+          }
+        }
       } else if (status === "paused" || status === "cancelled") {
         await supabase.from("cupito_users").update({ plan: "semilla" }).eq("email", email);
       }

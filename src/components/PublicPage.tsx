@@ -8,10 +8,9 @@ import { Reveal, LogoMark, IconCheck, IconClock, IconCalendar, IconBag, IconStar
 export default function PublicPage({ slug }: { slug: string }) {
   const page = usePublicPage(slug);
   const { addReviewFor, toast, fetchPageRemote, sessionUserId } = useStore();
-  const [showReviewModal, setShowReviewModal] = useState(false);
-  const [loadingRemote, setLoadingRemote] = useState(!page);
 
   // Los emails traen ?buscar=1 para abrir directo «Mis turnos» (ver/cancelar).
+  // El pedido de reseña trae ?resena=1 para abrir directo el formulario.
   const autoOpenLookup = (() => {
     try {
       if ((window.location.search || "").includes("buscar=1")) return true;
@@ -20,6 +19,17 @@ export default function PublicPage({ slug }: { slug: string }) {
     } catch { /* noop */ }
     return false;
   })();
+  const autoOpenReview = (() => {
+    try {
+      if ((window.location.search || "").includes("resena=1")) return true;
+      const h = window.location.hash || "";
+      if (h.includes("resena=1")) return true;
+    } catch { /* noop */ }
+    return false;
+  })();
+
+  const [showReviewModal, setShowReviewModal] = useState(autoOpenReview);
+  const [loadingRemote, setLoadingRemote] = useState(!page);
 
   useEffect(() => {
     // Si estoy viendo mi propia página logueado, lo local ya es lo más fresco.

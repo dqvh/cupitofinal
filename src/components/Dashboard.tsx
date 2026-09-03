@@ -43,6 +43,7 @@ import {
   getPreapprovalIdFromUrl,
   readPendingCheckout,
   requestCheckout,
+  PLAN_BENEFITS,
 } from "../lib/billing";
 import {
   Reveal,
@@ -207,6 +208,7 @@ export default function Dashboard() {
             planName: PLAN_META[plan].name,
             planPrice: PLAN_META[plan].price,
             slug: user.slug,
+            benefits: PLAN_BENEFITS[plan],
           }).catch(() => {});
         }
       } else if (result.error) {
@@ -469,7 +471,10 @@ export default function Dashboard() {
                       <BookingRow key={b.id} b={b} service={serviceOf(b.serviceId)} pro={data.professionals.find((p) => p.id === b.proId)} products={data.products} businessName={user.business}
                         onStatus={(id, s) => {
                           setStatus(id, s);
-                          if (s === "atendida") { requestReview(id); toast("Turno atendido · le enviamos el link de reseña a su email 💌"); }
+                          if (s === "atendida") {
+                            const r = requestReview(id);
+                            toast(r === "sent" ? "Turno atendido · link de reseña enviado por email 💌" : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp 📲", r === "sent" ? "ok" : "warn");
+                          }
                           else if (s === "ausente") { toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn"); }
                           else toast(s === "cancelada" ? "Turno cancelado. El hueco quedó libre." : "Turno confirmado.");
                         }}
@@ -698,8 +703,8 @@ export default function Dashboard() {
                                   onStatus={(id, s) => {
                                     setStatus(id, s);
                                     if (s === "atendida") {
-                                      requestReview(id);
-                                      toast("Turno atendido · link de reseña enviado 💌");
+                                      const r = requestReview(id);
+                                      toast(r === "sent" ? "Turno atendido · link de reseña enviado por email 💌" : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp 📲", r === "sent" ? "ok" : "warn");
                                     } else if (s === "ausente") {
                                       toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn");
                                     } else toast("Estado actualizado.");
@@ -1152,7 +1157,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
               {[1, 2, 3, 4, 5, 6, 0].map((dayIdx) => {
                 const h = hours[dayIdx];
                 return (
-                  <div key={dayIdx} className={`flex items-center justify-between rounded-xl border-2 p-3 transition-colors ${h.open ? "border-ink/12 bg-white/70" : "border-ink/8 bg-ink/[0.03] opacity-60"}`}>
+                  <div key={dayIdx} className={`flex items-center justify-between gap-3 rounded-2xl border-2 p-3.5 transition-all ${h.open ? "border-fern/40 bg-white shadow-sm" : "border-ink/8 bg-ink/[0.03] opacity-70"}`}>
                     <div className="flex items-center gap-3">
                       <Toggle
                         on={h.open}
@@ -1163,7 +1168,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                         }}
                         label={`Abrir ${DAY_NAMES[dayIdx]}`}
                       />
-                      <span className={`font-display text-xs font-bold sm:text-sm ${h.open ? "text-ink" : "text-inkmute"}`}>
+                      <span className={`font-display text-sm font-bold sm:text-[15px] ${h.open ? "text-ink" : "text-inkmute"}`}>
                         {DAY_NAMES[dayIdx]}
                       </span>
                     </div>
@@ -1171,7 +1176,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                       <div className="flex items-center gap-1.5 text-xs">
                         <input
                           type="time"
-                          className="field !h-8 !w-auto !py-1 !text-xs"
+                          className="field !h-11 !w-auto !px-2 !py-1 !text-sm font-bold"
                           value={h.from}
                           onChange={(e) => {
                             const next = [...hours];
@@ -1179,10 +1184,10 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                             setHours(next);
                           }}
                         />
-                        <span className="text-inkmute">a</span>
+                        <span className="font-bold text-inkmute">a</span>
                         <input
                           type="time"
-                          className="field !h-8 !w-auto !py-1 !text-xs"
+                          className="field !h-11 !w-auto !px-2 !py-1 !text-sm font-bold"
                           value={h.to}
                           onChange={(e) => {
                             const next = [...hours];
@@ -1192,7 +1197,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                         />
                       </div>
                     ) : (
-                      <span className="text-xs font-bold text-inkmute">Cerrado</span>
+                      <span className="rounded-full bg-ink/8 px-3 py-1 text-xs font-bold text-inkmute">Cerrado</span>
                     )}
                   </div>
                 );
@@ -1202,7 +1207,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
             <button
               type="button"
               onClick={saveHoursAndNext}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine shadow-block-ink"
+              className="mt-4 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine active:translate-y-0 active:scale-[0.98] shadow-block-ink"
             >
               Guardar horarios y continuar <IconArrow className="h-4 w-4" />
             </button>
@@ -1212,7 +1217,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
         {/* Paso 1: Primer Servicio */}
         {step === 1 && (
           <div className="pop-in mt-6 space-y-4">
-            <div>
+            <div className="rounded-2xl border-2 border-ink/10 bg-white/60 p-4">
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Nombre del servicio</label>
               <input
                 className="field"
@@ -1224,23 +1229,23 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="rounded-2xl border-2 border-ink/10 bg-white/60 p-4">
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Precio (ARS)</label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-inkmute">$</span>
                   <input
                     type="number"
-                    className="field !pl-8"
+                    className="field !pl-8 font-display font-bold"
                     placeholder="10000"
                     value={servicePrice}
                     onChange={(e) => setServicePrice(e.target.value)}
                   />
                 </div>
               </div>
-              <div>
+              <div className="rounded-2xl border-2 border-ink/10 bg-white/60 p-4">
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Duración</label>
                 <select
-                  className="field cursor-pointer"
+                  className="field cursor-pointer font-semibold"
                   value={serviceDuration}
                   onChange={(e) => setServiceDuration(e.target.value)}
                 >
@@ -1259,7 +1264,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                 type="button"
                 onClick={saveServiceAndNext}
                 disabled={!serviceName.trim()}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine disabled:opacity-50 shadow-block-ink"
+                className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine active:translate-y-0 active:scale-[0.98] disabled:opacity-50 shadow-block-ink"
               >
                 {serviceName.trim() ? "Guardar servicio y continuar" : "Ingresá el nombre del servicio"} <IconArrow className="h-4 w-4" />
               </button>
@@ -1538,7 +1543,7 @@ function BookingModal({ initialDate, initialClient, initialPhone, initialService
           </div>
         </div>
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-        <button type="submit" className="w-full rounded-full bg-coral py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)]">Crear reserva</button>
+        <button type="submit" className="min-h-[52px] w-full rounded-full bg-coral py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)] active:translate-y-0 active:scale-[0.98]">Crear reserva</button>
       </form>
     </Modal>
   );
@@ -2344,7 +2349,7 @@ function ServiceModal({ service, onClose }: { service?: Service; onClose: () => 
           </div>
         </div>
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-        <button type="submit" className="w-full rounded-full bg-evergreen py-3.5 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">{service ? "Guardar cambios" : "Publicar servicio"}</button>
+        <button type="submit" className="min-h-[52px] w-full rounded-full bg-evergreen py-3.5 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine active:translate-y-0 active:scale-[0.98]">{service ? "Guardar cambios" : "Publicar servicio"}</button>
       </form>
     </Modal>
   );
@@ -2907,8 +2912,8 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
   const plans: Plan[] = ["semilla", "crece", "escala"];
   const desc: Record<Plan, string[]> = {
     semilla: ["1 profesional", "25 reservas al mes", "Link web propio", "Recordatorios por email", "Horarios configurables"],
-    crece: ["Reservas ilimitadas", "Hasta 3 profesionales", "Cobro de seña (Mercado Pago / Transferencia)", "Tienda de productos y cupones", "Horarios por día con corte"],
-    escala: ["Todo lo de Crece", "Profesionales y equipos ilimitados", "Estadísticas avanzadas y exportación", "Lista de espera con prioridad (recurrentes primero)", "Paletas de colores exclusivas", "Soporte prioritario"],
+    crece: ["Reservas ilimitadas", "Hasta 3 profesionales", "Cobro de seña (Mercado Pago / Transferencia)", "Tienda de productos y cupones", "Página con los colores de tu marca", "Horarios por día con corte"],
+    escala: ["Todo lo de Crece", "Profesionales y equipos ilimitados", "Estadísticas avanzadas y exportación", "Lista de espera con prioridad (recurrentes primero)", "Soporte prioritario"],
   };
 
   const nextDateStr = fmtDateHuman(sub?.nextRenewal || new Date(Date.now() + 30 * 86400000).toISOString());
@@ -3717,8 +3722,8 @@ function AccountTab() {
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button type="button" onClick={() => onChange(!on)} aria-label={label} aria-pressed={on}
-      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ${on ? "bg-fern" : "bg-ink/20"}`}>
-      <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all duration-200 ${on ? "left-6" : "left-1"}`} />
+      className={`relative h-8 w-[52px] shrink-0 rounded-full transition-colors duration-200 ${on ? "bg-fern shadow-[inset_0_2px_4px_rgba(0,0,0,0.15)]" : "bg-ink/20"}`}>
+      <span className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all duration-200 ${on ? "left-[22px]" : "left-1"}`} />
     </button>
   );
 }

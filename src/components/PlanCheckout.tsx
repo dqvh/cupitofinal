@@ -3,6 +3,7 @@ import { PLAN_META, type Plan, useStore } from "../lib/store";
 import { sendSubscriptionWelcomeEmail } from "../lib/email";
 import {
   PLAN_AMOUNTS,
+  PLAN_BENEFITS,
   createMercadoPagoCheckout,
   isPaidPlan,
   savePendingCheckout,
@@ -123,6 +124,7 @@ export function PlanCheckout({
                         planName: PLAN_META[plan].name,
                         planPrice: PLAN_META[plan].price,
                         slug: user.slug,
+                        benefits: PLAN_BENEFITS[plan],
                       }).catch(() => {});
                     }
                     onClose();

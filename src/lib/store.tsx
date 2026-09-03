@@ -21,6 +21,7 @@ import {
   saveRemoteBooking,
   saveRemoteWaitlist,
 } from "./supabase";
+import { sendReviewRequestEmail } from "./email";
 
 /* ================= tipos ================= */
 
@@ -795,9 +796,8 @@ interface StoreApi {
   updateProfessional(id: string, patch: Partial<Omit<Professional, "id">>): void;
   removeProfessional(id: string): void;
   addWaitlist(e: { date: string; serviceId: string; client: string; phone: string }, ownerId?: string): string | null;
-  removeWaitlist(id: string): void;
-  createBookingFromWaitlist(waitlistId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
-  requestReview(bookingId: string): void;
+  removeWaitlist(id: string): void;  createBookingFromWaitlist(waitlistId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
+  requestReview(bookingId: string): "sent" | "noemail";
   addBooking(b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   addBookingFor(ownerId: string, b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): { ok: true; id: string } | { ok: false; error: string };
   rescheduleBooking(id: string, newDate: string, newTime: string, newProId?: string): { ok: boolean; error?: string };
@@ -1442,11 +1442,27 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     return { ok: true, id } as const;
   },
   requestReview(bookingId) {
-    if (!sessionUserId) return;
+    if (!sessionUserId) return "noemail" as const;
     const data = loadData(sessionUserId);
+    const target = data.bookings.find((b) => b.id === bookingId);
     data.bookings = data.bookings.map((b) => (b.id === bookingId ? { ...b, reviewRequested: true } : b));
     saveData(sessionUserId, data);
     emit();
+    // Pedido real: si hay email, se manda de verdad. Si no, el dueño avisa por WhatsApp.
+    const owner = users.find((u) => u.id === sessionUserId);
+    const toEmail = (target?.email || "").trim();
+    if (owner && toEmail.includes("@") && target) {
+      const svc = data.services.find((s) => s.id === target.serviceId);
+      sendReviewRequestEmail({
+        toEmail,
+        clientName: target.client,
+        businessName: owner.business,
+        serviceName: svc?.name || "atención",
+        slug: owner.slug,
+      }).catch(() => {});
+      return "sent" as const;
+    }
+    return "noemail" as const;
   },
   addBooking({ client, phone, serviceId, date, time, source, items, proId }) {
     if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta para crear reservas." };

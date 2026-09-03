@@ -22,6 +22,9 @@ import {
   IconWhatsApp,
   IconMail,
   IconInstagram,
+  LegalModal,
+  TERMS_DOC,
+  PRIVACY_DOC,
 } from "./components/kit";
 
 /* ================================================================
@@ -437,7 +440,7 @@ function Hero() {
               <a href="/studio-nails" target="_blank" rel="noreferrer" className="font-display font-bold text-lime underline decoration-limedeep/60 decoration-2 underline-offset-4 transition-colors hover:text-limedeep">Mirá el ejemplo en vivo →</a>
             </p>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-paper/60">
-              <span className="inline-flex items-center gap-2"><IconCheck className="h-4 w-4 text-lime" /> 14 días gratis</span>
+              <span className="inline-flex items-center gap-2"><IconCheck className="h-4 w-4 text-lime" /> Plan gratis para siempre</span>
               <span className="inline-flex items-center gap-2"><IconCheck className="h-4 w-4 text-lime" /> Sin tarjeta</span>
               <span className="inline-flex items-center gap-2"><IconCheck className="h-4 w-4 text-lime" /> Listo en 10 minutos</span>
             </div>
@@ -1116,7 +1119,7 @@ function Pricing() {
                   )}
                   <div className="flex items-baseline justify-between">
                     <h3 className={`font-display text-2xl font-extrabold ${p.highlight ? "text-lime" : "text-ink"}`}>{p.name}</h3>
-                    {p.highlight && <span className="rounded-full bg-lime/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-lime">14 días gratis</span>}
+                    {p.highlight && <span className="rounded-full bg-lime/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-lime">El más elegido</span>}
                   </div>
                   <p className={`mt-2 text-sm ${p.highlight ? "text-paper/65" : "text-inkmute"}`}>{p.tagline}</p>
                   <div className="mt-6 flex items-end gap-2">
@@ -1228,7 +1231,38 @@ function SubscriptionModal({ plan, billing, onClose }: { plan: PlanDef; billing:
 
 function CustomPlanModal({ onClose }: { onClose: () => void }) {
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
   const [form, setForm] = useState({ nombre: "", negocio: "", email: "", sucursales: "", mensaje: "" });
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSending(true);
+    const lines = [
+      `Nombre: ${form.nombre}`,
+      `Negocio: ${form.negocio}`,
+      `Email: ${form.email}`,
+      form.sucursales ? `Sucursales: ${form.sucursales}` : null,
+      form.mensaje ? `Necesidad: ${form.mensaje}` : null,
+    ].filter(Boolean);
+    // 1) Te llega a tu email para que quede registro
+    try {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: "hola@cupito.app",
+          subject: `Plan a medida: ${form.negocio} (${form.nombre})`,
+          html: `<h2>Nuevo pedido de plan a medida</h2><ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul>`,
+        }),
+      });
+    } catch { /* igual seguimos al paso 2 */ }
+    // 2) Se abre tu WhatsApp con la propuesta lista para enviar
+    const text = `¡Hola! Soy ${form.nombre} de ${form.negocio} (${form.email}). ${form.sucursales ? `Tengo ${form.sucursales} sucursales. ` : ""}${form.mensaje ? `Necesito: ${form.mensaje}` : "Quiero un plan a medida."}`;
+    setSending(false);
+    setSent(true);
+    window.open(`https://wa.me/5491131996205?text=${encodeURIComponent(text)}`, "_blank");
+  };
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-[2px]" onClick={onClose}>
       <div className="pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" onClick={(e) => e.stopPropagation()}>
@@ -1238,19 +1272,20 @@ function CustomPlanModal({ onClose }: { onClose: () => void }) {
         </div>
         {sent ? (
           <div className="pop-in mt-5 text-center">
-            <p className="text-lg font-bold text-fern">Te escribimos en menos de 24 h.</p>
-            <p className="mt-2 text-sm text-inkmute">Gracias{form.nombre ? `, ${form.nombre.split(" ")[0]}` : ""}. Armamos juntos un plan para {form.negocio || "tu negocio"} y te lo mandamos a {form.email}.</p>
+            <p className="text-lg font-bold text-fern">¡Propuesta en camino! ✅</p>
+            <p className="mt-2 text-sm text-inkmute">Se abrió tu WhatsApp con el mensaje listo{form.nombre ? `, ${form.nombre.split(" ")[0]}` : ""}. Envialo y te respondemos en menos de 24 h. También nos llegó a nuestro email.</p>
             <button onClick={onClose} className="mt-5 rounded-full bg-evergreen px-6 py-2.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5">Listo</button>
           </div>
         ) : (
-          <form onSubmit={(e) => { e.preventDefault(); setSent(true); }} className="mt-5 space-y-3.5">
+          <form onSubmit={submit} className="mt-5 space-y-3.5">
             <p className="text-sm text-inkmute">Contanos de tu negocio y te preparamos una propuesta.</p>
             <input required className="field" placeholder="Tu nombre *" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
             <input required className="field" placeholder="Nombre del negocio *" value={form.negocio} onChange={(e) => setForm({ ...form, negocio: e.target.value })} />
             <input required type="email" className="field" placeholder="Email *" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <input className="field" placeholder="¿Cuántas sucursales tenés?" value={form.sucursales} onChange={(e) => setForm({ ...form, sucursales: e.target.value })} />
             <textarea className="field min-h-20 resize-none" placeholder="¿Qué necesitás que haga Cupito por vos?" value={form.mensaje} onChange={(e) => setForm({ ...form, mensaje: e.target.value })} />
-            <button type="submit" className="w-full rounded-full bg-coral py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)]">Pedir mi propuesta →</button>
+            <button type="submit" disabled={sending} className="w-full rounded-full bg-coral py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)] disabled:opacity-60">{sending ? "Enviando…" : "Pedir mi propuesta →"}</button>
+            <p className="text-center text-[11px] text-inkmute">Te llega directo a nuestro WhatsApp y email.</p>
           </form>
         )}
       </div>
@@ -1266,7 +1301,7 @@ const FAQS = [
   },
   {
     q: "¿Es realmente gratis para empezar?",
-    a: "Sí, tenés 14 días de prueba completa con todas las funciones desbloqueadas sin poner ningún dato de tarjeta de crédito. Además, contás con el plan Semilla gratuito para siempre (hasta 25 reservas al mes). Si tu negocio crece, pasás al plan Crece cuando quieras.",
+    a: "El plan Semilla es gratuito para siempre (hasta 25 reservas al mes) y no pide tarjeta. Si tu negocio crece, pasás al plan Crece cuando quieras.",
   },
   {
     q: "¿Cómo funciona la seña por transferencia?",
@@ -1370,6 +1405,7 @@ function Faq() {
 
 /* ============ FOOTER ============ */
 function Footer() {
+  const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   return (
     <footer className="relative overflow-hidden bg-evergreen text-paper">
       <div className="relative border-b border-paper/10">
@@ -1392,7 +1428,7 @@ function Footer() {
                 Ver el ejemplo en vivo ↗
               </a>
             </div>
-            <p className="mt-7 text-sm text-paper/50">14 días gratis · Sin tarjeta · Cancelás cuando quieras · Tus datos son tuyos</p>
+            <p className="mt-7 text-sm text-paper/50">Plan gratis para siempre · Sin tarjeta · Cancelás cuando quieras · Tus datos son tuyos</p>
           </Reveal>
         </div>
       </div>
@@ -1429,11 +1465,12 @@ function Footer() {
         <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-paper/10 pt-8 sm:flex-row">
           <p className="text-sm text-paper/45">© 2026 Cupito. Todos los cupitos reservados.</p>
           <div className="flex gap-6 text-sm text-paper/45">
-            <a href="#inicio" className="transition-colors hover:text-lime">Términos</a>
-            <a href="#inicio" className="transition-colors hover:text-lime">Privacidad</a>
+            <button onClick={() => setLegal("terms")} className="transition-colors hover:text-lime">Términos</button>
+            <button onClick={() => setLegal("privacy")} className="transition-colors hover:text-lime">Privacidad</button>
           </div>
         </div>
       </div>
+      {legal && <LegalModal doc={legal === "terms" ? TERMS_DOC : PRIVACY_DOC} onClose={() => setLegal(null)} />}
       <p className="pointer-events-none select-none whitespace-nowrap text-center font-display text-[19vw] font-extrabold leading-[0.72] tracking-tighter text-paper/[0.04]" aria-hidden="true">cupito.</p>
     </footer>
   );
