@@ -56,7 +56,7 @@ function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme }:
           <IconChevron className="h-4 w-4 rotate-180" />
         </button>
         <p className="font-display text-base font-extrabold capitalize text-ink">{label}</p>
-        <button type="button" disabled={curMonth >= nowMonth + 2} onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Mes siguiente"
+        <button type="button" disabled={curMonth >= nowMonth + 1} onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Mes siguiente"
           className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/12 bg-white/60 text-ink transition-all enabled:hover:translate-x-0.5 enabled:hover:border-ink enabled:hover:bg-white disabled:opacity-30">
           <IconChevron className="h-4 w-4" />
         </button>
@@ -69,14 +69,17 @@ function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme }:
           if (d === null) return <span key={`x${i}`} />;
           const key = dateKey(new Date(year, month, d));
           const past = key < dateKey(now);
+          const maxDate = dateKey(addDays(now, 30));
+          const tooFar = key > maxDate;
           const closed = isClosed(key);
           const sel = key === selected;
-          const disabled = past || closed;
+          const disabled = past || tooFar || closed;
           return (
             <button type="button" key={key} disabled={disabled} onClick={() => onSelect(key)}
+              title={tooFar ? "Solo podés reservar hasta con 30 días de anticipación" : undefined}
               className={`relative flex aspect-square items-center justify-center rounded-lg border-2 font-display text-sm font-bold transition-all duration-150 ${sel ? theme.activeSlot : disabled ? "cursor-not-allowed border-transparent bg-ink/[0.04] text-ink/25" : "border-ink/10 bg-white/60 text-ink hover:-translate-y-0.5 hover:border-ink/40"}`}>
               {d}
-              {closed && !past && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-coral/60" />}
+              {closed && !past && !tooFar && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-coral/60" />}
             </button>
           );
         })}
@@ -144,11 +147,24 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const service = biz.services.find((s) => s.id === serviceId);
   const pro = biz.professionals.find((p) => p.id === proId);
 
+  const now = new Date();
+  const todayKey = dateKey(now);
+  const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
   const hoursFor = (key: string) => settings.hours[dayOfWeek(key)];
-  const isClosed = (key: string) => !hoursFor(key).open;
-  const slots = selectedDate ? slotsForDay(hoursFor(selectedDate)) : [];
+  const isClosed = (key: string) => {
+    if (!hoursFor(key).open) return true;
+    if (key === todayKey) {
+      const todaySlots = slotsForDay(hoursFor(key));
+      if (todaySlots.length > 0 && todaySlots.every((t) => t <= currentHHMM)) return true;
+    }
+    return false;
+  };
+  const rawSlots = selectedDate ? slotsForDay(hoursFor(selectedDate)) : [];
+  // Para hoy no mostrar turnos pasados:
+  const slots = selectedDate === todayKey ? rawSlots.filter((t) => t > currentHHMM) : rawSlots;
   const takenTimes = (key: string) => biz.bookings.filter((b) => b.date === key && b.status !== "cancelada").map((b) => b.time);
-  const allTaken = slots.length > 0 && slots.every((t) => takenTimes(selectedDate ?? "").includes(t));
+  const allTaken = rawSlots.length > 0 && slots.every((t) => takenTimes(selectedDate ?? "").includes(t));
   const hasBreak = selectedDate ? !!hoursFor(selectedDate).from2 : false;
   const breakInfo = selectedDate ? { to: hoursFor(selectedDate).to, from2: hoursFor(selectedDate).from2 } : null;
 
@@ -176,6 +192,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
     if (err) return setWlError(err);
     setWlError(null);
     setWlDone(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
     if (owner === undefined) toast(`Nueva persona en lista de espera: ${wlClient.trim()} 👀`);
   };
 
@@ -211,6 +228,8 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
     setClient(""); setPhone(""); setEmail(""); setItems({}); setError(null); setDone(false);
     setCouponInput(""); setCoupon(null); setCouponMsg(null); setShowPay(false); setClaimed(false);
     setWlClient(""); setWlPhone(""); setWlDone(false); setWlError(null); setShowWlForm(false);
+    setShowAllSlots(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const stepNum = step === 0 ? 1 : step === 1 ? 2 : step === 2 ? (hasPros ? 3 : 2) : hasPros ? 4 : 3;
@@ -326,7 +345,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                       }`}
                     >
                       <span className="font-display text-xs font-bold leading-tight">{s.label}</span>
-                      <span className="mt-0.5 text-[10px] text-inkmute">{closed ? "Cerrado" : s.date.slice(8) + "/" + s.date.slice(5, 7)}</span>
+                      <span className="mt-0.5 text-[10px] text-inkmute">{closed ? (s.date === todayKey ? "Finalizado" : "Cerrado") : s.date.slice(8) + "/" + s.date.slice(5, 7)}</span>
                     </button>
                   );
                 })}
@@ -354,9 +373,23 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
             </div>
 
             {slots.length === 0 ? (
-              <p className="rounded-xl border-2 border-dashed border-coral/40 bg-coral/5 p-4 text-sm text-inkmute">
-                Ese día <strong className="text-ink">{user.business}</strong> no atiende. Elegí otro día en el calendario.
-              </p>
+              <div className="rounded-2xl border-2 border-dashed border-coral/30 bg-coral/5 p-4 text-center">
+                <p className="font-display text-sm font-bold text-ink">
+                  {selectedDate === todayKey
+                    ? "Por hoy ya no quedan turnos disponibles (finalizó el horario de atención o ya pasaron las horas)."
+                    : `Ese día ${user.business} no atiende.`}
+                </p>
+                <p className="mt-1 text-xs text-inkmute">
+                  Elegí mañana u otra fecha en el calendario para reservar con tranquilidad.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="mt-3 btn-press inline-flex items-center gap-1.5 rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime hover:bg-pine"
+                >
+                  ← Elegir otro día en el calendario
+                </button>
+              </div>
             ) : time && !showAllSlots ? (
               <div className="flex items-center justify-between rounded-2xl border-2 border-fern/30 bg-fern/10 p-3.5 text-ink shadow-sm">
                 <div className="flex items-center gap-3">
@@ -566,102 +599,95 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
 
         {/* éxito */}
         {done && selectedDate && time && service && (
-          <div id="booking-confirmed-ticket" className="pop-in relative py-2 text-center">
+          <div id="booking-confirmed-ticket" className="pop-in relative py-3 text-center">
             <ConfettiBurst />
-            <svg viewBox="0 0 56 56" className="mx-auto h-14 w-14">
-              <circle cx="28" cy="28" r="25" fill="none" stroke="currentColor" strokeWidth="4" className={`circle-draw ${theme.accentText}`} strokeLinecap="round" transform="rotate(-90 28 28)" />
-              <path d="M18 29l7 7 13-14" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" className={`check-draw ${theme.accentText}`} />
-            </svg>
-            <h4 className="mt-2 font-display text-2xl font-extrabold text-ink">
-              {claimed ? "¡Turno reservado!" : "¡Tu cupito está asegurado!"}
+
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 shadow-sm">
+              <IconCheck className="h-8 w-8 stroke-[3]" />
+            </div>
+
+            <h4 className="font-display text-2xl font-extrabold text-ink">
+              {claimed ? "¡Turno reservado!" : "¡Tu turno está confirmado!"}
             </h4>
-            <p className="mt-1 text-sm text-inkmute">
-              {service.name} · {fmtLong(selectedDate)} a las {time}
-              {pro && ` · con ${pro.name.split(" ")[0]}`}
-              {itemCount > 0 && ` · ${itemCount} producto${itemCount === 1 ? "" : "s"} agregado${itemCount === 1 ? "" : "s"}`}
+            <p className="mt-1 text-xs text-inkmute">
+              Te esperamos en <strong className="text-ink font-bold">{user.business}</strong>
             </p>
 
-            {/* Tarjeta de comprobante limpio con botón de copia */}
-            <div className="mt-4 rounded-2xl border-2 border-dashed border-ink/15 bg-white/80 p-4 text-left shadow-sm">
-              <div className="flex items-center justify-between border-b border-ink/10 pb-2.5">
-                <span className="font-display text-xs font-extrabold uppercase tracking-wider text-inkmute">Comprobante de turno</span>
+            {/* Tarjeta de comprobante limpio */}
+            <div className="mx-auto mt-4 max-w-sm rounded-2xl border-2 border-dashed border-ink/15 bg-white p-4 text-left shadow-sm">
+              <div className="flex items-center justify-between border-b border-ink/10 pb-2">
+                <span className="font-display text-[11px] font-extrabold uppercase tracking-wider text-fern">
+                  ● Turno agendado
+                </span>
                 <CopyButton
-                  text={`Turno en ${user.business}: ${service.name} para ${client} el ${fmtLong(selectedDate)} a las ${time}.`}
+                  text={`Turno en ${user.business}: ${service.name} para ${client} el ${fmtLong(selectedDate)} a las ${time} hs.`}
                   label="Copiar datos"
-                  copiedLabel="¡Datos copiados!"
+                  copiedLabel="Copiado ✓"
                 />
               </div>
-              <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-inkmute block">Negocio</span>
-                  <span className="font-bold text-ink">{user.business}</span>
+
+              <div className="mt-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-inkmute">Servicio</span>
+                  <span className="font-bold text-ink">{service.name}</span>
                 </div>
-                <div>
-                  <span className="text-inkmute block">Cliente</span>
+                {pro && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-inkmute">Profesional</span>
+                    <span className="font-bold text-ink">{pro.name}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-inkmute">Día y horario</span>
+                  <span className="font-bold text-ink">{fmtLong(selectedDate)} · {time} hs</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-inkmute">Cliente</span>
                   <span className="font-bold text-ink">{client}</span>
                 </div>
-                <div>
-                  <span className="text-inkmute block">Fecha y Hora</span>
-                  <span className="font-bold text-ink">{selectedDate} · {time} hs</span>
-                </div>
-                <div>
-                  <span className="text-inkmute block">Total del servicio</span>
-                  <span className="font-bold text-ink">{fmtMoney(total)}</span>
+                <div className="flex items-center justify-between border-t border-ink/10 pt-2 font-display text-sm font-extrabold">
+                  <span>Total</span>
+                  <span className="text-emerald-700">{fmtMoney(total)}</span>
                 </div>
               </div>
             </div>
 
             {claimed && (
-              <p className="mx-auto mt-3 max-w-sm rounded-xl border-2 border-amber-500/30 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-                Tu comprobante ya está con {user.business}. Apenas verifique la transferencia, tu turno queda confirmado y te avisamos por WhatsApp.
+              <p className="mx-auto mt-3 max-w-sm rounded-xl border border-amber-500/30 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                Tu comprobante de seña está en revisión por {user.business}. Apenas se acredite, te avisamos por WhatsApp.
               </p>
             )}
 
-            <div className="mt-5 space-y-2 text-left">
-              {/* Botón 1: Descarga universal .ics (iPhone / Android) */}
+            {/* Acciones principales limpias */}
+            <div className="mx-auto mt-5 max-w-sm space-y-2.5">
+              {settings.whatsapp && (
+                <a
+                  href={`https://wa.me/54${settings.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola! Soy ${client}. Acabo de reservar ${service.name} para el ${fmtLong(selectedDate)} a las ${time} hs 🙌`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 font-display text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition-colors"
+                >
+                  <IconWhatsApp className="h-4 w-4" /> Abrir WhatsApp con el local
+                </a>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
                   downloadIcs(icsContent({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration, desc: `Turno en ${user.business}, reservado con Cupito.` }));
-                  toast("Archivo de calendario (.ics) descargado — tocalo para sumarlo a tu celu 📅");
+                  toast("Turno descargado para tu calendario 📅");
                 }}
-                className={`btn-press flex w-full items-center justify-center gap-2 rounded-xl ${theme.primaryBtn} py-3 font-display text-[15px] font-bold shadow-sm active:translate-y-0`}
+                className="btn-press flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink/15 bg-white py-2.5 font-display text-xs font-bold text-ink hover:bg-ink/5 transition-colors"
               >
-                <IconCalendar className="h-4 w-4" /> Agregar a Apple Calendar / Celular (.ics)
+                <IconCalendar className="h-4 w-4 text-fern" /> Guardar en mi calendario (.ics)
               </button>
 
-              {/* Botón 2: Google Calendar */}
-              <a
-                href={gcalUrl({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration })}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-press flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink/15 bg-white/70 py-2.5 text-sm font-bold text-ink transition-all hover:border-ink/40 hover:bg-white"
-              >
-                📅 Abrir en Google Calendar ↗
-              </a>
-
-              {/* Botón 3: Modal explicativo paso a paso */}
               <button
                 type="button"
-                onClick={() => setShowCalHelp(true)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink/20 py-2 text-xs font-bold text-inkmute hover:text-ink hover:border-ink/40 transition-colors"
+                onClick={reset}
+                className="w-full pt-2 font-display text-xs font-bold text-inkmute hover:text-ink transition-colors"
               >
-                📱 ¿Cómo agrego este turno al calendario de mi celular? Ver paso a paso
-              </button>
-
-              {settings.whatsapp && (
-                <a
-                  href={`https://wa.me/54${settings.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola! Soy ${client}. Acabo de reservar ${service.name} para el ${fmtLong(selectedDate)} a las ${time} 🙌`)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-press flex w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-600/30 bg-emerald-50 py-2.5 text-sm font-bold text-emerald-800 transition-all hover:bg-emerald-100"
-                >
-                  <IconWhatsApp className="h-4 w-4 text-emerald-600" /> Avisar al negocio por WhatsApp (opcional)
-                </a>
-              )}
-
-              <button type="button" onClick={reset} className="w-full rounded-xl py-2 text-sm font-bold text-ink/50 transition-colors hover:text-ink">
-                Reservar otro turno
+                ← Reservar otro turno
               </button>
             </div>
           </div>

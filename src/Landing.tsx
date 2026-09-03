@@ -32,12 +32,9 @@ export default function Landing() {
       <Nav />
       <main>
         <Hero />
-        <Problem />
         <Solution />
-        <RoiCalculator />
-        <Features />
-        <Testimonials />
         <Pricing />
+        <Features />
         <Faq />
       </main>
       <Footer />
@@ -59,9 +56,9 @@ function Nav() {
   }, []);
 
   const links = [
-    { href: "#problema", label: "El problema" },
-    { href: "#solucion", label: "La solución" },
+    { href: "#solucion", label: "¿Cómo funciona?" },
     { href: "#precios", label: "Precios" },
+    { href: "#beneficios", label: "Funciones" },
     { href: "#faq", label: "FAQ" },
   ];
 
@@ -392,12 +389,11 @@ function Hero() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <a href="#/auth" className="group inline-flex items-center gap-2.5 rounded-full bg-lime px-7 py-4 font-display text-lg font-bold text-ink transition-all duration-200 hover:-translate-y-1 hover:bg-limedeep hover:shadow-[0_16px_40px_rgba(205,244,99,0.35)] active:translate-y-0">
-                Crear mi agenda gratis
+                Crear mi página gratis
                 <IconArrow className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1.5" />
               </a>
-              <a href="#solucion" className="group inline-flex items-center gap-3 rounded-full border-2 border-paper/25 px-6 py-[14px] font-display text-base font-bold text-paper transition-all duration-200 hover:border-lime hover:text-lime">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-paper/10 transition-colors group-hover:bg-lime/20"><IconPlay className="h-3.5 w-3.5 translate-x-px" /></span>
-                Ver cómo funciona
+              <a href="#precios" className="group inline-flex items-center gap-2.5 rounded-full border-2 border-paper/25 px-6 py-[14px] font-display text-base font-bold text-paper transition-all duration-200 hover:border-lime hover:text-lime">
+                Ver planes y precios ↓
               </a>
             </div>
             <p className="mt-4 text-sm text-paper/60">
@@ -777,7 +773,7 @@ function RoiCalculator() {
 /* ============ FEATURES ============ */
 function Features() {
   return (
-    <section className="relative bg-card py-24 lg:py-32">
+    <section id="beneficios" className="relative scroll-mt-24 bg-card py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <Reveal className="mx-auto max-w-2xl text-center">
           <p className="inline-flex items-center gap-2 rounded-full bg-fern/10 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-fern">Todo lo que necesitás</p>

@@ -116,7 +116,7 @@ export default function Dashboard() {
   const [weekStart, setWeekStart] = useState(0);
   const [showNew, setShowNew] = useState(false);
   const [rescheduling, setRescheduling] = useState<Booking | null>(null);
-  const [prefill, setPrefill] = useState<{ client: string; phone: string; serviceId?: string } | null>(null);
+  const [prefill, setPrefill] = useState<{ client: string; phone: string; serviceId?: string; waitlistId?: string } | null>(null);
   const [serviceModal, setServiceModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [filter, setFilter] = useState<"todas" | BookingStatus>("todas");
   const [proFilter, setProFilter] = useState<string>("todos");
@@ -508,7 +508,7 @@ export default function Dashboard() {
                                 <p className="text-xs text-inkmute">{w.phone} · {serviceOf(w.serviceId)?.name ?? "Servicio"}</p>
                               </div>
                               <div className="flex shrink-0 gap-1.5">
-                                <button onClick={() => { setPrefill({ client: w.client, phone: w.phone, serviceId: w.serviceId }); store.removeWaitlist(w.id); setShowNew(true); }}
+                                <button onClick={() => { setPrefill({ client: w.client, phone: w.phone, serviceId: w.serviceId, waitlistId: w.id }); setShowNew(true); }}
                                   className="rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Darle turno</button>
                                 <button onClick={() => { store.removeWaitlist(w.id); toast("Quitado de la lista.", "warn"); }} aria-label="Quitar"
                                   className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral"><IconTrash className="h-3.5 w-3.5" /></button>
@@ -627,7 +627,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} onClose={() => setShowNew(false)} />}
+      {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} waitlistId={prefill?.waitlistId} onClose={() => { setShowNew(false); setPrefill(null); }} />}
       {serviceModal.open && <ServiceModal service={serviceModal.id ? data.services.find((s) => s.id === serviceModal.id) : undefined} onClose={() => setServiceModal({ open: false })} />}
       {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => setCheckoutPlan(null)} />}
       {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} onGoToPlan={(p) => { setShowOnboarding(false); setCheckoutPlan(p); }} />}
@@ -1136,8 +1136,8 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-function BookingModal({ initialDate, initialClient, initialPhone, initialServiceId, onClose }: { initialDate: string; initialClient?: string; initialPhone?: string; initialServiceId?: string; onClose: () => void }) {
-  const { data, addBooking, toast } = useStore();
+function BookingModal({ initialDate, initialClient, initialPhone, initialServiceId, waitlistId, onClose }: { initialDate: string; initialClient?: string; initialPhone?: string; initialServiceId?: string; waitlistId?: string; onClose: () => void }) {
+  const { data, addBooking, removeWaitlist, toast } = useStore();
   const [client, setClient] = useState(initialClient ?? "");
   const [phone, setPhone] = useState(initialPhone ?? "");
   const [serviceId, setServiceId] = useState(initialServiceId ?? data?.services[0]?.id ?? "");
@@ -1158,6 +1158,9 @@ function BookingModal({ initialDate, initialClient, initialPhone, initialService
     if (!time) return setError("Elegí un horario.");
     const res = addBooking({ client, phone, serviceId, date, time, source: "manual", proId: proId || undefined });
     if (!res.ok) return setError(res.error);
+    if (waitlistId) {
+      removeWaitlist(waitlistId);
+    }
     toast(`Reserva creada: ${client.trim()} · ${date} ${time}`);
     onClose();
   };
