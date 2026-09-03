@@ -33,10 +33,12 @@ export default function Landing() {
       <main>
         <Hero />
         <Solution />
+        <RoiCalculator />
         <Pricing />
         <Features />
         <Faq />
       </main>
+      <StickyMobileBar />
       <Footer />
     </div>
   );
@@ -1287,5 +1289,39 @@ function Footer() {
       </div>
       <p className="pointer-events-none select-none whitespace-nowrap text-center font-display text-[19vw] font-extrabold leading-[0.72] tracking-tighter text-paper/[0.04]" aria-hidden="true">cupito.</p>
     </footer>
+  );
+}
+
+function StickyMobileBar() {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShow(window.scrollY > 480);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div className="fixed bottom-3 inset-x-3 z-40 md:hidden pop-in">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border-2 border-lime/30 bg-evergreen/95 px-4 py-3 text-paper shadow-2xl backdrop-blur-md">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <LogoMark className="h-7 w-7 text-lime shrink-0" />
+          <div className="truncate">
+            <p className="font-display text-xs font-extrabold text-paper leading-tight">Cupito</p>
+            <p className="text-[10px] text-paper/70 truncate">Creá tu página gratis en 2 min</p>
+          </div>
+        </div>
+        <a
+          href="#/login"
+          className="btn-press shrink-0 rounded-full bg-lime px-4 py-2 font-display text-xs font-extrabold text-ink shadow-sm active:scale-95"
+        >
+          Empezar gratis →
+        </a>
+      </div>
+    </div>
   );
 }

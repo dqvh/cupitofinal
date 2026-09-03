@@ -7,6 +7,7 @@ import {
   IconCheck, IconCalendar, IconChevron, IconBag, IconTicket, IconPlus, IconUsers,
   IconWhatsApp, LogoMark, IconSun, IconMoon, CopyButton, ConfettiBurst, Badge,
 } from "./kit";
+import { normalizeArgentinaPhone, cleanPhoneDigits, createWhatsAppUrl } from "../lib/phone";
 
 /* ---------- helpers .ics / Google Calendar ---------- */
 function toLocalStamp(dt: Date) {
@@ -97,7 +98,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const store = useStore();
   const user = owner ? owner.user : store.user;
   const biz = owner ? owner.data : store.data;
-  const { addBookingFor, addWaitlist, toast } = store;
+  const { addBookingFor, addWaitlist, cancelBookingByClient, toast } = store;
 
   const [step, setStep] = useState(0); // 0 servicio · 1 profesional · 2 fecha · 3 hora+datos
   const [serviceId, setServiceId] = useState<string | null>(null);
@@ -124,6 +125,15 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const [wlError, setWlError] = useState<string | null>(null);
   const [showWlForm, setShowWlForm] = useState(false);
   const [showAllSlots, setShowAllSlots] = useState(false);
+  const [confirmedId, setConfirmedId] = useState<string | null>(null);
+  const [cancelFeedback, setCancelFeedback] = useState<string | null>(null);
+  const [showLookupModal, setShowLookupModal] = useState(false);
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupFeedback, setLookupFeedback] = useState<string | null>(null);
+
+  const phoneVal = useMemo(() => normalizeArgentinaPhone(phone), [phone]);
+  const wlPhoneVal = useMemo(() => normalizeArgentinaPhone(wlPhone), [wlPhone]);
+  const lookupVal = useMemo(() => normalizeArgentinaPhone(lookupPhone), [lookupPhone]);
 
   useEffect(() => {
     if (done) {
@@ -157,6 +167,8 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
   const hoursFor = (key: string) => settings.hours[dayOfWeek(key)];
   const isClosed = (key: string) => {
     if (!hoursFor(key).open) return true;
+    if ((settings.closedDates || []).includes(key)) return true;
+    if ((biz.blockedSlots || []).some((bs) => bs.date === key && !bs.time && (!bs.proId || !proId || bs.proId === proId))) return true;
     if (key === todayKey) {
       const todaySlots = slotsForDay(hoursFor(key));
       if (todaySlots.length > 0 && todaySlots.every((t) => t <= currentHHMM)) return true;
@@ -164,9 +176,16 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
     return false;
   };
   const rawSlots = selectedDate ? slotsForDay(hoursFor(selectedDate)) : [];
-  // Para hoy no mostrar turnos pasados:
-  const slots = selectedDate === todayKey ? rawSlots.filter((t) => t > currentHHMM) : rawSlots;
-  const takenTimes = (key: string) => biz.bookings.filter((b) => b.date === key && b.status !== "cancelada").map((b) => b.time);
+  const blockedTimesForDate = (key: string) =>
+    (biz.blockedSlots || [])
+      .filter((bs) => bs.date === key && bs.time && (!bs.proId || !proId || bs.proId === proId))
+      .map((bs) => bs.time!);
+  const takenTimes = (key: string) => [
+    ...biz.bookings.filter((b) => b.date === key && b.status !== "cancelada" && (!b.proId || !proId || b.proId === proId)).map((b) => b.time),
+    ...blockedTimesForDate(key),
+  ];
+  const slots = (selectedDate === todayKey ? rawSlots.filter((t) => t > currentHHMM) : rawSlots)
+    .filter((t) => !blockedTimesForDate(selectedDate ?? "").includes(t));
   const allTaken = rawSlots.length > 0 && slots.every((t) => takenTimes(selectedDate ?? "").includes(t));
   const hasBreak = selectedDate ? !!hoursFor(selectedDate).from2 : false;
   const breakInfo = selectedDate ? { to: hoursFor(selectedDate).to, from2: hoursFor(selectedDate).from2 } : null;
@@ -201,7 +220,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
 
   const confirm = () => {
     if (client.trim().length < 2) return setError("Poné tu nombre para confirmar.");
-    if (phone.replace(/\D/g, "").length < 8) return setError("Necesitamos un teléfono válido para coordinar.");
+    if (!phoneVal.isValid) return setError("Ingresá un número de celular válido de Argentina (ej. 11 5555-0000).");
     if (email.trim() !== "" && !/^\S+@\S+\.\S+$/.test(email.trim())) return setError("Ese email no parece válido (o dejalo vacío).");
     if (!serviceId || !selectedDate || !time) return setError("Falta elegir servicio, día y hora.");
     setError(null);
@@ -221,6 +240,8 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
     if (!res.ok) { setShowPay(false); return setError(res.error); }
     setShowPay(false);
     setClaimed(!!opts.claimTx);
+    setConfirmedId(res.id);
+    setCancelFeedback(null);
     setDone(true);
     if (owner === undefined)
       toast(opts.claimTx ? `Nueva reserva de ${client.trim()} — seña pendiente de verificación 💸` : `¡Nueva reserva de ${client.trim()}! Ya está en tu agenda 🎉`);
@@ -248,9 +269,18 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
             <LogoMark className={`h-4 w-4 shrink-0 ${theme.accentText}`} />
             <span className="truncate">cupito.app/{user.slug}</span>
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-bold opacity-80">
-            <span className={`blinkdot h-1.5 w-1.5 rounded-full ${theme.accentBg}`} /> Abierto 24/7
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLookupModal(true)}
+              className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold transition-all hover:bg-white/25 active:scale-95"
+            >
+              🔍 Mis turnos
+            </button>
+            <span className="hidden items-center gap-1.5 text-[11px] font-bold opacity-80 sm:inline-flex">
+              <span className={`blinkdot h-1.5 w-1.5 rounded-full ${theme.accentBg}`} /> Abierto 24/7
+            </span>
+          </div>
         </div>
         <h3 className="relative mt-4 font-display text-2xl font-extrabold">{user.business}</h3>
         <p className="relative text-sm opacity-80">Reservá tu cupito en menos de un minuto · sin llamadas</p>
@@ -495,7 +525,19 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                 </p>
                 <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
                   <input className="field" placeholder="Tu nombre *" value={wlClient} onChange={(e) => setWlClient(e.target.value)} />
-                  <input className="field" type="tel" placeholder="Tu teléfono *" value={wlPhone} onChange={(e) => setWlPhone(e.target.value)} />
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-extrabold text-ink/40">
+                      🇦🇷 +54 9
+                    </span>
+                    <input
+                      className="field !pl-16 font-mono text-sm font-semibold"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="11 5555-0000 *"
+                      value={wlPhoneVal.formatted || wlPhone}
+                      onChange={(e) => setWlPhone(cleanPhoneDigits(e.target.value))}
+                    />
+                  </div>
                 </div>
                 {wlError && <p className="mt-2 text-xs font-semibold text-coral">{wlError}</p>}
                 <button onClick={joinWaitlist} className="mt-3 w-full rounded-xl bg-coral py-3 font-display text-sm font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)]">
@@ -506,7 +548,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
             {(allTaken || showWlForm) && wlDone && (
               <div className="pop-in mt-4 rounded-xl border-2 border-limedeep/60 bg-lime/15 p-4 text-center">
                 <p className="font-display text-[15px] font-extrabold text-ink">¡Listo! Estás en la lista 🎉</p>
-                <p className="mt-1 text-sm text-inkmute">Te avisamos al <strong className="text-ink font-bold">{wlPhone}</strong> si se libera un lugar el {fmtLong(selectedDate)}.</p>
+                <p className="mt-1 text-sm text-inkmute">Te avisamos al <strong className="text-ink font-bold">{wlPhoneVal.formatted || wlPhone}</strong> si se libera un lugar el {fmtLong(selectedDate)}.</p>
               </div>
             )}
 
@@ -517,9 +559,37 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                   <input className="field" placeholder="Ana Torres" value={client} onChange={(e) => setClient(e.target.value)} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Teléfono *</label>
-                  <input className="field" type="tel" placeholder="11 5555-0000" value={phone} onChange={(e) => setPhone(e.target.value)} />
-                  <p className="mt-1 text-[11px] text-inkmute">Te avisamos por ahí si hay algún cambio con tu turno.</p>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-inkmute">Teléfono celular *</label>
+                    {phoneVal.badgeType === "valid" ? (
+                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        WhatsApp listo ✓
+                      </span>
+                    ) : phoneVal.badgeType === "warning" ? (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                        {phoneVal.hint}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-ink/40">
+                      🇦🇷 +54 9
+                    </span>
+                    <input
+                      className="field !pl-20 font-mono text-sm font-semibold tracking-wide"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="11 5555-0000"
+                      value={phoneVal.formatted || phone}
+                      onChange={(e) => {
+                        const clean = cleanPhoneDigits(e.target.value);
+                        setPhone(clean);
+                      }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] text-inkmute">
+                    {phoneVal.badgeType === "empty" ? "Ingresá tu código de área (ej. 11) y celular sin el 15." : phoneVal.hint}
+                  </p>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Email <span className="normal-case text-ink/40">(opcional, para confirmación y recordatorio)</span></label>
@@ -666,7 +736,7 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
             <div className="mx-auto mt-5 max-w-sm space-y-2.5">
               {settings.whatsapp && (
                 <a
-                  href={`https://wa.me/54${settings.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola! Soy ${client}. Acabo de reservar ${service.name} para el ${fmtLong(selectedDate)} a las ${time} hs 🙌`)}`}
+                  href={createWhatsAppUrl(settings.whatsapp, `Hola! Soy ${client}. Acabo de reservar ${service.name} para el ${fmtLong(selectedDate)} a las ${time} hs 🙌`)}
                   target="_blank"
                   rel="noreferrer"
                   className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 font-display text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition-colors"
@@ -675,16 +745,55 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
                 </a>
               )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  downloadIcs(icsContent({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration, desc: `Turno en ${user.business}, reservado con Cupito.` }));
-                  toast("Turno descargado para tu calendario 📅");
-                }}
-                className="btn-press flex w-full items-center justify-center gap-2 rounded-xl border-2 border-ink/15 bg-white py-2.5 font-display text-xs font-bold text-ink hover:bg-ink/5 transition-colors"
-              >
-                <IconCalendar className="h-4 w-4 text-fern" /> Guardar en mi calendario (.ics)
-              </button>
+              {/* Botones de Calendario: Google + Apple */}
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={gcalUrl({
+                    title: `${service.name} — ${user.business}`,
+                    date: selectedDate,
+                    time,
+                    duration: service.duration,
+                  })}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-press flex items-center justify-center gap-1.5 rounded-xl border-2 border-ink/15 bg-white py-2.5 font-display text-xs font-bold text-ink shadow-sm hover:border-ink/40 transition-colors"
+                >
+                  <IconCalendar className="h-4 w-4 text-blue-600" /> Google Calendar
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadIcs(icsContent({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration, desc: `Turno en ${user.business}, reservado con Cupito.` }));
+                    toast("Turno descargado para tu calendario 📅");
+                  }}
+                  className="btn-press flex items-center justify-center gap-1.5 rounded-xl border-2 border-ink/15 bg-white py-2.5 font-display text-xs font-bold text-ink shadow-sm hover:border-ink/40 transition-colors"
+                >
+                  <IconCalendar className="h-4 w-4 text-emerald-600" /> Apple (.ics)
+                </button>
+              </div>
+
+              {/* Auto-cancelación por el cliente */}
+              {!cancelFeedback ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("¿Seguro que deseás cancelar este turno? Liberaremos el horario para otra persona.")) {
+                      if (confirmedId) {
+                        cancelBookingByClient(user.id, confirmedId, "Cancelado por el cliente desde el comprobante");
+                        setCancelFeedback("Tu turno ha sido cancelado con éxito. ¡Gracias por avisar con tiempo!");
+                        toast("Turno cancelado ✓");
+                      }
+                    }
+                  }}
+                  className="block w-full pt-1 text-center text-xs font-bold text-coral/80 hover:text-coral underline underline-offset-4 transition-colors"
+                >
+                  ¿No vas a poder asistir? Cancelá tu turno acá
+                </button>
+              ) : (
+                <div className="rounded-xl border border-coral/30 bg-coral/10 p-3 text-xs font-bold text-coral text-center">
+                  {cancelFeedback}
+                </div>
+              )}
 
               <button
                 type="button"
@@ -712,6 +821,19 @@ export default function PublicBooking({ owner }: { owner?: ({ user: User } & Rec
       )}
       {showPay && (
         <TransferModal amount={deposit} settings={settings} business={user.business} onClose={() => setShowPay(false)} onSent={(txId) => finish({ claimTx: txId })} />
+      )}
+      {showLookupModal && (
+        <LookupBookingsModal
+          businessName={user.business}
+          bookings={biz.bookings}
+          services={biz.services}
+          professionals={biz.professionals}
+          onCancelBooking={(bId) => {
+            cancelBookingByClient(user.id, bId, "Cancelado por el cliente desde Mis Turnos");
+            toast("Turno cancelado ✓ El horario fue liberado.");
+          }}
+          onClose={() => setShowLookupModal(false)}
+        />
       )}
     </div>
   );
@@ -918,6 +1040,114 @@ function TransferModal({ amount, settings, business, onClose, onSent }: {
             Ya transferí — enviar comprobante
           </button>
           <p className="text-center text-[11px] leading-snug text-inkmute">Tu turno queda reservado como «pendiente» hasta que el negocio verifique la transferencia.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LookupBookingsModal({
+  businessName,
+  bookings,
+  services,
+  professionals,
+  onCancelBooking,
+  onClose,
+}: {
+  businessName: string;
+  bookings: Booking[];
+  services: Service[];
+  professionals: Professional[];
+  onCancelBooking: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [inputPhone, setInputPhone] = useState("");
+  const phoneVal = normalizeArgentinaPhone(inputPhone);
+  const nowKey = dateKey(new Date());
+
+  const matched = useMemo(() => {
+    if (phoneVal.cleanDigits.length < 6) return [];
+    const queryDigits = phoneVal.cleanDigits.slice(-8);
+    return bookings.filter(
+      (b) =>
+        b.phone.replace(/\D/g, "").endsWith(queryDigits) &&
+        b.date >= nowKey &&
+        b.status !== "cancelada"
+    );
+  }, [bookings, phoneVal.cleanDigits, nowKey]);
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/65 p-4 backdrop-blur-[3px]" onClick={onClose}>
+      <div className="pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-ink/10 pb-4">
+          <div>
+            <h3 className="font-display text-xl font-extrabold text-ink">Mis turnos en {businessName}</h3>
+            <p className="mt-0.5 text-xs text-inkmute">Consultá tus próximas citas o cancelá si no podés ir.</p>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" className="flex h-8 w-8 items-center justify-center rounded-full border border-ink/15 text-inkmute hover:border-coral hover:text-coral transition-colors">✕</button>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">
+              Ingresá tu número de celular
+            </label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-ink/40">
+                🇦🇷 +54 9
+              </span>
+              <input
+                className="field !pl-20 font-mono text-sm font-semibold"
+                type="tel"
+                inputMode="numeric"
+                placeholder="11 5555-0000"
+                value={phoneVal.formatted || inputPhone}
+                onChange={(e) => setInputPhone(cleanPhoneDigits(e.target.value))}
+                autoFocus
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-inkmute">
+              {phoneVal.cleanDigits.length < 6 ? "Ingresá al menos tu número para buscar tus turnos." : phoneVal.hint}
+            </p>
+          </div>
+
+          <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+            {phoneVal.cleanDigits.length >= 6 && matched.length === 0 ? (
+              <div className="rounded-xl border-2 border-dashed border-ink/10 bg-white/60 p-5 text-center text-xs text-inkmute">
+                No encontramos turnos activos para este número en {businessName}.
+              </div>
+            ) : null}
+
+            {matched.map((b) => {
+              const srv = services.find((s) => s.id === b.serviceId);
+              const pro = professionals.find((p) => p.id === b.proId);
+              return (
+                <div key={b.id} className="rounded-xl border-2 border-ink/10 bg-white p-3.5 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-display text-sm font-bold text-ink">{srv?.name || "Servicio"}</span>
+                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">Confirmado</span>
+                  </div>
+                  <div className="text-xs text-inkmute flex flex-wrap justify-between gap-1">
+                    <span>📅 {fmtLong(b.date)} a las <strong>{b.time} hs</strong></span>
+                    {pro && <span>con {pro.name}</span>}
+                  </div>
+                  <div className="pt-2 border-t border-ink/8 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("¿Seguro que deseás cancelar este turno?")) {
+                          onCancelBooking(b.id);
+                        }
+                      }}
+                      className="rounded-lg border border-coral/30 bg-coral/10 px-3 py-1.5 font-display text-xs font-bold text-coral hover:bg-coral hover:text-white transition-all"
+                    >
+                      Cancelar turno
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

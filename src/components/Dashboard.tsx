@@ -23,7 +23,10 @@ import {
   type Plan,
   type BizSettings,
   type BizData,
+  type BlockedSlot,
+  type Professional,
 } from "../lib/store";
+import { createWhatsAppUrl, formatArgentinaPhone, cleanPhoneDigits } from "../lib/phone";
 import PublicBooking from "./PublicBooking";
 import { PlanCheckout } from "./PlanCheckout";
 import {
@@ -65,7 +68,7 @@ import {
   Badge,
 } from "./kit";
 
-type View = "hoy" | "reservas" | "lista" | "stats" | "servicios" | "equipo" | "tienda" | "promos" | "pagina" | "suscripcion" | "ajustes";
+type View = "hoy" | "reservas" | "clientes" | "lista" | "stats" | "servicios" | "equipo" | "tienda" | "promos" | "pagina" | "suscripcion" | "ajustes";
 
 const SECTIONS: { label: string; items: { id: View; label: string; icon: (p: { className?: string }) => ReactNode }[] }[] = [
   {
@@ -73,6 +76,7 @@ const SECTIONS: { label: string; items: { id: View; label: string; icon: (p: { c
     items: [
       { id: "hoy", label: "Agenda del día", icon: (p) => <IconClock {...p} /> },
       { id: "reservas", label: "Reservas", icon: (p) => <IconCalendar {...p} /> },
+      { id: "clientes", label: "Clientes", icon: (p) => <IconUsers {...p} /> },
       { id: "lista", label: "Lista de espera", icon: (p) => <IconUsers {...p} /> },
       { id: "stats", label: "Estadísticas", icon: (p) => <IconChart {...p} /> },
     ],
@@ -110,7 +114,23 @@ const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Vierne
 
 export default function Dashboard() {
   const store = useStore();
-  const { user, data, toast, setStatus, removeBooking, saveProfile, stopImpersonating, impersonating, requestReview, rescheduleBooking } = store;
+  const {
+    user,
+    data,
+    toast,
+    setStatus,
+    removeBooking,
+    saveProfile,
+    stopImpersonating,
+    impersonating,
+    requestReview,
+    rescheduleBooking,
+    addBlockedSlot,
+    removeBlockedSlot,
+    saveClientNote,
+    addClosedDate,
+    removeClosedDate,
+  } = store;
   const [view, setView] = useState<View>("hoy");
   const [selDate, setSelDate] = useState(dateKey(new Date()));
   const [weekStart, setWeekStart] = useState(0);
@@ -123,6 +143,10 @@ export default function Dashboard() {
   const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [reservasMode, setReservasMode] = useState<"lista" | "grilla">("lista");
+  const [gridDate, setGridDate] = useState(dateKey(new Date()));
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockPrefillTime, setBlockPrefillTime] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -426,68 +450,247 @@ export default function Dashboard() {
             )}
 
             {/* ============ RESERVAS ============ */}
+            {/* ============ RESERVAS ============ */}
             {view === "reservas" && (
-              <div className="pop-in mt-8">
-                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-                  <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
-                    {(["todas", "pendiente", "confirmada", "atendida", "cancelada"] as const).map((f) => {
-                      const count = f === "todas" ? data.bookings.length : data.bookings.filter((b) => b.status === f).length;
-                      return (
-                        <button key={f} onClick={() => setFilter(f)}
-                          className={`btn-press whitespace-nowrap rounded-full border-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${filter === f ? "border-evergreen bg-evergreen text-lime" : "border-ink/12 bg-card text-inkmute hover:border-evergreen"}`}>
-                          {f === "todas" ? "Todas" : STATUS[f].label} ({count})
-                        </button>
-                      );
-                    })}
+              <div className="pop-in mt-8 space-y-6">
+                {/* Barra de herramientas operativa */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 pb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex rounded-xl border border-ink/12 bg-card p-1 shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => setReservasMode("lista")}
+                        className={`rounded-lg px-3 py-1.5 font-display text-xs font-bold transition-all ${
+                          reservasMode === "lista"
+                            ? "bg-evergreen text-lime shadow-sm"
+                            : "text-inkmute hover:text-ink"
+                        }`}
+                      >
+                        📋 Lista
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReservasMode("grilla")}
+                        className={`rounded-lg px-3 py-1.5 font-display text-xs font-bold transition-all ${
+                          reservasMode === "grilla"
+                            ? "bg-evergreen text-lime shadow-sm"
+                            : "text-inkmute hover:text-ink"
+                        }`}
+                      >
+                        📊 Grilla Horaria
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="relative min-w-[220px]">
-                    <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-inkmute" />
-                    <input
-                      className="field !py-2 !pl-9 !pr-7 !text-xs !rounded-full"
-                      placeholder="Buscar por cliente o teléfono..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-inkmute hover:text-ink"
-                        title="Borrar búsqueda"
-                      >
-                        ✕
-                      </button>
-                    )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBlockPrefillTime(undefined);
+                        setShowBlockModal(true);
+                      }}
+                      className="btn-press flex items-center gap-1.5 rounded-xl border border-ink/15 bg-card px-3 py-1.5 font-display text-xs font-bold text-ink hover:border-coral hover:text-coral transition-colors"
+                    >
+                      🚫 Bloquear horario
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        exportBookingsToCSV(
+                          data.bookings,
+                          data.services,
+                          data.professionals,
+                          `reservas-${user.slug}-${dateKey(new Date())}`
+                        );
+                        toast("Archivo Excel (.csv) descargado ✓");
+                      }}
+                      className="btn-press flex items-center gap-1.5 rounded-xl border border-ink/15 bg-card px-3 py-1.5 font-display text-xs font-bold text-ink hover:border-evergreen hover:text-evergreen transition-colors"
+                      title="Exportar todas las reservas con formato compatible con Excel"
+                    >
+                      📥 Exportar Excel (.csv)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrefill(null);
+                        setShowNew(true);
+                      }}
+                      className="btn-press flex items-center gap-1.5 rounded-xl bg-evergreen px-3.5 py-1.5 font-display text-xs font-bold text-lime shadow-sm hover:bg-pine"
+                    >
+                      <IconPlus className="h-3.5 w-3.5" /> + Reserva
+                    </button>
                   </div>
                 </div>
 
-                {upcoming.length === 0 ? (
-                  <EmptyState text={searchQuery ? "No hay reservas que coincidan con la búsqueda." : "No hay reservas con ese filtro."} sub={searchQuery ? "Probá con otro término o limpiá el buscador." : "Probá con otro estado o creá una nueva."}
-                    action={<button onClick={() => { setPrefill(null); setShowNew(true); }} className="inline-flex items-center gap-2 rounded-full bg-evergreen px-5 py-2.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5"><IconPlus className="h-4 w-4" /> Nueva reserva</button>} />
-                ) : (
-                  <div className="mt-6 space-y-6">
-                    {Object.entries(upcoming.reduce<Record<string, Booking[]>>((acc, b) => { (acc[b.date] ||= []).push(b); return acc; }, {})).map(([d, list]) => (
-                      <div key={d}>
-                        <p className="font-display text-base font-bold text-ink">
-                          {d === today ? "Hoy · " : ""}{fmtLong(d)}
-                          <span className="ml-2 text-sm font-semibold text-inkmute">{list.length} reserva{list.length === 1 ? "" : "s"}</span>
-                        </p>
-                        <div className="mt-3 space-y-3">
-                          {list.map((b) => (
-                            <BookingRow key={b.id} b={b} service={serviceOf(b.serviceId)} pro={data.professionals.find((p) => p.id === b.proId)} products={data.products} businessName={user.business}
-                              onStatus={(id, s) => { setStatus(id, s); if (s === "atendida") { requestReview(id); toast("Turno atendido · link de reseña enviado 💌"); } else toast("Estado actualizado."); }}
-                              onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
-                              onVerify={(id) => { store.markDepositPaid(id, "transferencia"); toast("Seña acreditada ✓"); }}
-                              onReject={(id) => { store.rejectDeposit(id); toast("Comprobante rechazado.", "warn"); }}
-                              onReschedule={(b) => setRescheduling(b)}
-                            />
-                          ))}
-                        </div>
+                {reservasMode === "grilla" ? (
+                  <div>
+                    {/* Selector de fecha para Grilla Horaria */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-inkmute">Día:</span>
+                        <input
+                          type="date"
+                          className="field !w-auto !py-1.5 !text-xs font-semibold"
+                          value={gridDate}
+                          onChange={(e) => setGridDate(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setGridDate(today)}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-bold ${gridDate === today ? "bg-evergreen text-lime" : "bg-ink/8 text-inkmute hover:text-ink"}`}
+                        >
+                          Hoy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGridDate(dateKey(addDays(new Date(), 1)))}
+                          className="rounded-lg bg-ink/8 px-2.5 py-1 text-xs font-bold text-inkmute hover:text-ink"
+                        >
+                          Mañana
+                        </button>
                       </div>
-                    ))}
+                      <p className="font-display text-sm font-bold text-ink">{fmtLong(gridDate)}</p>
+                    </div>
+
+                    <TimeGridView
+                      date={gridDate}
+                      bookings={data.bookings}
+                      blockedSlots={data.blockedSlots || []}
+                      services={data.services}
+                      pros={data.professionals}
+                      hours={data.settings.hours}
+                      onBookSlot={() => {
+                        setPrefill(null);
+                        setSelDate(gridDate);
+                        setShowNew(true);
+                      }}
+                      onBlockSlot={(timeSlot) => {
+                        setBlockPrefillTime(timeSlot);
+                        setShowBlockModal(true);
+                      }}
+                      onUnblockSlot={(id) => {
+                        removeBlockedSlot(id);
+                        toast("Horario desbloqueado ✓");
+                      }}
+                      onReschedule={(b) => setRescheduling(b)}
+                      businessName={user.business}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                      <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
+                        {(["todas", "pendiente", "confirmada", "atendida", "cancelada"] as const).map((f) => {
+                          const count = f === "todas" ? data.bookings.length : data.bookings.filter((b) => b.status === f).length;
+                          return (
+                            <button
+                              key={f}
+                              onClick={() => setFilter(f)}
+                              className={`btn-press whitespace-nowrap rounded-full border-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${filter === f ? "border-evergreen bg-evergreen text-lime" : "border-ink/12 bg-card text-inkmute hover:border-evergreen"}`}
+                            >
+                              {f === "todas" ? "Todas" : STATUS[f].label} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="relative min-w-[220px]">
+                        <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-inkmute" />
+                        <input
+                          className="field !py-2 !pl-9 !pr-7 !text-xs !rounded-full"
+                          placeholder="Buscar por cliente o teléfono..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {searchQuery && (
+                          <button
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-inkmute hover:text-ink"
+                            title="Borrar búsqueda"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {upcoming.length === 0 ? (
+                      <EmptyState
+                        text={searchQuery ? "No hay reservas que coincidan con la búsqueda." : "No hay reservas con ese filtro."}
+                        sub={searchQuery ? "Probá con otro término o limpiá el buscador." : "Probá con otro estado o creá una nueva."}
+                        action={
+                          <button
+                            onClick={() => {
+                              setPrefill(null);
+                              setShowNew(true);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-full bg-evergreen px-5 py-2.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5"
+                          >
+                            <IconPlus className="h-4 w-4" /> Nueva reserva
+                          </button>
+                        }
+                      />
+                    ) : (
+                      <div className="mt-6 space-y-6">
+                        {Object.entries(upcoming.reduce<Record<string, Booking[]>>((acc, b) => { (acc[b.date] ||= []).push(b); return acc; }, {})).map(([d, list]) => (
+                          <div key={d}>
+                            <p className="font-display text-base font-bold text-ink">
+                              {d === today ? "Hoy · " : ""}{fmtLong(d)}
+                              <span className="ml-2 text-sm font-semibold text-inkmute">{list.length} reserva{list.length === 1 ? "" : "s"}</span>
+                            </p>
+                            <div className="mt-3 space-y-3">
+                              {list.map((b) => (
+                                <BookingRow
+                                  key={b.id}
+                                  b={b}
+                                  service={serviceOf(b.serviceId)}
+                                  pro={data.professionals.find((p) => p.id === b.proId)}
+                                  products={data.products}
+                                  businessName={user.business}
+                                  onStatus={(id, s) => {
+                                    setStatus(id, s);
+                                    if (s === "atendida") {
+                                      requestReview(id);
+                                      toast("Turno atendido · link de reseña enviado 💌");
+                                    } else toast("Estado actualizado.");
+                                  }}
+                                  onDelete={(id) => {
+                                    removeBooking(id);
+                                    toast("Reserva eliminada.", "warn");
+                                  }}
+                                  onVerify={(id) => {
+                                    store.markDepositPaid(id, "transferencia");
+                                    toast("Seña acreditada ✓");
+                                  }}
+                                  onReject={(id) => {
+                                    store.rejectDeposit(id);
+                                    toast("Comprobante rechazado.", "warn");
+                                  }}
+                                  onReschedule={(b) => setRescheduling(b)}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
+            )}
+
+            {/* ============ CLIENTES (CRM) ============ */}
+            {view === "clientes" && (
+              <ClientsCRMView
+                bookings={data.bookings}
+                services={data.services}
+                clientNotes={data.settings.clientNotes || {}}
+                onSaveNote={(phone, note) => {
+                  saveClientNote(phone, note);
+                  toast("Nota privada guardada ✓");
+                }}
+                businessName={user.business}
+              />
             )}
 
             {/* ============ LISTA DE ESPERA ============ */}
@@ -647,6 +850,18 @@ export default function Dashboard() {
               setRescheduling(null);
             }
           }}
+        />
+      )}
+      {showBlockModal && (
+        <BlockModal
+          date={gridDate}
+          time={blockPrefillTime}
+          pros={data.professionals}
+          onSave={(slot) => {
+            addBlockedSlot(slot);
+            toast("Horario bloqueado ✓");
+          }}
+          onClose={() => setShowBlockModal(false)}
         />
       )}
     </div>
@@ -1240,7 +1455,7 @@ function RescheduleModal({
 
     if (notifyWhatsapp && b.phone) {
       const msg = `Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName}. Te confirmamos que tu turno de ${service?.name || "atención"} fue reprogramado para el ${fmtLong(date)} a las ${time} hs. ¡Te esperamos!`;
-      const waUrl = `https://wa.me/54${b.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`;
+      const waUrl = createWhatsAppUrl(b.phone, msg);
       window.open(waUrl, "_blank");
     }
   };
@@ -1326,6 +1541,478 @@ function RescheduleModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+function exportBookingsToCSV(bookings: Booking[], services: Service[], pros: Professional[], filename: string) {
+  const headers = ["ID", "Fecha", "Hora", "Cliente", "Teléfono", "Servicio", "Profesional", "Estado", "Origen", "Seña Cobrada", "Motivo Cancelación"];
+  const rows = bookings.map((b) => {
+    const s = services.find((srv) => srv.id === b.serviceId);
+    const p = pros.find((pr) => pr.id === b.proId);
+    return [
+      b.id,
+      b.date,
+      b.time,
+      `"${(b.client || "").replace(/"/g, '""')}"`,
+      `"${(b.phone || "").replace(/"/g, '""')}"`,
+      `"${(s?.name || "").replace(/"/g, '""')}"`,
+      `"${(p?.name || "").replace(/"/g, '""')}"`,
+      b.status,
+      b.source,
+      b.paidDeposit ? "Sí" : "No",
+      `"${(b.cancelReason || "").replace(/"/g, '""')}"`,
+    ].join(",");
+  });
+  const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${filename}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function BlockModal({
+  date,
+  time,
+  pros,
+  onSave,
+  onClose,
+}: {
+  date?: string;
+  time?: string;
+  pros: Professional[];
+  onSave: (slot: { date: string; time?: string; endTime?: string; proId?: string; reason: string }) => void;
+  onClose: () => void;
+}) {
+  const [bDate, setBDate] = useState(date || dateKey(new Date()));
+  const [bTime, setBTime] = useState(time || "13:00");
+  const [bEndTime, setBEndTime] = useState("");
+  const [bProId, setBProId] = useState("");
+  const [reason, setReason] = useState("");
+  const [isFullDay, setIsFullDay] = useState(false);
+
+  return (
+    <Modal title="Bloquear horario / Descanso" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave({
+            date: bDate,
+            time: isFullDay ? undefined : (bTime || undefined),
+            endTime: isFullDay ? undefined : (bEndTime || undefined),
+            proId: bProId || undefined,
+            reason: reason.trim() || "Bloqueado por el negocio",
+          });
+          onClose();
+        }}
+        className="mt-4 space-y-4 text-sm"
+      >
+        <div>
+          <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Fecha *</label>
+          <input type="date" className="field" value={bDate} onChange={(e) => setBDate(e.target.value)} required />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="full-day-block"
+            checked={isFullDay}
+            onChange={(e) => setIsFullDay(e.target.checked)}
+            className="h-4 w-4 rounded border-ink/20 text-evergreen focus:ring-evergreen"
+          />
+          <label htmlFor="full-day-block" className="text-xs font-bold text-ink cursor-pointer">
+            Bloquear el día completo (no disponible para nadie)
+          </label>
+        </div>
+
+        {!isFullDay && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Hora inicio *</label>
+              <input type="time" className="field" value={bTime} onChange={(e) => setBTime(e.target.value)} required />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Hora fin (opcional)</label>
+              <input type="time" className="field" value={bEndTime} onChange={(e) => setBEndTime(e.target.value)} />
+            </div>
+          </div>
+        )}
+
+        {pros.length > 0 && (
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Profesional afectado</label>
+            <select className="field" value={bProId} onChange={(e) => setBProId(e.target.value)}>
+              <option value="">Todo el negocio / Todos</option>
+              {pros.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Motivo del bloqueo</label>
+          <input
+            className="field"
+            placeholder="Ej: Almuerzo, Trámite personal, Médico, Mantenimiento..."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
+
+        <div className="pt-2 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-xl border border-ink/15 px-4 py-2.5 font-display text-xs font-bold text-inkmute hover:text-ink">
+            Cancelar
+          </button>
+          <button type="submit" className="rounded-xl bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime shadow-sm hover:bg-pine">
+            Guardar bloqueo
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function TimeGridView({
+  date,
+  bookings,
+  blockedSlots,
+  services,
+  pros,
+  hours,
+  onBookSlot,
+  onBlockSlot,
+  onUnblockSlot,
+  onReschedule,
+  businessName,
+}: {
+  date: string;
+  bookings: Booking[];
+  blockedSlots: BlockedSlot[];
+  services: Service[];
+  pros: Professional[];
+  hours: DayHours[];
+  onBookSlot: () => void;
+  onBlockSlot: (time: string) => void;
+  onUnblockSlot: (id: string) => void;
+  onReschedule: (b: Booking) => void;
+  businessName: string;
+}) {
+  const dayH = hours[dayOfWeek(date)];
+  const daySlots = dayH.open ? slotsForDay(dayH) : [];
+
+  return (
+    <div className="mt-4 space-y-3">
+      {!dayH.open ? (
+        <div className="card p-8 text-center text-sm text-inkmute">
+          El negocio está configurado como cerrado en este día de la semana.
+        </div>
+      ) : daySlots.length === 0 ? (
+        <div className="card p-8 text-center text-sm text-inkmute">
+          No hay horarios configurados para este día.
+        </div>
+      ) : (
+        <div className="divide-y divide-ink/8 rounded-2xl border-2 border-ink/10 bg-white overflow-hidden shadow-sm">
+          {daySlots.map((slotTime) => {
+            const b = bookings.find((x) => x.date === date && x.time === slotTime && x.status !== "cancelada");
+            const blocked = blockedSlots.find((bs) => bs.date === date && (!bs.time || bs.time === slotTime));
+            const srv = b ? services.find((s) => s.id === b.serviceId) : null;
+            const pro = b ? pros.find((p) => p.id === b.proId) : null;
+
+            return (
+              <div
+                key={slotTime}
+                className={`flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors ${
+                  b
+                    ? "bg-lime/10"
+                    : blocked
+                    ? "bg-ink/[0.04]"
+                    : "hover:bg-ink/[0.02]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm font-extrabold text-ink w-14">
+                    {slotTime}
+                  </span>
+                  {b ? (
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-display font-extrabold text-ink text-sm">{b.client}</span>
+                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          {b.status}
+                        </span>
+                      </div>
+                      <span className="text-xs text-inkmute">
+                        {srv?.name || "Servicio"} {pro ? `· con ${pro.name}` : ""} {b.phone ? `· ${formatArgentinaPhone(b.phone) || b.phone}` : ""}
+                      </span>
+                    </div>
+                  ) : blocked ? (
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-xs font-bold text-ink/70">
+                        🚫 Bloqueado: {blocked.reason}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-semibold text-ink/40">Disponible</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {b ? (
+                    <>
+                      <button
+                        onClick={() => onReschedule(b)}
+                        className="btn-press rounded-lg border border-ink/15 bg-white px-2.5 py-1 text-xs font-bold text-ink hover:border-evergreen"
+                      >
+                        Reprogramar
+                      </button>
+                      {b.phone && (
+                        <a
+                          href={createWhatsAppUrl(b.phone, `Hola ${b.client}! Te escribimos de ${businessName} por tu turno hoy a las ${b.time} hs.`)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-press rounded-lg border border-emerald-600/30 bg-emerald-50 p-1.5 text-emerald-800 hover:bg-emerald-100"
+                          title="WhatsApp"
+                        >
+                          <IconWhatsApp className="h-3.5 w-3.5 text-emerald-600" />
+                        </a>
+                      )}
+                    </>
+                  ) : blocked ? (
+                    <button
+                      onClick={() => onUnblockSlot(blocked.id)}
+                      className="text-xs font-bold text-coral hover:underline"
+                    >
+                      Desbloquear
+                    </button>
+                  ) : (
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => onBookSlot()}
+                        className="btn-press rounded-lg bg-evergreen px-3 py-1 text-xs font-bold text-lime hover:bg-pine"
+                      >
+                        + Turno
+                      </button>
+                      <button
+                        onClick={() => onBlockSlot(slotTime)}
+                        className="btn-press rounded-lg border border-ink/15 px-2.5 py-1 text-xs font-bold text-inkmute hover:border-coral hover:text-coral"
+                      >
+                        Pausar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClientsCRMView({
+  bookings,
+  services,
+  clientNotes,
+  onSaveNote,
+  businessName,
+}: {
+  bookings: Booking[];
+  services: Service[];
+  clientNotes: Record<string, string>;
+  onSaveNote: (phone: string, note: string) => void;
+  businessName: string;
+}) {
+  const [query, setQuery] = useState("");
+  const [editingPhone, setEditingPhone] = useState<string | null>(null);
+  const [draftNote, setDraftNote] = useState("");
+
+  const clients = useMemo(() => {
+    const map = new Map<string, {
+      name: string;
+      phone: string;
+      cleanPhone: string;
+      totalBookings: number;
+      attended: number;
+      cancelled: number;
+      totalSpent: number;
+      lastDate: string;
+      lastService: string;
+    }>();
+
+    for (const b of bookings) {
+      const clean = cleanPhoneDigits(b.phone);
+      if (!clean) continue;
+      const srv = services.find((s) => s.id === b.serviceId);
+      const existing = map.get(clean);
+      const price = srv?.price || 0;
+
+      if (!existing) {
+        map.set(clean, {
+          name: b.client,
+          phone: b.phone,
+          cleanPhone: clean,
+          totalBookings: 1,
+          attended: b.status === "atendida" ? 1 : 0,
+          cancelled: b.status === "cancelada" ? 1 : 0,
+          totalSpent: b.status === "atendida" || b.status === "confirmada" ? price : 0,
+          lastDate: b.date,
+          lastService: srv?.name || "",
+        });
+      } else {
+        existing.totalBookings += 1;
+        if (b.status === "atendida") existing.attended += 1;
+        if (b.status === "cancelada") existing.cancelled += 1;
+        if (b.status === "atendida" || b.status === "confirmada") existing.totalSpent += price;
+        if (b.date > existing.lastDate) {
+          existing.lastDate = b.date;
+          existing.lastService = srv?.name || "";
+          existing.name = b.client;
+        }
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  }, [bookings, services]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.cleanPhone.includes(q)
+    );
+  }, [clients, query]);
+
+  return (
+    <div className="pop-in mt-8 space-y-6">
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <div>
+          <h2 className="font-display text-xl font-extrabold text-ink">Ficha y CRM de Clientes</h2>
+          <p className="text-xs text-inkmute">Historial consolidado, datos de contacto y notas privadas de cada cliente.</p>
+        </div>
+        <div className="relative min-w-[240px]">
+          <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-inkmute" />
+          <input
+            className="field !py-2 !pl-9 !text-xs !rounded-full"
+            placeholder="Buscar por nombre o celular..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-inkmute hover:text-ink">✕</button>
+          )}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          text={query ? "No hay clientes que coincidan." : "Todavía no tenés clientes agendados."}
+          sub={query ? "Probá con otro nombre o número." : "Apenas reserven o crees un turno, sus fichas se generarán automáticamente."}
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {filtered.map((c) => {
+            const currentNote = clientNotes[c.cleanPhone] || "";
+            const isEditing = editingPhone === c.cleanPhone;
+            return (
+              <div key={c.cleanPhone} className="card p-5 space-y-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-base font-extrabold text-ink">{c.name}</h3>
+                    <p className="font-mono text-xs font-semibold text-inkmute">{formatArgentinaPhone(c.cleanPhone)}</p>
+                  </div>
+                  <a
+                    href={createWhatsAppUrl(c.phone, `Hola ${c.name.split(" ")[0]}! Te escribimos de ${businessName}.`)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-press flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-600/30 px-3 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
+                  >
+                    <IconWhatsApp className="h-3.5 w-3.5 text-emerald-600" /> WhatsApp
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 rounded-xl bg-ink/[0.03] p-2.5 text-center text-xs">
+                  <div>
+                    <span className="block font-display font-extrabold text-ink">{c.totalBookings}</span>
+                    <span className="text-[10px] text-inkmute">Turnos</span>
+                  </div>
+                  <div>
+                    <span className="block font-display font-extrabold text-emerald-700">{c.attended}</span>
+                    <span className="text-[10px] text-inkmute">Atendidos</span>
+                  </div>
+                  <div>
+                    <span className="block font-display font-extrabold text-fern">{fmtMoney(c.totalSpent)}</span>
+                    <span className="text-[10px] text-inkmute">Total gastado</span>
+                  </div>
+                </div>
+
+                <div className="text-xs text-inkmute">
+                  Última visita: <strong className="text-ink">{fmtLong(c.lastDate)}</strong> {c.lastService ? `(${c.lastService})` : ""}
+                </div>
+
+                {/* Nota privada */}
+                <div className="rounded-xl border border-dashed border-ink/15 bg-white/60 p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-inkmute">
+                      📝 Nota privada del negocio
+                    </span>
+                    {!isEditing && (
+                      <button
+                        onClick={() => {
+                          setEditingPhone(c.cleanPhone);
+                          setDraftNote(currentNote);
+                        }}
+                        className="text-[11px] font-bold text-fern hover:underline"
+                      >
+                        {currentNote ? "Editar" : "+ Agregar nota"}
+                      </button>
+                    )}
+                  </div>
+
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <textarea
+                        className="field text-xs !py-1.5 resize-none h-16"
+                        placeholder="Ej: Prefiere turnos por la mañana, alergia a producto X..."
+                        value={draftNote}
+                        onChange={(e) => setDraftNote(e.target.value)}
+                        autoFocus
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setEditingPhone(null)}
+                          className="rounded-lg px-2.5 py-1 text-xs font-bold text-inkmute hover:text-ink"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => {
+                            onSaveNote(c.cleanPhone, draftNote);
+                            setEditingPhone(null);
+                          }}
+                          className="rounded-lg bg-evergreen px-3 py-1 text-xs font-bold text-lime shadow-sm hover:bg-pine"
+                        >
+                          Guardar
+                        </button>
+                      </div>
+                    </div>
+                  ) : currentNote ? (
+                    <p className="text-xs text-ink/80 italic bg-ink/[0.02] p-2 rounded-lg">{currentNote}</p>
+                  ) : (
+                    <p className="text-[11px] text-ink/40 italic">Sin notas para este cliente.</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2446,6 +3133,69 @@ function HoursCard({
             );
           })}
         </div>
+      </div>
+
+      {/* Días cerrados / Feriados */}
+      <div className="mt-8 border-t-2 border-dashed border-ink/10 pt-6">
+        <label className="mb-1 block font-display text-sm font-extrabold text-ink">
+          🚫 Feriados y Días Cerrados (No Laborables)
+        </label>
+        <p className="mb-3 text-xs text-inkmute">
+          Fechas puntuales donde el negocio no abre. Esos días quedarán deshabilitados en el calendario público y nadie podrá reservar.
+        </p>
+
+        <div className="flex flex-wrap gap-2 items-center mb-4">
+          <input
+            type="date"
+            id="closed-date-input"
+            className="field !w-auto text-xs font-semibold"
+            min={dateKey(new Date())}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById("closed-date-input") as HTMLInputElement;
+              if (el && el.value) {
+                const current = settings.closedDates || [];
+                if (!current.includes(el.value)) {
+                  onUpdateSettings({ closedDates: [...current, el.value].sort() });
+                  toast(`Fecha ${fmtLong(el.value)} agregada como cerrada ✓`);
+                  el.value = "";
+                }
+              }
+            }}
+            className="btn-press rounded-xl bg-evergreen px-4 py-2 text-xs font-bold text-lime shadow-sm hover:bg-pine"
+          >
+            + Agregar día cerrado
+          </button>
+        </div>
+
+        {(settings.closedDates || []).length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {(settings.closedDates || []).map((dt) => (
+              <span
+                key={dt}
+                className="inline-flex items-center gap-2 rounded-xl border border-coral/30 bg-coral/10 px-3 py-1.5 text-xs font-bold text-coral"
+              >
+                <span>{fmtLong(dt)}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = (settings.closedDates || []).filter((d) => d !== dt);
+                    onUpdateSettings({ closedDates: next });
+                    toast("Día cerrado removido.");
+                  }}
+                  className="hover:text-red-700 font-extrabold ml-1"
+                  title="Eliminar"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs italic text-inkmute">No tenés feriados o días cerrados cargados.</p>
+        )}
       </div>
     </div>
   );

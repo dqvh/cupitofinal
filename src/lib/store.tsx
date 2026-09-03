@@ -46,6 +46,16 @@ export interface Booking {
   paymentMethod?: PaymentMethod;
   depositClaim?: { txId: string; sentAt: number }; // comprobante pendiente de verificación
   reviewRequested?: boolean;
+  cancelReason?: string;
+}
+
+export interface BlockedSlot {
+  id: string;
+  date: string; // YYYY-MM-DD
+  time?: string; // HH:MM
+  endTime?: string;
+  proId?: string;
+  reason: string;
 }
 
 export interface DayHours {
@@ -217,6 +227,8 @@ export interface BizSettings {
   setupDismissed: boolean;
   theme?: ThemeId;
   maxAdvanceDays?: number;
+  closedDates?: string[]; // ej ["2026-12-25", "2027-01-01"]
+  clientNotes?: Record<string, string>; // phone -> nota privada
 }
 
 export interface BizData {
@@ -227,6 +239,7 @@ export interface BizData {
   coupons: Coupon[];
   professionals: Professional[];
   waitlist: WaitlistEntry[];
+  blockedSlots?: BlockedSlot[];
   settings: BizSettings;
 }
 
@@ -512,6 +525,7 @@ function normalizeData(p: Partial<BizData>): BizData {
     coupons: Array.isArray(p.coupons) ? p.coupons : d.coupons,
     professionals: Array.isArray(p.professionals) ? p.professionals : d.professionals,
     waitlist: Array.isArray(p.waitlist) ? p.waitlist : d.waitlist,
+    blockedSlots: Array.isArray(p.blockedSlots) ? p.blockedSlots : [],
     settings: {
       ...d.settings,
       depositEnabled: typeof s.depositEnabled === "boolean" ? s.depositEnabled : d.settings.depositEnabled,
@@ -527,6 +541,9 @@ function normalizeData(p: Partial<BizData>): BizData {
       transferHolder: typeof s.transferHolder === "string" ? s.transferHolder : "",
       setupDismissed: typeof s.setupDismissed === "boolean" ? s.setupDismissed : false,
       theme: (s.theme && THEMES[s.theme as ThemeId] ? s.theme : "evergreen") as ThemeId,
+      maxAdvanceDays: typeof s.maxAdvanceDays === "number" ? s.maxAdvanceDays : 30,
+      closedDates: Array.isArray(s.closedDates) ? s.closedDates : [],
+      clientNotes: typeof s.clientNotes === "object" && s.clientNotes !== null ? s.clientNotes : {},
     },
   };
 }
@@ -650,6 +667,12 @@ interface StoreApi {
   markDepositPaid(id: string, method: PaymentMethod): void;
   rejectDeposit(id: string): void;
   setBookingPro(id: string, proId: string | undefined): void;
+  addBlockedSlot(slot: Omit<BlockedSlot, "id">): void;
+  removeBlockedSlot(id: string): void;
+  saveClientNote(phone: string, note: string): void;
+  cancelBookingByClient(ownerId: string, bookingId: string, reason?: string): { ok: boolean; error?: string };
+  addClosedDate(dateStr: string): void;
+  removeClosedDate(dateStr: string): void;
   /* sincronización nube */
   isCloudSyncActive: boolean;
   fetchPageRemote(slug: string): Promise<boolean>;
@@ -1066,7 +1089,11 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   addBooking({ client, phone, serviceId, date, time, source, items, proId }) {
     if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta para crear reservas." };
     const data = loadData(sessionUserId);
-    const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada");
+    const isClosedDate = (data.settings.closedDates || []).includes(date);
+    if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
+    const isBlocked = (data.blockedSlots || []).some((bs) => bs.date === date && (!bs.time || bs.time === time) && (!bs.proId || !proId || bs.proId === proId));
+    if (isBlocked) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
+    const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !proId || b.proId === proId));
     if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` };
     const id = uid();
     const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId };
@@ -1078,13 +1105,17 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   addBookingFor(ownerId, { client, phone, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
     const data = loadData(ownerId);
-    const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada");
-    if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` };
+    const isClosedDate = (data.settings.closedDates || []).includes(date);
+    if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
     let pro = proId;
     if (!pro && data.professionals.length > 0) {
       const dayCount = data.bookings.filter((b) => b.date === date).length;
       pro = data.professionals[dayCount % data.professionals.length].id;
     }
+    const isBlocked = (data.blockedSlots || []).some((bs) => bs.date === date && (!bs.time || bs.time === time) && (!bs.proId || !pro || bs.proId === pro));
+    if (isBlocked) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
+    const clash = data.bookings.find((b) => b.date === date && b.time === time && b.status !== "cancelada" && (!b.proId || !pro || b.proId === pro));
+    if (clash) return { ok: false, error: `El horario ${time} ya fue tomado por ${clash.client}.` };
     const id = uid();
     const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim };
     data.bookings = [...data.bookings, newBooking];
@@ -1147,6 +1178,62 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (!sessionUserId) return;
     const data = loadData(sessionUserId);
     data.bookings = data.bookings.map((b) => (b.id === id ? { ...b, proId } : b));
+    saveData(sessionUserId, data);
+    emit();
+  },
+  addBlockedSlot(slot) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    const newSlot: BlockedSlot = { ...slot, id: uid() };
+    data.blockedSlots = [...(data.blockedSlots || []), newSlot];
+    saveData(sessionUserId, data);
+    emit();
+  },
+  removeBlockedSlot(id) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    data.blockedSlots = (data.blockedSlots || []).filter((b) => b.id !== id);
+    saveData(sessionUserId, data);
+    emit();
+  },
+  saveClientNote(phone, note) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    const cleanPhone = phone.replace(/\D/g, "");
+    data.settings.clientNotes = {
+      ...(data.settings.clientNotes || {}),
+      [cleanPhone]: note.trim(),
+    };
+    saveData(sessionUserId, data);
+    emit();
+  },
+  cancelBookingByClient(ownerId, bookingId, reason) {
+    const data = loadData(ownerId);
+    const target = data.bookings.find((b) => b.id === bookingId);
+    if (!target) return { ok: false, error: "No se encontró el turno." };
+    data.bookings = data.bookings.map((b) =>
+      b.id === bookingId
+        ? { ...b, status: "cancelada" as BookingStatus, cancelReason: reason || "Cancelado por el cliente" }
+        : b
+    );
+    saveData(ownerId, data);
+    emit();
+    return { ok: true };
+  },
+  addClosedDate(dateStr) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    const current = data.settings.closedDates || [];
+    if (!current.includes(dateStr)) {
+      data.settings.closedDates = [...current, dateStr];
+      saveData(sessionUserId, data);
+      emit();
+    }
+  },
+  removeClosedDate(dateStr) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    data.settings.closedDates = (data.settings.closedDates || []).filter((d) => d !== dateStr);
     saveData(sessionUserId, data);
     emit();
   },
