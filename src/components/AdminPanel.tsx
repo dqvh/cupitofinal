@@ -878,8 +878,8 @@ ALTER TABLE cupito_data ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
             </div>
 
             <div className="rounded-xl border border-ink/10 bg-paper p-3 text-xs space-y-1.5">
-              <p className="font-bold text-ink">4. Login sin fricción (Supabase Auth):</p>
-              <p className="text-inkmute">En Supabase ➔ <strong>Authentication</strong> ➔ <strong>Sign In/Up</strong> ➔ desactivá <strong>“Confirm email”</strong>. Si no, cada registro exige verificar el email.</p>
+              <p className="font-bold text-ink">4. Seguridad del registro (Supabase Auth):</p>
+              <p className="text-inkmute">En Supabase ➔ <strong>Authentication</strong> ➔ <strong>Sign In/Up</strong> ➔ activá <strong>“Confirm email”</strong> (solo entran emails reales). En <strong>URL Configuration</strong> poné Site URL = tu dominio. Opcional anti-bots: sumá Cloudflare Turnstile en <strong>Auth → CAPTCHA</strong> y la var <strong className="font-mono">VITE_TURNSTILE_SITEKEY</strong> en Vercel.</p>
             </div>
           </div>
 

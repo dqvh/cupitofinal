@@ -798,7 +798,9 @@ async function callPublicApi(
 }
 
 /* Adopta la cuenta del dueño logueado en Auth: la busca local por auth_id,
-   si no está la trae de la nube. Devuelve null si ok, o mensaje de error. */
+   si no está la trae de la nube, y si tampoco existe pero hay un registro
+   pendiente (confirmó el email después), crea el negocio. Devuelve null si
+   ok, o mensaje de error. */
 async function adoptAuthAccount(authId: string): Promise<string | null> {
   const deleted = getDeletedUserIds();
   const hit = users.find((u) => u.auth_id === authId && !deleted.has(u.id));
@@ -809,12 +811,76 @@ async function adoptAuthAccount(authId: string): Promise<string | null> {
     return null;
   }
   const remote = await fetchRemoteUserByAuthId(authId).catch(() => null);
-  if (!remote || deleted.has(remote.user.id)) {
-    await sbSignOut().catch(() => {});
-    return "Tu login está listo pero no encontramos tu negocio. Escribinos a hola@cupito.app y lo resolvemos.";
+  if (remote && !deleted.has(remote.user.id)) {
+    importRemoteAccount(remote);
+    return null;
   }
-  importRemoteAccount(remote);
-  return null;
+  // Sin fila: ¿venía de un registro con email por confirmar?
+  const pending = loadPendingBiz();
+  if (pending && pending.authId === authId) {
+    const created = await createBizRowFromPending(pending);
+    if (created) return null;
+  }
+  await sbSignOut().catch(() => {});
+  return "Tu login está listo pero no encontramos tu negocio. Escribinos a hola@cupito.app y lo resolvemos.";
+}
+
+/* Registro que quedó pendiente de confirmación de email */
+interface PendingBiz { authId: string; name: string; business: string; email: string }
+const PENDING_BIZ_KEY = "cupito_pending_biz";
+function savePendingBiz(p: PendingBiz) {
+  safeSet(PENDING_BIZ_KEY, JSON.stringify(p));
+}
+function loadPendingBiz(): PendingBiz | null {
+  try {
+    const raw = safeGet(PENDING_BIZ_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as PendingBiz;
+    if (!p.authId || !p.business || !p.email) return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
+function clearPendingBiz() {
+  safeRemove(PENDING_BIZ_KEY);
+}
+
+async function ensureUniqueSlug(base: string): Promise<string> {
+  let slug = base;
+  let i = 1;
+  while (users.some((u) => u.slug === slug)) slug = `${base}-${i++}`;
+  if (isSupabaseConfigured) {
+    while (await fetchRemoteUserBySlug(slug).catch(() => null)) slug = `${base}-${i++}`;
+  }
+  return slug;
+}
+
+/* Crea la fila del negocio para un registro pendiente ya confirmado */
+async function createBizRowFromPending(pending: PendingBiz): Promise<boolean> {
+  try {
+    const slug = await ensureUniqueSlug(slugify(pending.business));
+    const user: User = {
+      id: pending.authId,
+      auth_id: pending.authId,
+      name: pending.name.trim(),
+      business: pending.business.trim(),
+      email: pending.email,
+      password: "",
+      slug,
+      plan: "semilla",
+      createdAt: Date.now(),
+    };
+    const withoutDup = users.filter((u) => u.email !== pending.email);
+    saveUsers([...withoutDup, user]);
+    saveSession(user.id);
+    saveData(user.id, defaultData());
+    clearPendingBiz();
+    emit();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /* Migra una cuenta legacy (password en texto plano) a Supabase Auth.
@@ -1203,7 +1269,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         return err;
       }
       if (s.reason === "confirm") {
-        return "Te enviamos un email de confirmación. Abrilo y después entrá de nuevo.";
+        return "Tu email todavía no está confirmado. Revisá tu bandeja (y spam) y después entrá.";
       }
       if (s.error !== "invalid") return s.error;
       // Credenciales inválidas en Auth: puede ser cuenta legacy sin migrar → migrar
@@ -1234,20 +1300,14 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (!s.ok) {
       if (s.reason === "exists") return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
       if (s.reason === "confirm") {
+        // Sin sesión todavía: guardar el negocio pendiente y crearlo al primer login
+        if (s.authId) savePendingBiz({ authId: s.authId, name: name.trim(), business: business.trim(), email: em });
         return "Te enviamos un email de confirmación. Abrilo para activar tu cuenta y después entrá.";
       }
       return s.error;
     }
     // Slug único (local + nube)
-    let slug = slugify(business);
-    const base = slug;
-    let i = 1;
-    const slugTakenLocally = (sl: string) => users.some((u) => u.slug === sl);
-    while (slugTakenLocally(slug)) slug = `${base}-${i++}`;
-    if (await fetchRemoteUserBySlug(slug).catch(() => null)) {
-      slug = `${base}-${i++}`;
-      while (await fetchRemoteUserBySlug(slug).catch(() => null)) slug = `${base}-${i++}`;
-    }
+    const slug = await ensureUniqueSlug(slugify(business));
     const user: User = {
       id: s.authId,
       auth_id: s.authId,

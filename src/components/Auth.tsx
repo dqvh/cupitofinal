@@ -29,6 +29,7 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const [business, setBusiness] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -64,7 +65,8 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
       if (name.trim().length < 2) return fail("Contanos tu nombre.");
       if (business.trim().length < 2) return fail("¿Cómo se llama tu negocio?");
       if (!/^\S+@\S+\.\S+$/.test(email.trim())) return fail("Ese email no parece válido.");
-      if (password.length < 6) return fail("La contraseña necesita al menos 6 caracteres.");
+      if (password.length < 8) return fail("La contraseña necesita al menos 8 caracteres.");
+      if (password !== password2) return fail("Las contraseñas no coinciden. Revisalas.");
     } else {
       if (!/^\S+@\S+\.\S+$/.test(email.trim())) return fail("Ese email no parece válido.");
       if (password.length === 0) return fail("Falta la contraseña.");
@@ -215,12 +217,18 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Contraseña</label>
                     <div className="relative">
-                      <input className="field pr-12" type={showPass ? "text" : "password"} placeholder={mode === "registro" ? "Mínimo 6 caracteres" : "Tu contraseña"} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "registro" ? "new-password" : "current-password"} />
+                      <input className="field pr-12" type={showPass ? "text" : "password"} placeholder={mode === "registro" ? "Mínimo 8 caracteres" : "Tu contraseña"} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "registro" ? "new-password" : "current-password"} />
                       <button type="button" onClick={() => setShowPass((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold uppercase tracking-wider text-inkmute transition-colors hover:text-fern">
                         {showPass ? "Ocultar" : "Ver"}
                       </button>
                     </div>
                   </div>
+                  {mode === "registro" && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Repetí la contraseña</label>
+                      <input className="field" type={showPass ? "text" : "password"} placeholder="Igual que arriba" value={password2} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" />
+                    </div>
+                  )}
                   <button type="submit" disabled={loading}
                     className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-evergreen px-6 py-4 font-display text-lg font-bold text-lime transition-all duration-200 hover:-translate-y-0.5 hover:bg-pine hover:shadow-[0_14px_35px_rgba(8,43,34,0.35)] active:translate-y-0 disabled:cursor-wait disabled:opacity-70">
                     {loading ? (

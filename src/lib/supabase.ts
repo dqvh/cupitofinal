@@ -230,8 +230,8 @@ export async function fetchRemoteUserByEmail(
 /* ================= Supabase Auth (email + password) =================
    Implementado con fetch directo a GoTrue para no sumar ~120KB al bundle.
    La sesión (access/refresh token) vive en localStorage.
-   IMPORTANTE en Supabase -> Authentication -> Sign In/Up: desactivar
-   "Confirm email" para que el registro entre directo sin verificar. */
+   Requiere en Supabase -> Authentication: "Confirm email" ACTIVADO y
+   Site URL = tu dominio. Anti-bots opcional con Turnstile (ver abajo). */
 
 export interface SbSession {
   access_token: string;
@@ -281,13 +281,18 @@ function toSession(data: any): SbSession | null {
   };
 }
 
-async function authFetch(path: string, body: Record<string, unknown>, bearer?: string): Promise<any> {
+async function authFetch(
+  path: string,
+  body: Record<string, unknown>,
+  opts?: { bearer?: string; captcha?: string }
+): Promise<any> {
   const res = await fetch(`${supabaseUrl}/auth/v1${path}`, {
     method: "POST",
     headers: {
       apikey: supabaseAnonKey,
       "Content-Type": "application/json",
-      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+      ...(opts?.bearer ? { Authorization: `Bearer ${opts.bearer}` } : {}),
+      ...(opts?.captcha ? { "x-captcha-token": opts.captcha } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -298,6 +303,80 @@ async function authFetch(path: string, body: Record<string, unknown>, bearer?: s
     throw new Error(code);
   }
   return data;
+}
+
+/* ---------- Captcha invisible (Cloudflare Turnstile, opcional) ----------
+   Si configurás VITE_TURNSTILE_SITEKEY (Vercel) + el secreto en Supabase
+   Auth → CAPTCHA, cada signup/signin lleva token anti-bots sin molestar
+   al usuario. Sin sitekey, no hace nada. */
+let turnstileLoading: Promise<any> | null = null;
+function loadTurnstile(): Promise<any> {
+  if (typeof window === "undefined") return Promise.reject(new Error("ssr"));
+  if ((window as any).turnstile) return Promise.resolve((window as any).turnstile);
+  if (turnstileLoading) return turnstileLoading;
+  turnstileLoading = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.onload = () =>
+      (window as any).turnstile ? resolve((window as any).turnstile) : reject(new Error("no widget"));
+    script.onerror = () => reject(new Error("load"));
+    document.head.appendChild(script);
+    setTimeout(() => reject(new Error("timeout")), 10000);
+  });
+  turnstileLoading.catch(() => {
+    turnstileLoading = null;
+  });
+  return turnstileLoading;
+}
+
+export async function getCaptchaToken(): Promise<string> {
+  const sitekey = pickEnv("VITE_TURNSTILE_SITEKEY", "NEXT_PUBLIC_TURNSTILE_SITEKEY");
+  if (!sitekey || !isSupabaseConfigured || typeof window === "undefined") return "";
+  try {
+    const t = await loadTurnstile();
+    return await new Promise<string>((resolve) => {
+      let done = false;
+      const finish = (tok: string) => {
+        if (!done) {
+          done = true;
+          resolve(tok);
+        }
+      };
+      const timer = setTimeout(() => finish(""), 10000);
+      try {
+        const holder = document.createElement("div");
+        holder.style.display = "none";
+        holder.setAttribute("aria-hidden", "true");
+        document.body.appendChild(holder);
+        const wid = t.render(holder, {
+          sitekey,
+          size: "invisible",
+          callback: (tok: string) => {
+            clearTimeout(timer);
+            holder.remove();
+            finish(tok || "");
+          },
+          "error-callback": () => {
+            clearTimeout(timer);
+            holder.remove();
+            finish("");
+          },
+          "expired-callback": () => {
+            clearTimeout(timer);
+            holder.remove();
+            finish("");
+          },
+        });
+        t.execute(wid);
+      } catch {
+        clearTimeout(timer);
+        finish("");
+      }
+    });
+  } catch {
+    return "";
+  }
 }
 
 /** ¿Hay sesión válida (aunque sea por expirar)? */
@@ -331,12 +410,13 @@ export async function sbGetAccessToken(): Promise<string> {
 
 export type SbSignUpResult =
   | { ok: true; authId: string; email: string }
-  | { ok: false; reason: "exists" | "confirm" | "error"; error: string };
+  | { ok: false; reason: "exists" | "confirm" | "error"; error: string; authId?: string };
 
 export async function sbSignUp(email: string, password: string): Promise<SbSignUpResult> {
   const em = email.toLowerCase().trim();
   try {
-    const data = await authFetch("/signup", { email: em, password });
+    const captcha = await getCaptchaToken();
+    const data = await authFetch("/signup", { email: em, password }, captcha ? { captcha } : undefined);
     const session = toSession(data);
     if (session) {
       sbSaveSession(session);
@@ -344,13 +424,18 @@ export async function sbSignUp(email: string, password: string): Promise<SbSignU
     }
     // Sin sesión: quedó pendiente de confirmación (Confirm email activado)
     // o el email ya estaba registrado.
-    const identities = (data?.user as any)?.identities;
+    const u = data?.user as any;
+    const pendingId = u?.id ? String(u.id) : undefined;
+    const identities = u?.identities;
     if (Array.isArray(identities) && identities.length === 0) {
       return { ok: false, reason: "exists", error: "exists" };
     }
-    return { ok: false, reason: "confirm", error: "confirm" };
+    return { ok: false, reason: "confirm", error: "confirm", authId: pendingId };
   } catch (e) {
     const msg = String((e as Error).message || "");
+    if (/captcha/i.test(msg)) {
+      return { ok: false, reason: "error", error: "La verificación anti-bots falló. Recargá la página e intentá de nuevo." };
+    }
     if (/422|already registered|already exists|exists/i.test(msg)) {
       return { ok: false, reason: "exists", error: "exists" };
     }
@@ -367,13 +452,17 @@ export async function sbSignUp(email: string, password: string): Promise<SbSignU
 export async function sbSignIn(email: string, password: string): Promise<SbSignUpResult> {
   const em = email.toLowerCase().trim();
   try {
-    const data = await authFetch("/token?grant_type=password", { email: em, password });
+    const captcha = await getCaptchaToken();
+    const data = await authFetch("/token?grant_type=password", { email: em, password }, captcha ? { captcha } : undefined);
     const session = toSession(data);
     if (!session) throw new Error("session");
     sbSaveSession(session);
     return { ok: true, authId: session.user_id, email: session.email || em };
   } catch (e) {
     const msg = String((e as Error).message || "");
+    if (/captcha/i.test(msg)) {
+      return { ok: false, reason: "error", error: "La verificación anti-bots falló. Recargá la página e intentá de nuevo." };
+    }
     if (/400|401|invalid|credentials|grant/i.test(msg)) {
       return { ok: false, reason: "error", error: "invalid" };
     }
@@ -389,7 +478,7 @@ export async function sbSignOut(): Promise<void> {
   sbClearSession();
   if (!isSupabaseConfigured || !s) return;
   try {
-    await authFetch("/logout", {}, s.access_token);
+    await authFetch("/logout", {}, { bearer: s.access_token });
   } catch { /* noop */ }
 }
 
