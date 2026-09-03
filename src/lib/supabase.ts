@@ -55,11 +55,14 @@ if (typeof window !== "undefined" && !isSupabaseConfigured) {
 }
 
 async function rest(path: string, init?: RequestInit): Promise<Response> {
+  // Si hay sesión de Supabase Auth, las escrituras van con el JWT del dueño
+  // (las políticas RLS solo dejan escribir al dueño). Si no, key pública.
+  const token = await sbGetAccessToken().catch(() => "");
   return fetch(`${supabaseUrl}/rest/v1${path}`, {
     ...init,
     headers: {
       apikey: supabaseAnonKey,
-      Authorization: `Bearer ${supabaseAnonKey}`,
+      Authorization: `Bearer ${token || supabaseAnonKey}`,
       "Content-Type": "application/json",
       ...(init?.headers || {}),
     },
@@ -86,7 +89,7 @@ async function upsert(table: "cupito_users" | "cupito_data", row: Record<string,
 }
 
 function mapUser(u: any): User {
-  return {
+  const user: User = {
     id: u.id,
     name: u.name,
     business: u.business,
@@ -97,6 +100,8 @@ function mapUser(u: any): User {
     createdAt: Number(u.created_at || Date.now()),
     subscription: u.subscription || undefined,
   };
+  (user as User & { auth_id?: string }).auth_id = u.auth_id || undefined;
+  return user;
 }
 
 /**
@@ -153,11 +158,12 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
       name: user.name,
       business: user.business,
       email: user.email,
-      password: user.password,
+      password: user.password || null,
       slug: user.slug,
       plan: user.plan,
       created_at: user.createdAt,
       subscription: user.subscription || null,
+      auth_id: (user as User & { auth_id?: string }).auth_id || null,
     }, "id");
 
     if (data) {
@@ -175,7 +181,32 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
 }
 
 /**
- * Busca un negocio por email (para login multi-dispositivo).
+ * Busca un negocio por su auth_id (dueño logueado con Supabase Auth).
+ */
+export async function fetchRemoteUserByAuthId(
+  authId: string
+): Promise<{ user: User; data: BizData | null } | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const userData = await selectOne<any>(`/cupito_users?select=*&auth_id=eq.${encodeURIComponent(authId)}`);
+    if (!userData) return null;
+    const user = mapUser(userData);
+
+    const rowData = await selectOne<{ data: BizData }>(
+      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(user.id)}`
+    );
+    if (!rowData?.data) {
+      return { user, data: null as unknown as BizData };
+    }
+    return { user, data: rowData.data as BizData };
+  } catch (err) {
+    console.warn("[Cupito Supabase] Error consultando negocio por auth_id:", err);
+    return null;
+  }
+}
+
+/**
+ * Busca un negocio por email (para login multi-dispositivo y migración).
  */
 export async function fetchRemoteUserByEmail(
   email: string
@@ -192,6 +223,189 @@ export async function fetchRemoteUserByEmail(
     return { user, data: (rowData?.data as BizData) ?? null };
   } catch (err) {
     console.warn("[Cupito Supabase] Error consultando negocio por email:", err);
+    return null;
+  }
+}
+
+/* ================= Supabase Auth (email + password) =================
+   Implementado con fetch directo a GoTrue para no sumar ~120KB al bundle.
+   La sesión (access/refresh token) vive en localStorage.
+   IMPORTANTE en Supabase -> Authentication -> Sign In/Up: desactivar
+   "Confirm email" para que el registro entre directo sin verificar. */
+
+export interface SbSession {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number; // ms
+  user_id: string;
+  email: string;
+}
+
+const SB_SESSION_KEY = "cupito_sb_session";
+
+function sbLoadSession(): SbSession | null {
+  try {
+    const raw = window.localStorage.getItem(SB_SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as SbSession;
+    if (!s.access_token || !s.user_id) return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+function sbSaveSession(s: SbSession) {
+  try {
+    window.localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s));
+  } catch { /* noop */ }
+}
+
+export function sbClearSession() {
+  try {
+    window.localStorage.removeItem(SB_SESSION_KEY);
+  } catch { /* noop */ }
+}
+
+function toSession(data: any): SbSession | null {
+  const at = data?.access_token;
+  const rt = data?.refresh_token;
+  const u = data?.user;
+  if (!at || !u?.id) return null;
+  return {
+    access_token: at,
+    refresh_token: rt || "",
+    expires_at: Date.now() + Number(data?.expires_in || 3600) * 1000,
+    user_id: String(u.id),
+    email: String(u.email || ""),
+  };
+}
+
+async function authFetch(path: string, body: Record<string, unknown>, bearer?: string): Promise<any> {
+  const res = await fetch(`${supabaseUrl}/auth/v1${path}`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseAnonKey,
+      "Content-Type": "application/json",
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = String(data.msg || data.message || data.error || `Auth ${res.status}`);
+    const code = `${res.status} ${msg}`;
+    throw new Error(code);
+  }
+  return data;
+}
+
+/** ¿Hay sesión válida (aunque sea por expirar)? */
+export function sbHasSession(): boolean {
+  if (!isSupabaseConfigured || typeof window === "undefined") return false;
+  return !!sbLoadSession();
+}
+
+/** Access token vigente; refresca solo si falta poco para vencer. */
+export async function sbGetAccessToken(): Promise<string> {
+  if (!isSupabaseConfigured || typeof window === "undefined") return "";
+  const s = sbLoadSession();
+  if (!s) return "";
+  if (Date.now() < s.expires_at - 60 * 1000) return s.access_token;
+  // Refrescar
+  if (!s.refresh_token) {
+    sbClearSession();
+    return "";
+  }
+  try {
+    const data = await authFetch("/token?grant_type=refresh_token", { refresh_token: s.refresh_token });
+    const next = toSession({ ...data, user: data.user || { id: s.user_id, email: s.email } });
+    if (!next || !next.refresh_token) throw new Error("refresh");
+    sbSaveSession({ ...next, refresh_token: next.refresh_token || s.refresh_token });
+    return next.access_token;
+  } catch {
+    sbClearSession();
+    return "";
+  }
+}
+
+export type SbSignUpResult =
+  | { ok: true; authId: string; email: string }
+  | { ok: false; reason: "exists" | "confirm" | "error"; error: string };
+
+export async function sbSignUp(email: string, password: string): Promise<SbSignUpResult> {
+  const em = email.toLowerCase().trim();
+  try {
+    const data = await authFetch("/signup", { email: em, password });
+    const session = toSession(data);
+    if (session) {
+      sbSaveSession(session);
+      return { ok: true, authId: session.user_id, email: session.email || em };
+    }
+    // Sin sesión: quedó pendiente de confirmación (Confirm email activado)
+    // o el email ya estaba registrado.
+    const identities = (data?.user as any)?.identities;
+    if (Array.isArray(identities) && identities.length === 0) {
+      return { ok: false, reason: "exists", error: "exists" };
+    }
+    return { ok: false, reason: "confirm", error: "confirm" };
+  } catch (e) {
+    const msg = String((e as Error).message || "");
+    if (/422|already registered|already exists|exists/i.test(msg)) {
+      return { ok: false, reason: "exists", error: "exists" };
+    }
+    if (/429|rate|too many/i.test(msg)) {
+      return { ok: false, reason: "error", error: "Demasiados intentos. Esperá un minuto y probá de nuevo." };
+    }
+    if (/password|weak|short/i.test(msg)) {
+      return { ok: false, reason: "error", error: "La contraseña es muy débil o corta (mínimo 6 caracteres)." };
+    }
+    return { ok: false, reason: "error", error: "No pudimos crear la cuenta. Revisá tu conexión." };
+  }
+}
+
+export async function sbSignIn(email: string, password: string): Promise<SbSignUpResult> {
+  const em = email.toLowerCase().trim();
+  try {
+    const data = await authFetch("/token?grant_type=password", { email: em, password });
+    const session = toSession(data);
+    if (!session) throw new Error("session");
+    sbSaveSession(session);
+    return { ok: true, authId: session.user_id, email: session.email || em };
+  } catch (e) {
+    const msg = String((e as Error).message || "");
+    if (/400|401|invalid|credentials|grant/i.test(msg)) {
+      return { ok: false, reason: "error", error: "invalid" };
+    }
+    if (/confirm|verif/i.test(msg)) {
+      return { ok: false, reason: "confirm", error: "confirm" };
+    }
+    return { ok: false, reason: "error", error: "No pudimos entrar. Revisá tu conexión." };
+  }
+}
+
+export async function sbSignOut(): Promise<void> {
+  const s = typeof window !== "undefined" ? sbLoadSession() : null;
+  sbClearSession();
+  if (!isSupabaseConfigured || !s) return;
+  try {
+    await authFetch("/logout", {}, s.access_token);
+  } catch { /* noop */ }
+}
+
+/** Valida la sesión contra el servidor (para el arranque). */
+export async function sbValidateSession(): Promise<{ authId: string; email: string } | null> {
+  const token = await sbGetAccessToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { apikey: supabaseAnonKey, Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("invalid");
+    const u = await res.json();
+    return { authId: String(u.id), email: String(u.email || "") };
+  } catch {
+    sbClearSession();
     return null;
   }
 }

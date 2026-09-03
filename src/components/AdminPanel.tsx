@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { useStore, PLAN_META, fmtLong, fmtMoney, type Plan, type User, type UserSubscription } from "../lib/store";
+import { useStore, getAdminKey, setAdminKey, PLAN_META, fmtLong, fmtMoney, type Plan, type User, type UserSubscription } from "../lib/store";
 import {
   LogoMark,
   IconLock,
@@ -674,14 +674,16 @@ function NewBusinessModal({ onClose }: { onClose: () => void }) {
   const [plan, setPlan] = useState<Plan>("crece");
   const [billing, setBilling] = useState<"mensual" | "anual">("mensual");
   const [durationDays, setDurationDays] = useState(30);
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!business.trim() || !name.trim() || !email.trim()) {
       return toast("Completá todos los campos requeridos.", "warn");
     }
 
-    const res = adminAddUser({
+    setBusy(true);
+    const res = await adminAddUser({
       business: business.trim(),
       name: name.trim(),
       email: email.trim().toLowerCase(),
@@ -690,12 +692,14 @@ function NewBusinessModal({ onClose }: { onClose: () => void }) {
       billing,
       durationDays,
     });
+    setBusy(false);
 
     if (!res.ok) {
       return toast(res.error || "No se pudo crear el negocio.", "warn");
     }
 
     toast(`¡Negocio ${business} creado con éxito en plan ${PLAN_META[plan].name}! 🎉`);
+    if (res.warning) toast(res.warning, "warn");
     onClose();
   };
 
@@ -765,7 +769,7 @@ function NewBusinessModal({ onClose }: { onClose: () => void }) {
 
           <div className="mt-6 flex items-center justify-end gap-2 border-t border-ink/10 pt-4">
             <button type="button" onClick={onClose} className="btn-press rounded-full border-2 border-ink/15 px-5 py-2.5 font-display text-sm font-bold text-inkmute hover:text-ink">Cancelar</button>
-            <button type="submit" className="btn-press rounded-full bg-lime px-6 py-2.5 font-display text-sm font-bold text-ink hover:bg-limedeep shadow-sm">Crear Negocio →</button>
+            <button type="submit" disabled={busy} className="btn-press rounded-full bg-lime px-6 py-2.5 font-display text-sm font-bold text-ink hover:bg-limedeep shadow-sm disabled:opacity-60">{busy ? "Creando…" : "Crear Negocio →"}</button>
           </div>
         </form>
       </div>
@@ -775,34 +779,20 @@ function NewBusinessModal({ onClose }: { onClose: () => void }) {
 
 /* ============ MODAL: INFORMACIÓN SUPABASE ============ */
 function SyncInfoModal({ isConfigured, onClose }: { isConfigured: boolean; onClose: () => void }) {
-  const sqlSnippet = `-- 1. Tabla de Usuarios
-CREATE TABLE IF NOT EXISTS cupito_users (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  business TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
-  plan TEXT DEFAULT 'semilla',
-  created_at BIGINT,
-  subscription JSONB
-);
+  const [adminKey, setAdminKeyState] = useState(getAdminKey());
+  const sqlSnippet = `-- 1. Columnas Auth (migración segura, correr de nuevo si ya existe todo)
+ALTER TABLE cupito_users ADD COLUMN IF NOT EXISTS auth_id TEXT UNIQUE;
+ALTER TABLE cupito_users ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
+ALTER TABLE cupito_users ALTER COLUMN password DROP NOT NULL;
+ALTER TABLE cupito_data ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
 
--- 2. Tabla de Datos de Negocio
-CREATE TABLE IF NOT EXISTS cupito_data (
-  user_id TEXT PRIMARY KEY REFERENCES cupito_users(id) ON DELETE CASCADE,
-  data JSONB NOT NULL,
-  updated_at BIGINT
-);
+-- 2. RLS: lectura pública, escritura solo del dueño, SIN delete público
+-- (ver supabase-schema.sql en el repo para el script completo)`;
 
--- 3. Habilitar RLS público para sincronización
-ALTER TABLE cupito_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cupito_data ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Permitir lectura publica usuarios" ON cupito_users FOR SELECT USING (true);
-CREATE POLICY "Permitir escritura publica usuarios" ON cupito_users FOR ALL USING (true);
-CREATE POLICY "Permitir lectura publica datos" ON cupito_data FOR SELECT USING (true);
-CREATE POLICY "Permitir escritura publica datos" ON cupito_data FOR ALL USING (true);`;
+  const saveKey = () => {
+    setAdminKey(adminKey.trim());
+    setAdminKeyState(adminKey.trim());
+  };
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -861,6 +851,35 @@ CREATE POLICY "Permitir escritura publica datos" ON cupito_data FOR ALL USING (t
               <pre className="max-h-28 overflow-y-auto rounded-lg bg-ink/5 p-2 font-mono text-[10px] text-ink/70">
                 {sqlSnippet}
               </pre>
+            </div>
+
+            <div className="rounded-xl border border-ink/10 bg-paper p-3 text-xs space-y-1.5">
+              <p className="font-bold text-ink">3. Clave de Central (para crear/editar negocios en la nube):</p>
+              <p className="text-inkmute">Creá <strong className="font-mono">CUPITO_ADMIN_KEY</strong> en Vercel con cualquier texto largo, y pegala acá (queda en este navegador):</p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  className="field !py-2 font-mono !text-xs"
+                  placeholder="Pegá la clave…"
+                  value={adminKey}
+                  onChange={(e) => setAdminKeyState(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={saveKey}
+                  className="btn-press shrink-0 rounded-xl bg-evergreen px-4 font-display text-xs font-bold text-lime"
+                >
+                  Guardar
+                </button>
+              </div>
+              {adminKey && getAdminKey() === adminKey.trim() && adminKey.trim() !== "" && (
+                <p className="font-bold text-fern">✓ Clave guardada: la Central ya puede operar la nube.</p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-ink/10 bg-paper p-3 text-xs space-y-1.5">
+              <p className="font-bold text-ink">4. Login sin fricción (Supabase Auth):</p>
+              <p className="text-inkmute">En Supabase ➔ <strong>Authentication</strong> ➔ <strong>Sign In/Up</strong> ➔ desactivá <strong>“Confirm email”</strong>. Si no, cada registro exige verificar el email.</p>
             </div>
           </div>
 

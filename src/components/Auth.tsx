@@ -31,14 +31,16 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [pickPlan, setPickPlan] = useState(false);
   const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
   const [chosen, setChosen] = useState<Plan>(presetPlan ?? "crece");
 
-  const switchMode = (m: Mode) => { setMode(m); setError(null); setPickPlan(false); };
-  const fail = (msg: string) => { setError(msg); setShakeKey((k) => k + 1); setLoading(false); };
+  const switchMode = (m: Mode) => { setMode(m); setError(null); setNotice(null); setPickPlan(false); };
+  const fail = (msg: string) => { setError(msg); setNotice(null); setShakeKey((k) => k + 1); setLoading(false); };
+  const info = (msg: string) => { setNotice(msg); setError(null); setShakeKey((k) => k + 1); setLoading(false); };
 
   const goApp = (plan: Plan) => {
     toast("¡Cuenta creada! Tu agenda ya está lista 🎉");
@@ -57,6 +59,7 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     if (mode === "registro") {
       if (name.trim().length < 2) return fail("Contanos tu nombre.");
       if (business.trim().length < 2) return fail("¿Cómo se llama tu negocio?");
@@ -73,7 +76,11 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
           ? await registerAsync({ name, business, email, password })
           : await loginAsync(email, password);
         setLoading(false);
-        if (err) return fail(err);
+        if (err) {
+          // Avisos informativos (confirmar email, cuenta migrada) van en verde, no en rojo
+          if (/confirmaci|revisá tu email|entrá de nuevo|migrada/i.test(err)) return info(err);
+          return fail(err);
+        }
       } catch {
         setLoading(false);
         return fail("No pudimos conectar con la nube. Revisá tu internet e intentá de nuevo.");
@@ -186,6 +193,7 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
                 </div>
 
                 {error && <div key={shakeKey} className="shake mt-5 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">{error}</div>}
+                {notice && <div key={shakeKey} className="shake mt-5 rounded-xl border-2 border-fern/40 bg-fern/10 px-4 py-3 text-sm font-semibold text-fern">{notice}</div>}
 
                 <form onSubmit={submit} className="mt-6 space-y-4">
                   {mode === "registro" && (

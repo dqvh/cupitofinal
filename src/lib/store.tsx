@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -12,6 +13,7 @@ import {
   isSupabaseConfigured,
   fetchRemoteUserBySlug,
   fetchRemoteUserByEmail,
+  fetchRemoteUserByAuthId,
   fetchAllRemoteUsers,
   syncUserToRemote,
   deleteUserFromRemote,
@@ -20,6 +22,12 @@ import {
   fetchRemoteBizData,
   saveRemoteBooking,
   saveRemoteWaitlist,
+  sbSignUp,
+  sbSignIn,
+  sbSignOut,
+  sbValidateSession,
+  sbHasSession,
+  sbGetAccessToken,
 } from "./supabase";
 import { sendReviewRequestEmail } from "./email";
 
@@ -265,7 +273,8 @@ export interface User {
   name: string;
   business: string;
   email: string;
-  password: string;
+  password: string; // legacy (cuentas viejas sin migrar). Las nuevas guardan "".
+  auth_id?: string; // vínculo con Supabase Auth: solo el dueño escribe sus filas
   slug: string;
   plan: Plan;
   createdAt: number;
@@ -715,6 +724,145 @@ function saveSession(id: string | null) {
   if (id) safeSet(SESSION_KEY, id); else safeRemove(SESSION_KEY);
 }
 
+/* Clave de la Central para operar la nube (queda en sessionStorage del navegador) */
+const ADMIN_KEY_KEY = "cupito_admin_key";
+export function getAdminKey(): string {
+  try {
+    return window.sessionStorage.getItem(ADMIN_KEY_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+export function setAdminKey(k: string) {
+  try {
+    if (k) window.sessionStorage.setItem(ADMIN_KEY_KEY, k);
+    else window.sessionStorage.removeItem(ADMIN_KEY_KEY);
+  } catch { /* noop */ }
+}
+
+/* Llamada en segundo plano a /api/admin (no bloquea la UI; ya se aplicó local) */
+function pushAdmin(payload: Record<string, unknown>) {
+  if (!isSupabaseConfigured || typeof window === "undefined") return;
+  const adminKey = getAdminKey();
+  if (!adminKey) {
+    console.warn("[Cupito] Sin clave de Central: el cambio quedó solo local (cargala en el modal de nube).");
+    return;
+  }
+  fetch("/api/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, adminKey }),
+  }).then((r) => {
+    if (!r.ok) console.warn("[Cupito] /api/admin respondió", r.status);
+  }).catch(() => {});
+}
+
+/* Importa una cuenta traída de la nube a este dispositivo (login/registro
+   en otro aparato, o migración a Auth): reemplaza duplicados por email,
+   guarda datos e inicia sesión. */
+function importRemoteAccount(remote: { user: User; data: BizData | null }) {
+  const withoutDup = users.filter((u) => u.id !== remote.user.id && u.email !== remote.user.email);
+  users = [...withoutDup, remote.user];
+  safeSet(USERS_KEY, JSON.stringify(users));
+  if (remote.data) {
+    safeSet(dataKey(remote.user.id), JSON.stringify(normalizeData(remote.data)));
+  } else {
+    loadData(remote.user.id);
+  }
+  saveSession(remote.user.id);
+  emit();
+  if (isSupabaseConfigured) api.syncUserDataFromCloud(remote.user.id).catch(() => {});
+}
+
+/* Llama al endpoint público (/api/public) para escrituras de invitados.
+   Devuelve null si no hay nube o la red falló (el caller usa la vía local). */
+async function callPublicApi(
+  payload: Record<string, unknown>
+): Promise<{ ok: true; id?: string; data?: BizData } | { ok: false; error: string } | null> {
+  if (!isSupabaseConfigured || typeof window === "undefined") return null;
+  try {
+    const res = await fetch("/api/public", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    // Sin JSON no hay API (ej: dev local) → vía local
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) return null;
+    const r = await res.json().catch(() => ({}));
+    if (!res.ok || r.error) return { ok: false, error: String(r.error || "Error de red.") };
+    return { ok: true, id: r.id, data: r.data as BizData | undefined };
+  } catch {
+    return null;
+  }
+}
+
+/* Adopta la cuenta del dueño logueado en Auth: la busca local por auth_id,
+   si no está la trae de la nube. Devuelve null si ok, o mensaje de error. */
+async function adoptAuthAccount(authId: string): Promise<string | null> {
+  const deleted = getDeletedUserIds();
+  const hit = users.find((u) => u.auth_id === authId && !deleted.has(u.id));
+  if (hit) {
+    saveSession(hit.id);
+    emit();
+    if (isSupabaseConfigured) api.syncUserDataFromCloud(hit.id).catch(() => {});
+    return null;
+  }
+  const remote = await fetchRemoteUserByAuthId(authId).catch(() => null);
+  if (!remote || deleted.has(remote.user.id)) {
+    await sbSignOut().catch(() => {});
+    return "Tu login está listo pero no encontramos tu negocio. Escribinos a hola@cupito.app y lo resolvemos.";
+  }
+  importRemoteAccount(remote);
+  return null;
+}
+
+/* Migra una cuenta legacy (password en texto plano) a Supabase Auth.
+   Devuelve null si migró e inició sesión, o string con el error. */
+async function migrateLegacyAccount(em: string, password: string): Promise<string | null> {
+  // 1) La fila tiene que existir (local o nube) y coincidir el password
+  const local = users.find((x) => x.email === em);
+  const remote = await fetchRemoteUserByEmail(em).catch(() => null);
+  const row = local ?? remote?.user;
+  if (!row) return "No encontramos ninguna cuenta con ese email.";
+  if ((row.password || "") !== password) return "La contraseña no coincide. Probá de nuevo.";
+  if (isDemoUser(row)) {
+    saveSession(row.id);
+    emit();
+    return null;
+  }
+  // 2) Migrar en el servidor (verifica password y crea el auth user)
+  let res: any = null;
+  try {
+    const r = await fetch("/api/account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "migrate", email: em, password }),
+    });
+    res = await r.json().catch(() => ({}));
+  } catch {
+    return "No pudimos conectar con el servidor. Revisá tu internet.";
+  }
+  if (!res?.ok) {
+    if (res?.error === "NEED_SIGNIN") {
+      const s = await sbSignIn(em, password);
+      if (s.ok) return adoptAuthAccount(s.authId);
+    }
+    return typeof res?.error === "string" && res.error
+      ? res.error
+      : "No pudimos migrar tu cuenta. Escribinos a hola@cupito.app.";
+  }
+  // 3) Iniciar sesión en Auth y traer la fila vinculada
+  const s = await sbSignIn(em, password);
+  if (!s.ok) return "Cuenta migrada ✓ Entrá de nuevo con tu email y contraseña.";
+  const fresh = await fetchRemoteUserByEmail(em).catch(() => null);
+  if (fresh) {
+    importRemoteAccount(fresh);
+    return null;
+  }
+  return adoptAuthAccount(s.authId);
+}
+
 function loadData(userId: string): BizData {
   try {
     const raw = safeGet(dataKey(userId));
@@ -782,14 +930,34 @@ if (typeof window !== "undefined" && isSupabaseConfigured) {
     emit();
     // Subir a la nube las cuentas creadas en este dispositivo cuando no había
     // conexión (si no, la compu nunca aparece en el celu y viceversa).
+    // Solo filas con auth_id: con RLS+Auth el servidor rechaza las demás
+    // (se suben solas al migrar/iniciar sesión).
     combined.forEach((u) => {
-      if (!remoteIds.has(u.id) && !deleted.has(u.id) && !isDemoUser(u)) {
+      if (!remoteIds.has(u.id) && !deleted.has(u.id) && !isDemoUser(u) && u.auth_id) {
         try {
           syncUserToRemote(u, loadData(u.id)).catch(() => {});
         } catch { /* noop */ }
       }
     });
   }).catch((e) => console.warn("[Cupito] Error en sync inicial de Supabase:", e));
+
+  // Restaurar sesión de Supabase Auth: si hay JWT válido pero la sesión local
+  // apunta a otro lado (u otro dispositivo), adoptar la cuenta del dueño.
+  sbValidateSession().then((sess) => {
+    if (!sess) return;
+    const deleted = getDeletedUserIds();
+    const hit = users.find((u) => u.auth_id === sess.authId && !deleted.has(u.id));
+    if (hit) {
+      if (sessionUserId !== hit.id) {
+        saveSession(hit.id);
+        emit();
+      }
+      return;
+    }
+    fetchRemoteUserByAuthId(sess.authId).then((remote) => {
+      if (remote && !deleted.has(remote.user.id)) importRemoteAccount(remote);
+    }).catch(() => {});
+  }).catch(() => {});
 }
 
 /* ================= store ================= */
@@ -816,7 +984,8 @@ interface StoreApi {
   stopImpersonating(): void;
   adminSetPlan(userId: string, plan: Plan): void;
   adminUpdateUser(userId: string, updates: Partial<User>): void;
-  adminAddUser(data: { name: string; business: string; email: string; password: string; plan: Plan; billing?: "mensual" | "anual"; durationDays?: number }): { ok: boolean; error?: string; user?: User };
+  adminAddUser(data: { name: string; business: string; email: string; password: string; plan: Plan; billing?: "mensual" | "anual"; durationDays?: number }): Promise<{ ok: boolean; error?: string; user?: User; warning?: string }>;
+  adminAddUserLocal(data: { name: string; business: string; email: string; password: string; plan: Plan; billing?: "mensual" | "anual"; durationDays?: number }): User;
   adminDeleteUser(userId: string): void;
   /* negocio */
   addService(s: Omit<Service, "id">): void;
@@ -833,18 +1002,18 @@ interface StoreApi {
   resumeSubscription(): void;
   addReview(r: Omit<Review, "id">): void;
   removeReview(id: string): void;
-  addReviewFor(ownerId: string, r: Omit<Review, "id">): void;
+  addReviewFor(ownerId: string, r: Omit<Review, "id">): Promise<void>;
   addCoupon(c: { code: string; pct: number }): string | null;
   updateCoupon(id: string, patch: Partial<Omit<Coupon, "id">>): void;
   removeCoupon(id: string): void;
   addProfessional(name: string, role: string): string | null;
   updateProfessional(id: string, patch: Partial<Omit<Professional, "id">>): void;
   removeProfessional(id: string): void;
-  addWaitlist(e: { date: string; serviceId: string; client: string; phone: string }, ownerId?: string): string | null;
+  addWaitlist(e: { date: string; serviceId: string; client: string; phone: string }, ownerId?: string): Promise<string | null>;
   removeWaitlist(id: string): void;  createBookingFromWaitlist(waitlistId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   requestReview(bookingId: string): "sent" | "noemail";
   addBooking(b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
-  addBookingFor(ownerId: string, b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): { ok: true; id: string } | { ok: false; error: string };
+  addBookingFor(ownerId: string, b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
   rescheduleBooking(id: string, newDate: string, newTime: string, newProId?: string): { ok: boolean; error?: string };
   setStatus(id: string, status: BookingStatus): void;
   removeBooking(id: string): void;
@@ -855,7 +1024,7 @@ interface StoreApi {
   addBlockedSlot(slot: Omit<BlockedSlot, "id">): void;
   removeBlockedSlot(id: string): void;
   saveClientNote(phone: string, note: string): void;
-  cancelBookingByClient(ownerId: string, bookingId: string, reason?: string): { ok: boolean; error?: string };
+  cancelBookingByClient(ownerId: string, bookingId: string, reason?: string, phone?: string): Promise<{ ok: boolean; error?: string }>;
   addClosedDate(dateStr: string): void;
   removeClosedDate(dateStr: string): void;
   /* sincronización nube */
@@ -1026,45 +1195,77 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   async loginAsync(email, password) {
     const em = email.trim().toLowerCase();
-    const local = users.find((x) => x.email === em);
-    if (local && local.password === password) {
-      saveSession(local.id);
-      emit();
-      if (isSupabaseConfigured) api.syncUserDataFromCloud(local.id).catch(() => {});
-      return null;
-    }
-    if (local && local.password !== password) return "La contraseña no coincide. Probá de nuevo.";
-    // Fallback nube: la cuenta se creó en otro dispositivo (celu/compu)
+    // 1) Camino real: Supabase Auth
     if (isSupabaseConfigured) {
-      const remote = await fetchRemoteUserByEmail(em);
-      if (!remote) return "No encontramos ninguna cuenta con ese email.";
-      if (remote.user.password !== password) return "La contraseña no coincide. Probá de nuevo.";
-      // Importar cuenta + datos a este dispositivo para que quede igual que en el otro
-      const withoutDup = users.filter((u) => u.id !== remote.user.id && u.email !== em);
-      users = [...withoutDup, remote.user];
-      safeSet(USERS_KEY, JSON.stringify(users));
-      if (remote.data) {
-        safeSet(dataKey(remote.user.id), JSON.stringify(normalizeData(remote.data)));
-      } else {
-        loadData(remote.user.id);
-        await api.syncUserDataFromCloud(remote.user.id).catch(() => {});
+      const s = await sbSignIn(em, password).catch(() => ({ ok: false, reason: "error", error: "No pudimos conectar." }) as const);
+      if (s.ok) {
+        const err = await adoptAuthAccount(s.authId);
+        return err;
       }
-      saveSession(remote.user.id);
-      emit();
-      return null;
+      if (s.reason === "confirm") {
+        return "Te enviamos un email de confirmación. Abrilo y después entrá de nuevo.";
+      }
+      if (s.error !== "invalid") return s.error;
+      // Credenciales inválidas en Auth: puede ser cuenta legacy sin migrar → migrar
+      const mig = await migrateLegacyAccount(em, password);
+      if (mig !== null) return mig;
+      return "La contraseña no coincide. Probá de nuevo.";
     }
-    return "No encontramos ninguna cuenta con ese email.";
+    // 2) Sin nube: comparación local legacy
+    const local = users.find((x) => x.email === em);
+    if (!local) return "No encontramos ninguna cuenta con ese email.";
+    if (local.password !== password) return "La contraseña no coincide. Probá de nuevo.";
+    saveSession(local.id);
+    emit();
+    return null;
   },
   async registerAsync({ name, business, email, password }) {
     const em = email.trim().toLowerCase();
     if (users.some((u) => u.email === em)) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
-    // Evitar duplicados entre dispositivos: si el email ya existe en la nube,
-    // no crear una tienda nueva vacía (era lo que dejaba "para configurar de 0").
-    if (isSupabaseConfigured) {
-      const remote = await fetchRemoteUserByEmail(em).catch(() => null);
-      if (remote) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+    // Sin nube: cuenta local legacy
+    if (!isSupabaseConfigured) {
+      return api.register({ name, business, email, password });
     }
-    return api.register({ name, business, email, password });
+    // No crear duplicados: si el email ya existe en la nube, ir a login
+    const remote = await fetchRemoteUserByEmail(em).catch(() => null);
+    if (remote) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+    // Crear en Supabase Auth (la sesión queda guardada)
+    const s = await sbSignUp(em, password);
+    if (!s.ok) {
+      if (s.reason === "exists") return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+      if (s.reason === "confirm") {
+        return "Te enviamos un email de confirmación. Abrilo para activar tu cuenta y después entrá.";
+      }
+      return s.error;
+    }
+    // Slug único (local + nube)
+    let slug = slugify(business);
+    const base = slug;
+    let i = 1;
+    const slugTakenLocally = (sl: string) => users.some((u) => u.slug === sl);
+    while (slugTakenLocally(slug)) slug = `${base}-${i++}`;
+    if (await fetchRemoteUserBySlug(slug).catch(() => null)) {
+      slug = `${base}-${i++}`;
+      while (await fetchRemoteUserBySlug(slug).catch(() => null)) slug = `${base}-${i++}`;
+    }
+    const user: User = {
+      id: s.authId,
+      auth_id: s.authId,
+      name: name.trim(),
+      business: business.trim(),
+      email: em,
+      password: "",
+      slug,
+      plan: "semilla",
+      createdAt: Date.now(),
+    };
+    const withoutDup = users.filter((u) => u.email !== em);
+    saveUsers([...withoutDup, user]);
+    saveSession(user.id);
+    const fresh = defaultData();
+    saveData(user.id, fresh);
+    emit();
+    return null;
   },
   loginDemo() {
     const existing = users.find((u) => u.email === "demo@cupito.app");
@@ -1083,7 +1284,11 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     seedDemoExtras(demo.id);
     emit();
   },
-  logout() { saveSession(null); emit(); },
+  logout() {
+    saveSession(null);
+    if (isSupabaseConfigured) sbSignOut().catch(() => {});
+    emit();
+  },
   deleteAccount() {
     if (!sessionUserId) return;
     const id = sessionUserId;
@@ -1098,7 +1303,16 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveSession(null);
     safeRemove(dataKey(id));
     if (isSupabaseConfigured) {
+      // Borrado lógico (RLS ya no permite DELETE físico) + borrado del login en Auth
       deleteUserFromRemote(id).catch(() => {});
+      sbGetAccessToken().then((t) => {
+        if (!t) return sbSignOut().catch(() => {});
+        return fetch("/api/account", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", accessToken: t }),
+        }).catch(() => {}).finally(() => sbSignOut().catch(() => {}));
+      }).catch(() => {});
     }
     emit();
   },
@@ -1132,6 +1346,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     ssRemove(ADMIN_SESSION_KEY);
     ssRemove(IMPERSONATION_KEY);
     saveSession(null);
+    if (isSupabaseConfigured) sbSignOut().catch(() => {});
     emit();
   },
   loginAs(userId) {
@@ -1149,6 +1364,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   adminSetPlan(userId, plan) {
     saveUsers(users.map((u) => (u.id === userId ? { ...u, plan } : u)));
     emit();
+    pushAdmin({ action: "set-plan", userId, plan });
   },
   adminUpdateUser(userId, updates) {
     saveUsers(
@@ -1162,12 +1378,61 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       })
     );
     emit();
+    pushAdmin({ action: "update-user", userId, updates });
   },
-  adminAddUser(data) {
+  async adminAddUser(data) {
     const em = data.email.trim().toLowerCase();
     if (users.some((u) => u.email === em)) {
-      return { ok: false, error: "Ya existe un negocio registrado con ese email." };
+      return { ok: false, error: "Ya existe un negocio registrado con ese email." } as const;
     }
+    // Con nube + clave de Central: provisionar en el servidor (crea login + filas)
+    if (isSupabaseConfigured && getAdminKey()) {
+      try {
+        const res = await fetch("/api/admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "provision",
+            adminKey: getAdminKey(),
+            name: data.name.trim(),
+            business: data.business.trim(),
+            email: em,
+            password: data.password || "cupito123",
+            plan: data.plan,
+            billing: data.billing ?? "mensual",
+            durationDays: data.durationDays,
+          }),
+        });
+        const r = await res.json().catch(() => ({}));
+        if (res.ok && r.ok && r.user) {
+          const remoteUser = {
+            ...r.user,
+            subscription: r.user.subscription || undefined,
+          } as User;
+          saveUsers([...users.filter((u) => u.email !== em), remoteUser]);
+          loadData(remoteUser.id);
+          emit();
+          return { ok: true, user: remoteUser } as const;
+        }
+        if (res.status === 403) {
+          return { ok: false, error: "Clave de Central incorrecta o sin configurar (ver modal de nube)." } as const;
+        }
+        // otro error: seguir con alta local y avisar
+        const fallback = api.adminAddUserLocal(data);
+        return { ok: true, user: fallback, warning: `Se creó solo local: ${r.error || "falló la nube"}.` } as const;
+      } catch {
+        const fallback = api.adminAddUserLocal(data);
+        return { ok: true, user: fallback, warning: "Sin conexión: se creó solo local." } as const;
+      }
+    }
+    const local = api.adminAddUserLocal(data);
+    if (isSupabaseConfigured && !getAdminKey()) {
+      return { ok: true, user: local, warning: "Solo local: configurá la clave de Central (modal de nube) para subirlo." } as const;
+    }
+    return { ok: true, user: local } as const;
+  },
+  adminAddUserLocal(data) {
+    const em = data.email.trim().toLowerCase();
     const business = data.business.trim();
     let baseSlug = slugify(business) || "negocio";
     let slug = baseSlug;
@@ -1199,7 +1464,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveUsers([...users, newUser]);
     loadData(newUser.id);
     emit();
-    return { ok: true, user: newUser };
+    return newUser;
   },
   adminDeleteUser(userId) {
     markUserDeleted(userId);
@@ -1214,6 +1479,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     safeRemove(dataKey(userId));
     if (isSupabaseConfigured) {
       deleteUserFromRemote(userId).catch(() => {});
+      pushAdmin({ action: "delete-user", userId });
     }
     emit();
   },
@@ -1373,7 +1639,17 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveData(sessionUserId, data);
     emit();
   },
-  addReviewFor(ownerId, r) {
+  async addReviewFor(ownerId, r) {
+    if (isSupabaseConfigured) {
+      const res = await callPublicApi({ action: "review", ownerId, review: r });
+      if (res) {
+        if (res.ok && res.data) {
+          safeSet(dataKey(ownerId), JSON.stringify(normalizeData(res.data)));
+          emit();
+        }
+        return;
+      }
+    }
     const data = loadData(ownerId);
     data.reviews = [{ ...r, id: uid() }, ...data.reviews];
     saveData(ownerId, data);
@@ -1434,9 +1710,21 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveData(sessionUserId, data);
     emit();
   },
-  addWaitlist({ date, serviceId, client, phone }, ownerId) {
+  async addWaitlist({ date, serviceId, client, phone }, ownerId) {
     const targetId = ownerId || sessionUserId;
     if (!targetId) return "No se encontró el negocio.";
+    // Con nube: el servidor valida y guarda (los invitados no pueden escribir directo con RLS+Auth)
+    if (isSupabaseConfigured) {
+      const r = await callPublicApi({ action: "waitlist", ownerId: targetId, entry: { date, serviceId, client, phone } });
+      if (r) {
+        if (r.ok && r.data) {
+          safeSet(dataKey(targetId), JSON.stringify(normalizeData(r.data)));
+          emit();
+        }
+        return r.ok ? null : r.error;
+      }
+      // sin red: vía local
+    }
     const data = loadData(targetId);
     if (client.trim().length < 2) return "Poné tu nombre completo.";
     if (phone.replace(/\D/g, "").length < 8) return "Necesitamos un teléfono válido para avisarte.";
@@ -1530,7 +1818,22 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     emit();
     return { ok: true, id };
   },
-  addBookingFor(ownerId, { client, phone, email, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
+  async addBookingFor(ownerId, { client, phone, email, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
+    // Con nube: el servidor valida y guarda (los invitados no pueden escribir directo con RLS+Auth)
+    if (isSupabaseConfigured) {
+      const r = await callPublicApi({
+        action: "book", ownerId,
+        booking: { client, phone, email, serviceId, date, time, items, proId, paidDeposit, paymentMethod, status, depositClaim },
+      });
+      if (r) {
+        if (r.ok && r.data) {
+          safeSet(dataKey(ownerId), JSON.stringify(normalizeData(r.data)));
+          emit();
+        }
+        return r.ok ? { ok: true, id: r.id! } : { ok: false, error: r.error };
+      }
+      // sin red: vía local
+    }
     const data = loadData(ownerId);
     const owner = users.find((u) => u.id === ownerId);
     if (semillaLimitReached(owner, data))
@@ -1672,7 +1975,27 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveData(sessionUserId, data);
     emit();
   },
-  cancelBookingByClient(ownerId, bookingId, reason) {
+  async cancelBookingByClient(ownerId, bookingId, reason, phone) {
+    if (isSupabaseConfigured) {
+      const r = await callPublicApi({ action: "cancel", ownerId, bookingId, reason, phone });
+      if (r) {
+        if (r.ok) {
+          if (r.data) safeSet(dataKey(ownerId), JSON.stringify(normalizeData(r.data)));
+          else {
+            // Sin data en respuesta: marcar local para feedback inmediato
+            const data = loadData(ownerId);
+            data.bookings = data.bookings.map((b) =>
+              b.id === bookingId ? { ...b, status: "cancelada" as BookingStatus, cancelReason: reason || "Cancelado por el cliente" } : b
+            );
+            safeSet(dataKey(ownerId), JSON.stringify(data));
+          }
+          emit();
+          return { ok: true };
+        }
+        return { ok: false, error: r.error };
+      }
+      // sin red: vía local
+    }
     const data = loadData(ownerId);
     const target = data.bookings.find((b) => b.id === bookingId);
     if (!target) return { ok: false, error: "No se encontró el turno." };
@@ -1776,6 +2099,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", onFocus);
     };
   }, [sessionUserId]);
+
+  // Si hay sesión local vieja pero no hay JWT, las escrituras no llegan a la nube:
+  // avisar una vez que hay que volver a entrar (la sesión Auth expira o se cerró en otro lado).
+  const reloginNoticed = useRef(false);
+  useEffect(() => {
+    if (reloginNoticed.current || !memo.user || isDemoUser(memo.user)) return;
+    if (!isSupabaseConfigured || sbHasSession()) return;
+    reloginNoticed.current = true;
+    const t = setTimeout(() => {
+      if (!sbHasSession()) toast("Cerrá sesión y volvé a entrar para reconectar la nube 🔄", "warn");
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [memo.user, toast]);
 
   return (
     <Ctx.Provider value={memo}>

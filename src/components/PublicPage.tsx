@@ -305,8 +305,8 @@ export default function PublicPage({ slug }: { slug: string }) {
           businessName={user.business}
           theme={theme}
           onClose={() => setShowReviewModal(false)}
-          onSubmit={(rev) => {
-            addReviewFor(user.id, rev);
+          onSubmit={async (rev) => {
+            await addReviewFor(user.id, rev);
             toast("¡Gracias por tu reseña! Ya está visible en la página ⭐");
             setShowReviewModal(false);
           }}

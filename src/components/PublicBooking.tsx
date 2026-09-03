@@ -127,9 +127,11 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
   const [wlPhone, setWlPhone] = useState("");
   const [wlDone, setWlDone] = useState(false);
   const [wlError, setWlError] = useState<string | null>(null);
+  const [wlBusy, setWlBusy] = useState(false);
   const [showWlForm, setShowWlForm] = useState(false);
   const [showAllSlots, setShowAllSlots] = useState(false);
   const [confirmedId, setConfirmedId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [cancelFeedback, setCancelFeedback] = useState<string | null>(null);
   const [cancelBlocked, setCancelBlocked] = useState(false);
   const [showLookupModal, setShowLookupModal] = useState(!!initialLookupOpen);
@@ -225,9 +227,11 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
     setCouponMsg({ ok: true, text: `¡Listo! ${found.pct}% de descuento aplicado.` });
   };
 
-  const joinWaitlist = () => {
-    if (!selectedDate || !serviceId) return;
-    const err = addWaitlist({ date: selectedDate, serviceId, client: wlClient, phone: wlPhone }, user.id);
+  const joinWaitlist = async () => {
+    if (!selectedDate || !serviceId || wlBusy) return;
+    setWlBusy(true);
+    const err = await addWaitlist({ date: selectedDate, serviceId, client: wlClient, phone: wlPhone }, user.id);
+    setWlBusy(false);
     if (err) return setWlError(err);
     setWlError(null);
     setWlDone(true);
@@ -245,15 +249,17 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
     else finish({});
   };
 
-  const finish = (opts: { claimTx?: string }) => {
-    if (!serviceId || !selectedDate || !time) return;
-    const res = addBookingFor(user.id, {
+  const finish = async (opts: { claimTx?: string }) => {
+    if (!serviceId || !selectedDate || !time || confirming) return;
+    setConfirming(true);
+    const res = await addBookingFor(user.id, {
       client, phone, email: email.trim() || undefined, serviceId, date: selectedDate, time, source: "online",
       items: bookingItems.length ? bookingItems : undefined,
       proId: proId ?? undefined,
       status: opts.claimTx ? "pendiente" : undefined,
       depositClaim: opts.claimTx ? { txId: opts.claimTx, sentAt: Date.now() } : undefined,
     });
+    setConfirming(false);
     if (!res.ok) { setShowPay(false); return setError(res.error); }
     setShowPay(false);
     setClaimed(!!opts.claimTx);
@@ -636,8 +642,8 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
                   </div>
                 </div>
                 {wlError && <p className="mt-2 text-xs font-semibold text-coral">{wlError}</p>}
-                <button onClick={joinWaitlist} className="mt-3 w-full rounded-xl bg-coral py-3 font-display text-sm font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)]">
-                  Anotarme en la lista de espera
+                <button onClick={joinWaitlist} disabled={wlBusy} className="mt-3 w-full rounded-xl bg-coral py-3 font-display text-sm font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)] disabled:opacity-60">
+                  {wlBusy ? "Anotándote…" : "Anotarme en la lista de espera"}
                 </button>
               </div>
             )}
@@ -775,8 +781,8 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
                 </div>
 
                 {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-                <button onClick={confirm} className={`w-full rounded-xl ${theme.primaryBtn} py-3.5 font-display text-base font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-md active:translate-y-0`}>
-                  {depositOn ? `Confirmar y pagar seña (${fmtMoney(deposit)}) →` : "Confirmar turno →"}
+                <button onClick={confirm} disabled={confirming} className={`w-full rounded-xl ${theme.primaryBtn} py-3.5 font-display text-base font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-md active:translate-y-0 disabled:opacity-70`}>
+                  {confirming ? "Confirmando…" : depositOn ? `Confirmar y pagar seña (${fmtMoney(deposit)}) →` : "Confirmar turno →"}
                 </button>
               </div>
             )}
@@ -893,10 +899,10 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
               {!cancelFeedback ? (
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (window.confirm("¿Seguro que deseás cancelar este turno? Liberaremos el horario para otra persona.")) {
                       if (confirmedId) {
-                        const r = cancelBookingByClient(user.id, confirmedId, "Cancelado por el cliente desde el comprobante");
+                        const r = await cancelBookingByClient(user.id, confirmedId, "Cancelado por el cliente desde el comprobante", phone);
                         if (r.ok) {
                           setCancelFeedback("Tu turno ha sido cancelado con éxito. ¡Gracias por avisar con tiempo!");
                           toast("Turno cancelado ✓");
@@ -964,9 +970,10 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
           services={biz.services}
           professionals={biz.professionals}
           whatsapp={settings.whatsapp}
-          onCancelBooking={(bId) => {
-            const r = cancelBookingByClient(user.id, bId, "Cancelado por el cliente desde Mis Turnos");
+          onCancelBooking={async (bId, lookupPhone) => {
+            const r = await cancelBookingByClient(user.id, bId, "Cancelado por el cliente desde Mis Turnos", lookupPhone);
             if (r.ok) toast("Turno cancelado ✓ El horario fue liberado.");
+            else if (r.error !== "FALTA_MENOS_24H") toast(r.error || "No se pudo cancelar.", "warn");
             return r;
           }}
           onClose={() => setShowLookupModal(false)}
@@ -1197,11 +1204,12 @@ function LookupBookingsModal({
   services: Service[];
   professionals: Professional[];
   whatsapp?: string;
-  onCancelBooking: (id: string) => { ok: boolean; error?: string };
+  onCancelBooking: (id: string, phone: string) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
 }) {
   const [inputPhone, setInputPhone] = useState("");
   const [blockedMsg, setBlockedMsg] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const phoneVal = normalizeArgentinaPhone(inputPhone);
   const nowKey = dateKey(new Date());
 
@@ -1274,15 +1282,18 @@ function LookupBookingsModal({
                   <div className="pt-2 border-t border-ink/8 flex justify-end">
                     <button
                       type="button"
-                      onClick={() => {
+                      disabled={cancellingId === b.id}
+                      onClick={async () => {
                         if (window.confirm("¿Seguro que deseás cancelar este turno?")) {
-                          const r = onCancelBooking(b.id);
+                          setCancellingId(b.id);
+                          const r = await onCancelBooking(b.id, inputPhone);
+                          setCancellingId(null);
                           if (!r.ok && r.error === "FALTA_MENOS_24H") setBlockedMsg(true);
                         }
                       }}
-                      className="rounded-lg border border-coral/30 bg-coral/10 px-3 py-1.5 font-display text-xs font-bold text-coral hover:bg-coral hover:text-white transition-all"
+                      className="rounded-lg border border-coral/30 bg-coral/10 px-3 py-1.5 font-display text-xs font-bold text-coral hover:bg-coral hover:text-white transition-all disabled:opacity-60"
                     >
-                      Cancelar turno
+                      {cancellingId === b.id ? "Cancelando…" : "Cancelar turno"}
                     </button>
                   </div>
                 </div>
