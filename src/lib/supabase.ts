@@ -230,8 +230,8 @@ export async function fetchRemoteUserByEmail(
 /* ================= Supabase Auth (email + password) =================
    Implementado con fetch directo a GoTrue para no sumar ~120KB al bundle.
    La sesión (access/refresh token) vive en localStorage.
-   Requiere en Supabase -> Authentication: "Confirm email" ACTIVADO y
-   Site URL = tu dominio. Anti-bots opcional con Turnstile (ver abajo). */
+   "Confirm email" va DESACTIVADO (entran directo). Anti-bots opcional
+   con Turnstile (ver abajo). */
 
 export interface SbSession {
   access_token: string;

@@ -52,9 +52,8 @@ DELETE FROM cupito_users WHERE email = 'demo@cupito.app';
 --    reseñas) pasan por /api/public/* con la service key, con validación.
 --
 --    IMPORTANTE en Supabase -> Authentication -> Sign In/Up:
---    ACTIVÁ "Confirm email" para que solo entren emails reales.
---    Y en Authentication -> URL Configuration poné Site URL = https://cupito.app
---    (o tu dominio de Vercel) para que el link del email vuelva a tu página.
+--    Dejá DESACTIVADO "Confirm email" (entran directo, sin verificar).
+--    Igual dejá Site URL = https://cupito.app (o tu dominio) por las dudas.
 ALTER TABLE cupito_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cupito_data ENABLE ROW LEVEL SECURITY;
 
