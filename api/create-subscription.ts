@@ -74,7 +74,8 @@ export default async function handler(req: Request): Promise<Response> {
     });
 
     const d = await res.json();
-    const url = d.init_point || d.sandbox_init_point;
+    const isTest = TOKEN.startsWith("TEST-");
+    const url = isTest ? (d.sandbox_init_point || d.init_point) : (d.init_point || d.sandbox_init_point);
     if (!res.ok || !url) return json({ demo: false, error: d.message || d.cause?.[0]?.description || "MercadoPago rechazó la suscripción." }, 400);
 
     return json({ init_point: url, sandbox_init_point: d.sandbox_init_point ?? null });

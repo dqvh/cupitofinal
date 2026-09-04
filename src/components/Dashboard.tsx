@@ -255,12 +255,15 @@ export default function Dashboard() {
       } else {
         store.toast("Mercado Pago todavía no autorizó el pago. Si ya pagaste, recargá en un momento.", "warn");
       }
-      if (window.location.search.includes("preapproval")) {
-        const url = new URL(window.location.href);
-        url.searchParams.delete("preapproval_id");
-        url.searchParams.delete("preapprovalId");
-        url.searchParams.delete("preapproval");
-        window.history.replaceState({}, "", url.pathname + url.hash.split("?")[0]);
+      if (window.location.search.includes("preapproval") || window.location.hash.includes("preapproval")) {
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("preapproval_id");
+          url.searchParams.delete("preapprovalId");
+          url.searchParams.delete("preapproval");
+          const cleanHash = (window.location.hash || "").split("?")[0] || "#/app";
+          window.history.replaceState({}, "", url.pathname + cleanHash);
+        } catch { /* noop */ }
       }
     };
     void run();
