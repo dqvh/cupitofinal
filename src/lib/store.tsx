@@ -302,6 +302,7 @@ export function semillaLimitReached(owner: Pick<User, "plan"> | undefined, data:
 export const isPaid = (u: User) => u.plan !== "semilla";
 /* La cuenta demo vive solo en cada dispositivo: jamás se sube ni se trae de la nube */
 export const DEMO_EMAIL = "demo@cupito.app";
+export const DEMO_SLUG = "cupito-demo";
 export const isDemoUser = (u: Pick<User, "email"> | undefined | null) => !!u && u.email === DEMO_EMAIL;
 export const PRO_LIMIT: Record<Plan, number> = { semilla: 1, crece: 3, escala: 99 };
 export const PRO_COLORS = ["#cdf463", "#ff7a59", "#93e6c3", "#b7e33f", "#f4b863"];
@@ -1560,13 +1561,18 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   loginDemo() {
     const existing = users.find((u) => u.email === "demo@cupito.app");
+    // Migración: la demo vieja usaba slug studio-nails y tapaba el ejemplo
+    // real en cada celular. La demo ahora vive en cupito-demo.
+    if (existing && (existing as User).slug === "studio-nails") {
+      (existing as User).slug = DEMO_SLUG;
+    }
     const demo: User = existing ?? {
       id: uid(),
       name: "Caro Méndez",
-      business: "Studio Nails",
+      business: "Studio Nails (demo local)",
       email: "demo@cupito.app",
       password: "demo123",
-      slug: "studio-nails",
+      slug: DEMO_SLUG,
       plan: "crece",
       createdAt: Date.now(),
     };
@@ -1973,7 +1979,8 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     emit();
   },
   async addReviewFor(ownerId, r) {
-    if (isSupabaseConfigured) {
+    const reviewOwner = users.find((u) => u.id === ownerId);
+    if (!isDemoUser(reviewOwner) && isSupabaseConfigured) {
       const res = await callPublicApi({ action: "review", ownerId, review: r });
       if (res) {
         if (res.ok && res.data) {
@@ -2055,8 +2062,11 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   async addWaitlist({ date, serviceId, client, phone }, ownerId) {
     const targetId = ownerId || sessionUserId;
     if (!targetId) return "No se encontró el negocio.";
-    // Con nube: el servidor valida y guarda (los invitados no pueden escribir directo con RLS+Auth)
-    if (isSupabaseConfigured) {
+    const targetOwner = users.find((u) => u.id === targetId);
+    const targetIsDemo = isDemoUser(targetOwner);
+    // Con nube: el servidor valida y guarda (los invitados no pueden escribir directo con RLS+Auth).
+    // La demo es 100% local: nunca va a la nube (su id no existe en Supabase).
+    if (!targetIsDemo && isSupabaseConfigured) {
       const r = await callPublicApi({ action: "waitlist", ownerId: targetId, entry: { date, serviceId, client, phone } });
       if (r) {
         if (r.ok && r.data) {
@@ -2076,7 +2086,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const entry: WaitlistEntry = { id: uid(), date, serviceId, client: client.trim(), phone: phone.trim(), createdAt: Date.now() };
     data.waitlist = [...data.waitlist, entry];
     saveData(targetId, data);
-    saveRemoteWaitlist(targetId, entry).catch(() => {});
+    if (!targetIsDemo) saveRemoteWaitlist(targetId, entry).catch(() => {});
     emit();
     return null;
   },
@@ -2192,8 +2202,11 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     return { ok: true, id };
   },
   async addBookingFor(ownerId, { client, phone, email, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
-    // Con nube: el servidor valida y guarda (los invitados no pueden escribir directo con RLS+Auth)
-    if (isSupabaseConfigured) {
+    const bookingOwner = users.find((u) => u.id === ownerId);
+    const bookingIsDemo = isDemoUser(bookingOwner);
+    // Con nube: el servidor valida y guarda (los invitados no pueden escribir directo con RLS+Auth).
+    // La demo es 100% local: su id no existe en Supabase y el servidor diría "ya no está disponible".
+    if (!bookingIsDemo && isSupabaseConfigured) {
       const r = await callPublicApi({
         action: "book", ownerId,
         booking: { client, phone, email, serviceId, date, time, items, proId, paidDeposit, paymentMethod, status, depositClaim },
@@ -2251,7 +2264,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim, createdAt: Date.now() };
     data.bookings = [...data.bookings, newBooking];
     saveData(ownerId, data);
-    saveRemoteBooking(ownerId, newBooking).catch(() => {});
+    if (!bookingIsDemo) saveRemoteBooking(ownerId, newBooking).catch(() => {});
     emit();
     return { ok: true, id };
   },
@@ -2374,7 +2387,8 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     emit();
   },
   async cancelBookingByClient(ownerId, bookingId, reason, phone) {
-    if (isSupabaseConfigured) {
+    const cancelOwner = users.find((u) => u.id === ownerId);
+    if (!isDemoUser(cancelOwner) && isSupabaseConfigured) {
       const r = await callPublicApi({ action: "cancel", ownerId, bookingId, reason, phone });
       if (r) {
         if (r.ok) {
@@ -2560,7 +2574,9 @@ export function usePublicPage(slug: string): ({ user: User } & Record<"data", Bi
   return useMemo(() => {
     void version;
     const target = (slug || "").toLowerCase().trim();
-    const user = users.find((u) => u.slug.toLowerCase().trim() === target) ?? null;
+    const matches = users.filter((u) => u.slug.toLowerCase().trim() === target);
+    // Si hay colisión (demo vieja + negocio real con mismo slug), gana el real.
+    const user = matches.find((u) => !isDemoUser(u)) ?? matches[0] ?? null;
     if (!user) return null;
     const pageData = loadData(user.id);
     return { user, ["data"]: pageData };
@@ -2577,10 +2593,10 @@ export function ensureDemo(): void {
     const demo: User = {
       id: uid(),
       name: "Caro Méndez",
-      business: "Studio Nails",
+      business: "Studio Nails (demo local)",
       email: "demo@cupito.app",
       password: "demo123",
-      slug: "studio-nails",
+      slug: DEMO_SLUG,
       plan: "crece",
       createdAt: Date.now(),
     };
@@ -2588,6 +2604,11 @@ export function ensureDemo(): void {
     loadData(demo.id);
     seedDemoExtras(demo.id);
     return;
+  }
+  // Migración: demo vieja con slug studio-nails tapaba el ejemplo real.
+  if ((existing as User).slug === "studio-nails") {
+    (existing as User).slug = DEMO_SLUG;
+    safeSet(USERS_KEY, JSON.stringify(users));
   }
   seedDemoExtras(existing.id);
 }
