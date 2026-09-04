@@ -38,6 +38,16 @@ function svcHeaders(serviceKey: string, extra?: Record<string, string>) {
   };
 }
 
+function slugify(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
 
@@ -52,6 +62,156 @@ export default async function handler(req: Request): Promise<Response> {
   if (!url || !serviceKey) return json({ error: "Falta configuración de Supabase en el servidor." }, 500);
 
   try {
+    /* ---------------- REGISTRAR CUENTA ---------------- */
+    if (body.action === "register") {
+      const name = String(body.name || "").trim().slice(0, 60);
+      const business = String(body.business || "").trim().slice(0, 80);
+      const email = String(body.email || "").toLowerCase().trim();
+      const password = String(body.password || "");
+      if (name.length < 2 || business.length < 2) return json({ error: "Faltan datos." }, 400);
+      if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: "Email inválido." }, 400);
+      if (password.length < 6) return json({ error: "La contraseña necesita 6+ caracteres." }, 400);
+
+      // 1. Verificar si ya existe en cupito_users (activo)
+      const exRes = await fetch(`${url}/rest/v1/cupito_users?select=id,deleted&email=eq.${encodeURIComponent(email)}`, { headers: svcHeaders(serviceKey) });
+      const exRows = (await exRes.json().catch(() => [])) as any[];
+      if (Array.isArray(exRows) && exRows.length > 0 && !exRows[0].deleted) {
+        return json({ error: "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?" }, 409);
+      }
+
+      // 2. Crear o reutilizar usuario en Supabase Auth con email_confirm: true
+      let authId = "";
+      const createRes = await fetch(`${url}/auth/v1/admin/users`, {
+        method: "POST",
+        headers: svcHeaders(serviceKey),
+        body: JSON.stringify({ email, password, email_confirm: true }),
+      });
+      const created = await createRes.json().catch(() => ({}));
+      if (created?.id) {
+        authId = String(created.id);
+      } else {
+        // Si ya existía en Auth (ej: intento previo), actualizar password y confirmar
+        const listRes = await fetch(`${url}/auth/v1/admin/users`, { headers: svcHeaders(serviceKey) });
+        if (listRes.ok) {
+          const listed = await listRes.json().catch(() => ({}));
+          const found = (listed?.users || []).find((u: any) => String(u.email || "").toLowerCase() === email);
+          if (found?.id) {
+            authId = String(found.id);
+            await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(authId)}`, {
+              method: "PUT",
+              headers: svcHeaders(serviceKey),
+              body: JSON.stringify({ password, email_confirm: true }),
+            });
+          }
+        }
+      }
+
+      if (!authId) {
+        return json({ error: "No pudimos crear el usuario en la nube." }, 500);
+      }
+
+      // 3. Generar slug único en la nube
+      let slug = slugify(business) || "negocio";
+      const base = slug;
+      let i = 1;
+      for (;;) {
+        const sRes = await fetch(`${url}/rest/v1/cupito_users?select=id&slug=eq.${encodeURIComponent(slug)}&id=neq.${encodeURIComponent(authId)}`, { headers: svcHeaders(serviceKey) });
+        const sRows = (await sRes.json().catch(() => [])) as any[];
+        if (!Array.isArray(sRows) || sRows.length === 0) break;
+        slug = `${base}-${i++}`;
+        if (i > 50) break;
+      }
+
+      const now = Date.now();
+      const plan = body.plan === "escala" ? "escala" : body.plan === "crece" ? "crece" : "semilla";
+      const billing = body.billing === "anual" ? "anual" : "mensual";
+      const days = typeof body.durationDays === "number" ? body.durationDays : (billing === "anual" ? 365 : 30);
+      const nextRenewal = now + days * 24 * 3600 * 1000;
+      const subscription = plan !== "semilla" ? {
+        billing,
+        activeSince: now,
+        nextRenewal,
+        autoRenew: true,
+        status: "activa",
+      } : null;
+
+      const user = {
+        id: authId,
+        auth_id: authId,
+        name,
+        business,
+        email,
+        password: null,
+        slug,
+        plan,
+        created_at: now,
+        subscription,
+        deleted: false,
+      };
+
+      // 4. Guardar en cupito_users (upsert)
+      const uRes = await fetch(`${url}/rest/v1/cupito_users?on_conflict=id`, {
+        method: "POST",
+        headers: { ...svcHeaders(serviceKey), Prefer: "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify(user),
+      });
+      if (!uRes.ok) {
+        const t = await uRes.text().catch(() => "");
+        return json({ error: `Error guardando negocio: ${t}` }, 500);
+      }
+
+      // 5. Guardar en cupito_data (upsert datos default)
+      const defaultData = {
+        services: [
+          { id: "srv-1", name: "Atención General", duration: 30, price: 0, active: true },
+        ],
+        professionals: [],
+        bookings: [],
+        products: [],
+        reviews: [],
+        coupons: [],
+        waitlist: [],
+        blockedSlots: [],
+        settings: {
+          depositEnabled: false,
+          depositPct: 20,
+          hours: [
+            { open: false, from: "09:00", to: "13:00" },
+            { open: true, from: "09:00", to: "20:00" },
+            { open: true, from: "09:00", to: "20:00" },
+            { open: true, from: "09:00", to: "20:00" },
+            { open: true, from: "09:00", to: "20:00" },
+            { open: true, from: "09:00", to: "20:00" },
+            { open: true, from: "09:00", to: "14:00" },
+          ],
+          description: "",
+          address: "",
+          whatsapp: "",
+          instagram: "",
+          mapsUrl: "",
+          transferAlias: "",
+          transferCBU: "",
+          transferHolder: "",
+          setupDismissed: false,
+          theme: "evergreen",
+          maxAdvanceDays: 30,
+        },
+      };
+
+      await fetch(`${url}/rest/v1/cupito_data?on_conflict=user_id`, {
+        method: "POST",
+        headers: { ...svcHeaders(serviceKey), Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify({
+          user_id: authId,
+          data: defaultData,
+          updated_at: now,
+          deleted: false,
+        }),
+      });
+
+      return json({ ok: true, user, slug });
+    }
+
     /* ---------------- MIGRAR ---------------- */
     if (body.action === "migrate") {
       const email = String(body.email || "").toLowerCase().trim();

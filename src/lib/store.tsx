@@ -280,6 +280,7 @@ export interface User {
   plan: Plan;
   createdAt: number;
   subscription?: UserSubscription;
+  deleted?: boolean;
 }
 
 export const PLAN_META: Record<Plan, { name: string; price: string }> = {
@@ -923,13 +924,17 @@ async function completeBizSetupCore(name: string, business: string): Promise<str
       slug,
       plan: "semilla",
       createdAt: Date.now(),
+      deleted: false,
     };
-    const withoutDup = users.filter((u) => u.email !== em);
+    unmarkUserDeleted(user.id);
+    const withoutDup = users.filter((u) => u.email !== em && u.id !== user.id);
     saveUsers([...withoutDup, user]);
     saveSession(user.id);
-    saveData(user.id, defaultData());
+    const fresh = defaultData();
+    saveData(user.id, fresh);
     clearPendingBiz();
     setFreshSignup();
+    await syncUserToRemote(user, fresh).catch(() => {});
     emit();
     return null;
   } catch {
@@ -950,13 +955,17 @@ async function createBizRowFromPending(pending: PendingBiz): Promise<boolean> {
       slug,
       plan: "semilla",
       createdAt: Date.now(),
+      deleted: false,
     };
-    const withoutDup = users.filter((u) => u.email !== pending.email);
+    unmarkUserDeleted(user.id);
+    const withoutDup = users.filter((u) => u.email !== pending.email && u.id !== user.id);
     saveUsers([...withoutDup, user]);
     saveSession(user.id);
-    saveData(user.id, defaultData());
+    const fresh = defaultData();
+    saveData(user.id, fresh);
     clearPendingBiz();
     setFreshSignup();
+    await syncUserToRemote(user, fresh).catch(() => {});
     emit();
     return true;
   } catch {
@@ -1048,6 +1057,10 @@ if (typeof window !== "undefined" && isSupabaseConfigured) {
     const prevSession = sessionUserId;
     const remoteByEmail = new Map<string, User>();
     (remoteUsers || []).forEach((u) => {
+      if (u.deleted === false) {
+        unmarkUserDeleted(u.id);
+        deleted.delete(u.id);
+      }
       if (!deleted.has(u.id) && !isDemoUser(u)) remoteByEmail.set(u.email, u);
     });
     const map = new Map<string, User>();
@@ -1187,6 +1200,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (!isSupabaseConfigured) return false;
     const remote = await fetchRemoteUserBySlug(slug);
     if (!remote || isDemoUser(remote.user)) return false;
+    unmarkUserDeleted(remote.user.id);
     // Si hay un duplicado local con el mismo email, lo reemplaza la nube.
     const currentUsers = users.filter((u) => u.id !== remote.user.id && u.email !== remote.user.email);
     users = [...currentUsers, remote.user];
@@ -1380,19 +1394,76 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     // No crear duplicados: si el email ya existe en la nube, ir a login
     const remote = await fetchRemoteUserByEmail(em).catch(() => null);
     if (remote) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
-    // Crear en Supabase Auth (la sesión queda guardada)
+
+    // 1) Registro en el servidor mediante /api/account (Service Role):
+    // Crea el Auth user con email pre-confirmado, genera el slug único y
+    // graba de inmediato en cupito_users y cupito_data en Supabase sin bloqueos de RLS.
+    try {
+      const res = await fetch("/api/account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "register",
+          name: name.trim(),
+          business: business.trim(),
+          email: em,
+          password,
+        }),
+      });
+      const r = await res.json().catch(() => ({}));
+      if (res.ok && r.ok && r.user) {
+        const user: User = {
+          id: r.user.id,
+          auth_id: r.user.auth_id || r.user.id,
+          name: r.user.name,
+          business: r.user.business,
+          email: r.user.email,
+          password: "",
+          slug: r.user.slug,
+          plan: r.user.plan || "semilla",
+          createdAt: Number(r.user.created_at || Date.now()),
+          subscription: r.user.subscription || undefined,
+          deleted: false,
+        };
+        unmarkUserDeleted(user.id);
+        const withoutDup = users.filter((u) => u.email !== em && u.id !== user.id);
+        users = [...withoutDup, user];
+        safeSet(USERS_KEY, JSON.stringify(users));
+        saveSession(user.id);
+        const fresh = defaultData();
+        fresh.services = [
+          { id: "srv-1", name: "Atención General", duration: 30, price: 0 },
+        ];
+        saveData(user.id, fresh);
+        setFreshSignup();
+
+        // Conectar la sesión en el cliente (token Auth)
+        await sbSignIn(em, password).catch(() => {});
+
+        emit();
+        return null;
+      }
+      if (res.status === 409 || r.error?.includes("Ya existe")) {
+        return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+      }
+      if (r.error && !r.error.includes("Falta configuración")) {
+        return r.error;
+      }
+    } catch {
+      // Fallback a cliente
+    }
+
+    // 2) Fallback directo en cliente con Supabase Auth
     const s = await sbSignUp(em, password);
     if (!s.ok) {
       if (s.reason === "exists") return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
       if (s.reason === "confirm") {
-        // Sin sesión todavía: guardar el negocio pendiente y crearlo al primer login
         if (s.authId) savePendingBiz({ authId: s.authId, name: name.trim(), business: business.trim(), email: em });
         setFreshSignup();
         return "Te enviamos un email de confirmación. Abrilo para activar tu cuenta y después entrá.";
       }
       return s.error;
     }
-    // Slug único (local + nube)
     const slug = await ensureUniqueSlug(slugify(business));
     const user: User = {
       id: s.authId,
@@ -1404,13 +1475,17 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       slug,
       plan: "semilla",
       createdAt: Date.now(),
+      deleted: false,
     };
-    const withoutDup = users.filter((u) => u.email !== em);
-    saveUsers([...withoutDup, user]);
+    unmarkUserDeleted(user.id);
+    const withoutDup = users.filter((u) => u.email !== em && u.id !== user.id);
+    users = [...withoutDup, user];
+    safeSet(USERS_KEY, JSON.stringify(users));
     saveSession(user.id);
     const fresh = defaultData();
     saveData(user.id, fresh);
     setFreshSignup();
+    await syncUserToRemote(user, fresh).catch(() => {});
     emit();
     return null;
   },
@@ -1535,7 +1610,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (users.some((u) => u.email === em)) {
       return { ok: false, error: "Ya existe un negocio registrado con ese email." } as const;
     }
-    // Con nube + clave de Central: provisionar en el servidor (crea login + filas)
+    // 1. Con clave de Central: provisionar mediante /api/admin
     if (isSupabaseConfigured && getAdminKey()) {
       try {
         const res = await fetch("/api/admin", {
@@ -1558,8 +1633,10 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
           const remoteUser = {
             ...r.user,
             subscription: r.user.subscription || undefined,
+            deleted: false,
           } as User;
-          saveUsers([...users.filter((u) => u.email !== em), remoteUser]);
+          unmarkUserDeleted(remoteUser.id);
+          saveUsers([...users.filter((u) => u.email !== em && u.id !== remoteUser.id), remoteUser]);
           loadData(remoteUser.id);
           emit();
           return { ok: true, user: remoteUser } as const;
@@ -1567,18 +1644,44 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         if (res.status === 403) {
           return { ok: false, error: "Clave de Central incorrecta o sin configurar (ver modal de nube)." } as const;
         }
-        // otro error: seguir con alta local y avisar
-        const fallback = api.adminAddUserLocal(data);
-        return { ok: true, user: fallback, warning: `Se creó solo local: ${r.error || "falló la nube"}.` } as const;
-      } catch {
-        const fallback = api.adminAddUserLocal(data);
-        return { ok: true, user: fallback, warning: "Sin conexión: se creó solo local." } as const;
-      }
+      } catch {}
     }
+
+    // 2. Si no hay adminKey en el navegador, provisionar mediante /api/account (Service Role)
+    if (isSupabaseConfigured) {
+      try {
+        const res = await fetch("/api/account", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "register",
+            name: data.name.trim(),
+            business: data.business.trim(),
+            email: em,
+            password: data.password || "cupito123",
+            plan: data.plan,
+            billing: data.billing ?? "mensual",
+            durationDays: data.durationDays,
+          }),
+        });
+        const r = await res.json().catch(() => ({}));
+        if (res.ok && r.ok && r.user) {
+          const remoteUser = {
+            ...r.user,
+            subscription: r.user.subscription || undefined,
+            deleted: false,
+          } as User;
+          unmarkUserDeleted(remoteUser.id);
+          saveUsers([...users.filter((u) => u.email !== em && u.id !== remoteUser.id), remoteUser]);
+          loadData(remoteUser.id);
+          emit();
+          return { ok: true, user: remoteUser } as const;
+        }
+      } catch {}
+    }
+
     const local = api.adminAddUserLocal(data);
-    if (isSupabaseConfigured && !getAdminKey()) {
-      return { ok: true, user: local, warning: "Solo local: configurá la clave de Central (modal de nube) para subirlo." } as const;
-    }
+    unmarkUserDeleted(local.id);
     return { ok: true, user: local } as const;
   },
   adminAddUserLocal(data) {
@@ -1610,9 +1713,15 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         autoRenew: true,
         status: "activa",
       } : undefined,
+      deleted: false,
     };
-    saveUsers([...users, newUser]);
-    loadData(newUser.id);
+    unmarkUserDeleted(newUser.id);
+    saveUsers([...users.filter((u) => u.email !== em && u.id !== newUser.id), newUser]);
+    const fresh = defaultData();
+    saveData(newUser.id, fresh);
+    if (isSupabaseConfigured) {
+      syncUserToRemote(newUser, fresh).catch(() => {});
+    }
     emit();
     return newUser;
   },
@@ -2310,7 +2419,8 @@ export function usePublicPage(slug: string): ({ user: User } & Record<"data", Bi
   const version = useSyncExternalStore(subscribe, () => storeVersion);
   return useMemo(() => {
     void version;
-    const user = users.find((u) => u.slug === slug) ?? null;
+    const target = (slug || "").toLowerCase().trim();
+    const user = users.find((u) => u.slug.toLowerCase().trim() === target) ?? null;
     if (!user) return null;
     const pageData = loadData(user.id);
     return { user, ["data"]: pageData };

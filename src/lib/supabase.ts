@@ -126,6 +126,7 @@ function mapUser(u: any): User {
     plan: u.plan,
     createdAt: Number(u.created_at || Date.now()),
     subscription: u.subscription || undefined,
+    deleted: Boolean(u.deleted),
   };
   (user as User & { auth_id?: string }).auth_id = u.auth_id || undefined;
   return user;
@@ -140,17 +141,24 @@ export async function fetchRemoteUserBySlug(
 ): Promise<{ user: User; data: BizData } | null> {
   if (!isSupabaseConfigured) return null;
   try {
-    const userData = await selectOne<any>(`/cupito_users?select=*&slug=eq.${encodeURIComponent(slug.toLowerCase().trim())}`);
-    if (!userData) return null;
+    const cleanSlug = (slug || "").toLowerCase().trim();
+    if (!cleanSlug) return null;
+    const userData = await selectOne<any>(`/cupito_users?select=*&slug=ilike.${encodeURIComponent(cleanSlug)}&deleted=neq.true`);
+    if (!userData || userData.deleted) return null;
     const user = mapUser(userData);
 
-    const rowData = await selectOne<{ data: BizData }>(
-      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(user.id)}`
-    );
-    if (!rowData?.data) {
-      return { user, data: null as unknown as BizData };
+    let data: BizData | null = null;
+    try {
+      const rowData = await selectOne<{ data: BizData; deleted?: boolean }>(
+        `/cupito_data?select=data,deleted&user_id=eq.${encodeURIComponent(user.id)}`
+      );
+      if (rowData?.data && !rowData.deleted) {
+        data = rowData.data as BizData;
+      }
+    } catch {
+      // Si la consulta de data falla o todavía no existe la fila, no bloqueamos el usuario
     }
-    return { user, data: rowData.data as BizData };
+    return { user, data: data as unknown as BizData };
   } catch (err) {
     console.warn("[Cupito Supabase] Error consultando negocio por slug:", err);
     return null;
@@ -217,17 +225,20 @@ export async function fetchRemoteUserByAuthId(
 ): Promise<{ user: User; data: BizData | null } | null> {
   if (!isSupabaseConfigured) return null;
   try {
-    const userData = await selectOne<any>(`/cupito_users?select=*&auth_id=eq.${encodeURIComponent(authId)}`);
-    if (!userData) return null;
+    const userData = await selectOne<any>(`/cupito_users?select=*&auth_id=eq.${encodeURIComponent(authId)}&deleted=neq.true`);
+    if (!userData || userData.deleted) return null;
     const user = mapUser(userData);
 
-    const rowData = await selectOne<{ data: BizData }>(
-      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(user.id)}`
-    );
-    if (!rowData?.data) {
-      return { user, data: null as unknown as BizData };
-    }
-    return { user, data: rowData.data as BizData };
+    let data: BizData | null = null;
+    try {
+      const rowData = await selectOne<{ data: BizData; deleted?: boolean }>(
+        `/cupito_data?select=data,deleted&user_id=eq.${encodeURIComponent(user.id)}`
+      );
+      if (rowData?.data && !rowData.deleted) {
+        data = rowData.data as BizData;
+      }
+    } catch {}
+    return { user, data };
   } catch (err) {
     console.warn("[Cupito Supabase] Error consultando negocio por auth_id:", err);
     return null;
@@ -242,14 +253,22 @@ export async function fetchRemoteUserByEmail(
 ): Promise<{ user: User; data: BizData | null } | null> {
   if (!isSupabaseConfigured) return null;
   try {
-    const userData = await selectOne<any>(`/cupito_users?select=*&email=eq.${encodeURIComponent(email.toLowerCase().trim())}`);
-    if (!userData) return null;
+    const cleanEmail = (email || "").toLowerCase().trim();
+    if (!cleanEmail) return null;
+    const userData = await selectOne<any>(`/cupito_users?select=*&email=eq.${encodeURIComponent(cleanEmail)}&deleted=neq.true`);
+    if (!userData || userData.deleted) return null;
     const user = mapUser(userData);
 
-    const rowData = await selectOne<{ data: BizData }>(
-      `/cupito_data?select=data&user_id=eq.${encodeURIComponent(user.id)}`
-    );
-    return { user, data: (rowData?.data as BizData) ?? null };
+    let data: BizData | null = null;
+    try {
+      const rowData = await selectOne<{ data: BizData; deleted?: boolean }>(
+        `/cupito_data?select=data,deleted&user_id=eq.${encodeURIComponent(user.id)}`
+      );
+      if (rowData?.data && !rowData.deleted) {
+        data = rowData.data as BizData;
+      }
+    } catch {}
+    return { user, data };
   } catch (err) {
     console.warn("[Cupito Supabase] Error consultando negocio por email:", err);
     return null;

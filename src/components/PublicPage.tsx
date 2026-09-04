@@ -41,7 +41,13 @@ export default function PublicPage({ slug }: { slug: string }) {
     // aunque haya algo en local: lo local puede ser un duplicado vacío y viejo.
     let cancelled = false;
     if (!page) setLoadingRemote(true);
-    fetchPageRemote(slug).catch(() => {}).finally(() => {
+    fetchPageRemote(slug).then(async (ok) => {
+      if (!ok && !cancelled) {
+        // Reintentar tras un breve delay por si recién se registró en otro dispositivo
+        await new Promise((r) => setTimeout(r, 800));
+        if (!cancelled) await fetchPageRemote(slug).catch(() => {});
+      }
+    }).catch(() => {}).finally(() => {
       if (!cancelled) {
         setLoadingRemote(false);
       }
@@ -68,7 +74,18 @@ export default function PublicPage({ slug }: { slug: string }) {
         <LogoMark className="h-14 w-14 text-fern" />
         <p className="font-display text-3xl font-extrabold sm:text-4xl">Ese negocio todavía no tiene su página <span className="text-lime">:(</span></p>
         <p className="max-w-sm text-paper/70">Probá con la página de ejemplo para ver cómo funciona.</p>
-        <a href="/studio-nails" className="rounded-full bg-lime px-7 py-3.5 font-display text-base font-bold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:bg-limedeep">Ver página de ejemplo</a>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <a href="/studio-nails" className="rounded-full bg-lime px-7 py-3.5 font-display text-base font-bold text-ink transition-all duration-200 hover:-translate-y-0.5 hover:bg-limedeep">Ver página de ejemplo</a>
+          <button
+            onClick={() => {
+              setLoadingRemote(true);
+              fetchPageRemote(slug).finally(() => setLoadingRemote(false));
+            }}
+            className="rounded-full border border-paper/30 px-6 py-3.5 font-display text-sm font-semibold text-paper transition-all duration-200 hover:bg-white/10"
+          >
+            🔄 Reintentar
+          </button>
+        </div>
         <a href="#/" className="text-sm text-paper/50 underline-offset-4 transition-colors hover:text-lime hover:underline">← Volver al inicio</a>
       </div>
     );
