@@ -1824,6 +1824,15 @@ function BookingModal({
       )
     : [];
 
+  const availableSlots = useMemo(() => {
+    const list = [...free];
+    if (time && !list.includes(time)) {
+      list.push(time);
+      list.sort((a, b) => toMinutes(a) - toMinutes(b));
+    }
+    return list;
+  }, [free, time]);
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (client.trim().length < 2) return setError("El nombre del cliente es obligatorio.");
@@ -1878,12 +1887,37 @@ function BookingModal({
           </div>
         )}
         <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Horario {time && <span className="text-fern">· {time}</span>}</label>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-xs font-bold uppercase tracking-wider text-inkmute">
+              Horario {time && <span className="text-fern">· {time} hs</span>}
+            </label>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-inkmute">Manual:</span>
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="rounded-lg border border-ink/15 bg-white px-2 py-0.5 text-xs font-mono font-bold text-ink"
+              />
+            </div>
+          </div>
           <div className="grid max-h-40 grid-cols-4 gap-1.5 overflow-y-auto rounded-xl border-2 border-ink/10 bg-white/50 p-2">
-            {free.length === 0 && <p className="col-span-4 py-3 text-center text-sm text-inkmute">{dayHours && !dayHours.open ? "Ese día el negocio no abre." : "No quedan horarios libres ese día."}</p>}
-            {free.map((t) => (
-              <button type="button" key={t} onClick={() => setTime(t)}
-                className={`rounded-lg border-2 py-1.5 font-display text-sm font-bold transition-all ${time === t ? "border-evergreen bg-evergreen text-lime" : "border-ink/10 bg-white hover:border-evergreen"}`}>{t}</button>
+            {availableSlots.length === 0 && (
+              <p className="col-span-4 py-3 text-center text-sm text-inkmute">
+                {dayHours && !dayHours.open ? "Ese día el negocio no abre." : "No quedan horarios libres ese día (podés escribir uno manual arriba)."}
+              </p>
+            )}
+            {availableSlots.map((t) => (
+              <button
+                type="button"
+                key={t}
+                onClick={() => setTime(t)}
+                className={`rounded-lg border-2 py-1.5 font-display text-sm font-bold transition-all ${
+                  time === t ? "border-evergreen bg-evergreen text-lime" : "border-ink/10 bg-white hover:border-evergreen"
+                }`}
+              >
+                {t}
+              </button>
             ))}
           </div>
         </div>
@@ -2215,27 +2249,52 @@ function TimeGridView({
   const dIdx = dayOfWeek(date);
 
   const daySlots = useMemo(() => {
+    const slotSet = new Set<string>();
+
+    // 1. Horarios base del profesional seleccionado o de todo el equipo
     if (proFilter !== "todos") {
       const p = pros.find((x) => x.id === proFilter);
       const pH = getProHours(p, hours)[dIdx];
-      return pH.open ? slotsForDay(pH) : [];
-    }
-    if (pros.length > 0) {
-      const slotSet = new Set<string>();
+      if (pH?.open) {
+        slotsForDay(pH).forEach((s) => slotSet.add(s));
+      }
+    } else if (pros.length > 0) {
       pros.forEach((p) => {
         const pH = getProHours(p, hours)[dIdx];
-        if (pH.open) {
+        if (pH?.open) {
           slotsForDay(pH).forEach((s) => slotSet.add(s));
         }
       });
       if (slotSet.size === 0 && hours[dIdx]?.open) {
         slotsForDay(hours[dIdx]).forEach((s) => slotSet.add(s));
       }
-      return Array.from(slotSet).sort((a, b) => toMinutes(a) - toMinutes(b));
+    } else {
+      const dayH = hours[dIdx];
+      if (dayH?.open) {
+        slotsForDay(dayH).forEach((s) => slotSet.add(s));
+      }
     }
-    const dayH = hours[dIdx];
-    return dayH.open ? slotsForDay(dayH) : [];
-  }, [date, proFilter, pros, hours, dIdx]);
+
+    // 2. ¡IMPORTANTE! Agregar siempre todos los horarios que tengan reservas en esta fecha
+    bookings.forEach((b) => {
+      if (b.date === date && b.status !== "cancelada") {
+        if (proFilter === "todos" || !b.proId || b.proId === proFilter) {
+          slotSet.add(b.time);
+        }
+      }
+    });
+
+    // 3. Agregar horarios de bloqueos puntuales en este día
+    blockedSlots.forEach((bs) => {
+      if (bs.date === date && bs.time) {
+        if (proFilter === "todos" || !bs.proId || bs.proId === proFilter) {
+          slotSet.add(bs.time);
+        }
+      }
+    });
+
+    return Array.from(slotSet).sort((a, b) => toMinutes(a) - toMinutes(b));
+  }, [date, proFilter, pros, hours, dIdx, bookings, blockedSlots]);
 
   return (
     <div className="mt-4 space-y-3">
@@ -2283,8 +2342,20 @@ function TimeGridView({
             if (proFilter !== "todos") {
               const currentPro = pros.find((p) => p.id === proFilter);
               const b = bookings.find(
-                (x) => x.date === date && x.time === slotTime && x.status !== "cancelada" && x.proId === proFilter
+                (x) => x.date === date && x.time === slotTime && x.status !== "cancelada" && (x.proId === proFilter || (!x.proId && pros.length <= 1))
               );
+              // Turno previo que sigue en curso en slotTime
+              const ongoing = !b ? bookings.find((x) => {
+                if (x.date !== date || x.status === "cancelada") return false;
+                if (x.proId && x.proId !== proFilter) return false;
+                const start = toMinutes(x.time);
+                const end = start + serviceDurationOf(services, x.serviceId);
+                const s = toMinutes(slotTime);
+                return s > start && s < end;
+              }) : null;
+              const ongoingSrv = ongoing ? services.find((s) => s.id === ongoing.serviceId) : null;
+              const ongoingEnd = ongoing ? `${String(Math.floor((toMinutes(ongoing.time) + serviceDurationOf(services, ongoing.serviceId)) / 60)).padStart(2, "0")}:${String((toMinutes(ongoing.time) + serviceDurationOf(services, ongoing.serviceId)) % 60).padStart(2, "0")}` : null;
+
               const blocked = blockedSlots.find(
                 (bs) => bs.date === date && (!bs.time || bs.time === slotTime) && (!bs.proId || bs.proId === proFilter)
               );
@@ -2296,6 +2367,8 @@ function TimeGridView({
                   className={`flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors ${
                     b
                       ? "bg-lime/10"
+                      : ongoing
+                      ? "bg-amber-500/[0.04]"
                       : blocked
                       ? "bg-ink/[0.04]"
                       : "hover:bg-ink/[0.02]"
@@ -2315,6 +2388,12 @@ function TimeGridView({
                         </div>
                         <span className="text-xs text-inkmute">
                           {srv?.name || "Servicio"} {b.phone ? `· ${formatArgentinaPhone(b.phone) || b.phone}` : ""}
+                        </span>
+                      </div>
+                    ) : ongoing ? (
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                          ↳ En atención: <strong className="text-ink">{ongoing.client}</strong> ({ongoingSrv?.name || "Servicio"} hasta {ongoingEnd} hs)
                         </span>
                       </div>
                     ) : blocked ? (
@@ -2351,6 +2430,8 @@ function TimeGridView({
                           </a>
                         )}
                       </>
+                    ) : ongoing ? (
+                      <span className="text-xs font-bold text-inkmute italic">En curso</span>
                     ) : blocked ? (
                       <button
                         onClick={() => onUnblockSlot(blocked.id)}
@@ -2385,6 +2466,17 @@ function TimeGridView({
             const isGlobalBlocked = slotBlocks.some((bs) => !bs.proId);
 
             const busyProIds = new Set(slotBookings.map((b) => b.proId).filter(Boolean));
+            // Incluir profesionales que están en atención continua en slotTime
+            bookings.forEach((x) => {
+              if (x.date !== date || x.status === "cancelada" || !x.proId) return;
+              const start = toMinutes(x.time);
+              const end = start + serviceDurationOf(services, x.serviceId);
+              const s = toMinutes(slotTime);
+              if (s > start && s < end) {
+                busyProIds.add(x.proId);
+              }
+            });
+
             const blockedProIds = new Set(slotBlocks.filter((bs) => bs.proId).map((bs) => bs.proId));
 
             const freePros = isGlobalBlocked
@@ -2394,8 +2486,8 @@ function TimeGridView({
                   const pH = getProHours(p, hours)[dIdx];
                   if (!pH || !pH.open) return false;
                   const s = toMinutes(slotTime);
-                  const inS1 = pH.from && pH.to && s >= toMinutes(pH.from) && s + 45 <= toMinutes(pH.to);
-                  const inS2 = pH.from2 && pH.to2 && s >= toMinutes(pH.from2) && s + 45 <= toMinutes(pH.to2);
+                  const inS1 = pH.from && pH.to && s >= toMinutes(pH.from) && s < toMinutes(pH.to);
+                  const inS2 = pH.from2 && pH.to2 && s >= toMinutes(pH.from2) && s < toMinutes(pH.to2);
                   return inS1 || inS2;
                 });
 
