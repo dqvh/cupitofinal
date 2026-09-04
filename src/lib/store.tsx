@@ -1661,9 +1661,15 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveUsers(
       users.map((u) => {
         if (u.id !== userId) return u;
-        const updated = { ...u, ...updates };
-        if (updates.business && !updates.slug) {
-          updated.slug = slugify(updates.business);
+        // La demo es local y vive atada a demo@cupito.app: cambiarle el email
+        // rompe el login (busca en la nube donde la demo nunca existe).
+        const safeUpdates = { ...updates };
+        if (isDemoUser(u) && typeof safeUpdates.email === "string" && safeUpdates.email.toLowerCase().trim() !== DEMO_EMAIL) {
+          delete (safeUpdates as Partial<User>).email;
+        }
+        const updated = { ...u, ...safeUpdates };
+        if (safeUpdates.business && !safeUpdates.slug) {
+          updated.slug = slugify(safeUpdates.business);
         }
         return updated;
       })
