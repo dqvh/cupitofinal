@@ -173,6 +173,21 @@ export default function Dashboard() {
   const [calendarProId, setCalendarProId] = useState<string | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const handleBeforeInstall = (e: Event) => {
@@ -471,36 +486,221 @@ export default function Dashboard() {
         {/* ---------- main ---------- */}
         <div className="min-w-0 flex-1">
           {/* topbar mobile */}
-          <div className="sticky top-0 z-40 border-b border-white/10 bg-[#071d15] text-white lg:hidden">
-            <div className="flex items-center justify-between px-4 py-3">
-              <a href="#/" className="flex items-center gap-2">
-                <LogoMark className="h-7 w-7 text-emerald-400" />
-                <span className="font-display text-lg font-bold tracking-tight">cupito<span className="text-emerald-400">.</span></span>
-              </a>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCalendarModal(true)}
-                  className="rounded-full bg-white/10 border border-white/10 px-2.5 py-1.5 font-display text-xs font-bold text-white"
-                  title="Sincronizar calendario"
-                >
-                  📅 Cal
-                </button>
-                <a href={`/${user.slug}`} className="rounded-full bg-emerald-500 px-3.5 py-1.5 font-display text-xs font-bold text-slate-950 shadow-sm">
-                  Mi página ↗
+          <header className="sticky top-0 z-40 flex h-14 sm:h-16 items-center justify-between border-b border-white/10 bg-[#061811] px-3.5 sm:px-4 text-white lg:hidden">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              {/* Botón 3 líneas horizontales (Hamburguesa) */}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white transition-transform active:scale-95 hover:bg-white/15 focus:outline-hidden"
+                aria-label="Abrir menú de navegación"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+                {data.waitlist.length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-extrabold text-white animate-pulse shadow-xs">
+                    {data.waitlist.length}
+                  </span>
+                )}
+              </button>
+
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <a href="#/" className="flex items-center gap-1.5 shrink-0">
+                  <LogoMark className="h-6 w-6 text-emerald-400" />
+                  <span className="font-display text-base font-bold tracking-tight text-white">cupito<span className="text-emerald-400">.</span></span>
                 </a>
+                <span className="text-white/20">/</span>
+                <span className="truncate text-xs font-semibold text-emerald-300">
+                  {viewTitle[0]}
+                </span>
               </div>
             </div>
-            <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 pb-3">
-              {SECTIONS.flatMap((s) => s.items).map((n) => (
-                <button key={n.id} onClick={() => setView(n.id)}
-                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                    view === n.id ? "bg-white text-slate-900 shadow-xs" : "bg-white/10 text-white/70 hover:bg-white/15"
-                  }`}>
-                  {n.label}
-                  {n.id === "lista" && data.waitlist.length > 0 && <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold text-white">{data.waitlist.length}</span>}
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={promptInstall}
+                className="btn-press flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1.5 sm:px-3 sm:py-1.5 font-display text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                title="Instalar app en tu celular"
+              >
+                <span>📲</span>
+                <span className="hidden xs:inline">{isStandalone ? "App lista" : "Instalar app"}</span>
+              </button>
+              <a
+                href={`/${user.slug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-press flex items-center gap-1 rounded-full bg-emerald-500 px-3 py-1.5 font-display text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-emerald-400"
+              >
+                <span>Ver</span>
+                <span className="text-[10px]">↗</span>
+              </a>
+            </div>
+          </header>
+
+          {/* Drawer sidebar mobile */}
+          <div
+            className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ease-out ${
+              mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+            }`}
+            aria-hidden={!mobileMenuOpen}
+          >
+            {/* Backdrop con blur */}
+            <div
+              className="absolute inset-0 bg-slate-950/75 backdrop-blur-xs transition-opacity duration-300"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+
+            {/* Panel lateral deslizante */}
+            <div
+              className={`absolute inset-y-0 left-0 flex w-[84vw] max-w-xs flex-col bg-[#061811] text-white shadow-2xl border-r border-white/10 transition-transform duration-300 ease-out transform ${
+                mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
+            >
+              {/* Header de la sidebar */}
+              <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
+                <div className="flex items-center gap-2.5">
+                  <LogoMark className="h-7 w-7 text-emerald-400" />
+                  <div>
+                    <span className="block font-display text-base font-bold tracking-tight text-white leading-tight">
+                      cupito<span className="text-emerald-400">.</span>
+                    </span>
+                    <span className="block text-[10px] font-medium uppercase tracking-wider text-white/40">
+                      Panel de control
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white/80 hover:bg-white/15 hover:text-white transition-colors active:scale-95"
+                  aria-label="Cerrar menú"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
-              ))}
+              </div>
+
+              {/* Navegación con todas las secciones */}
+              <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+                {SECTIONS.map((sec) => (
+                  <div key={sec.label}>
+                    <p className="px-3 pb-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/35">
+                      {sec.label}
+                    </p>
+                    <div className="space-y-0.5">
+                      {sec.items.map((n) => {
+                        const active = view === n.id;
+                        return (
+                          <button
+                            key={n.id}
+                            onClick={() => {
+                              setView(n.id);
+                              setMobileMenuOpen(false);
+                            }}
+                            className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-all duration-150 active:scale-[0.98] ${
+                              active
+                                ? "bg-white/12 text-white shadow-xs border border-white/10"
+                                : "text-white/65 hover:bg-white/[0.06] hover:text-white"
+                            }`}
+                          >
+                            <span
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                                active
+                                  ? "bg-emerald-500 text-slate-950 font-bold shadow-xs shadow-emerald-500/30"
+                                  : "bg-white/[0.06] text-white/70 group-hover:text-white"
+                              }`}
+                            >
+                              {n.icon({ className: "h-3.5 w-3.5" })}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate">{n.label}</span>
+                            {active && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+                            {n.id === "lista" && data.waitlist.length > 0 && (
+                              <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-extrabold text-white">
+                                {data.waitlist.length}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </nav>
+
+              {/* Footer con PWA, accesos directos y datos del negocio */}
+              <div className="border-t border-white/10 p-3.5 space-y-2.5 bg-[#05140e]">
+                {/* Banner PWA */}
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-base">
+                      📲
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-xs font-bold text-white">
+                        {isStandalone ? "App lista en tu celular" : "Instalar Cupito como App"}
+                      </p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-white/60">
+                        {isStandalone
+                          ? "Ya tenés Cupito instalado en tu pantalla de inicio."
+                          : "Abrí tu panel en 1 toque directo desde tu pantalla de inicio."}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      promptInstall();
+                    }}
+                    className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-500 py-2 font-display text-xs font-bold text-slate-950 transition-all hover:bg-emerald-400 active:scale-[0.98]"
+                  >
+                    <span>📲</span>
+                    <span>{isStandalone ? "Ver cómo usarla" : "Instalar app ahora"}</span>
+                  </button>
+                </div>
+
+                {/* Accesos directos: Calendario + Ver página */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setShowCalendarModal(true);
+                    }}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 font-display text-xs font-semibold text-white/80 transition-all hover:bg-white/[0.08] hover:text-white active:scale-98"
+                  >
+                    <IconCalendar className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Calendario</span>
+                  </button>
+                  <a
+                    href={`/${user.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 font-display text-xs font-semibold text-white/80 transition-all hover:bg-white/[0.08] hover:text-white active:scale-98"
+                  >
+                    <IconLink className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Mi página ↗</span>
+                  </a>
+                </div>
+
+                {/* Perfil del negocio */}
+                <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 border border-emerald-500/40 font-display text-xs font-bold text-emerald-300">
+                    {user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate font-display text-xs font-bold text-white">{user.business}</span>
+                    <span className="flex items-center gap-1.5 text-[10px] text-white/50">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      Plan {PLAN_META[user.plan].name}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
