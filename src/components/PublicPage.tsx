@@ -101,7 +101,7 @@ export default function PublicPage({ slug }: { slug: string }) {
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className={`border-b-2 border-ink/10 ${theme.headerBg} ${theme.headerText}`}>
+      <header className={`border-b border-white/15 ${theme.headerBg} ${theme.headerText}`}>
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3.5 sm:px-8">
           <a href="#/" className="group flex items-center gap-2">
             <LogoMark className={`h-8 w-8 ${theme.accentText} transition-transform duration-300 group-hover:-rotate-6`} />
@@ -184,32 +184,25 @@ export default function PublicPage({ slug }: { slug: string }) {
                 Tu cupito en <span className="text-coral">60 segundos</span>.
               </h2>
 
-              {/* ticket perforado */}
-              <div className="mt-7 rounded-[20px] border-2 border-ink/12 bg-card shadow-block-ink">
-                <div className="flex items-center justify-between gap-3 border-b-2 border-dashed border-ink/12 px-5 py-3">
-                  <p className="font-display text-[11px] font-extrabold uppercase tracking-[0.2em] text-inkmute">Ticket de reserva · {user.business}</p>
-                  <span className={`rotate-2 rounded-md ${theme.badgeBg} ${theme.badgeText} px-2 py-0.5 font-display text-[10px] font-extrabold uppercase tracking-wider`}>≈ 1 min</span>
+              {/* ticket explicativo */}
+              <div className="mt-7 rounded-2xl border border-slate-200/90 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5 bg-slate-50/50">
+                  <p className="font-display text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Paso a paso · {user.business}</p>
+                  <span className={`rounded-full ${theme.badgeBg} ${theme.badgeText} px-2.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider`}>≈ 1 min</span>
                 </div>
-                <div className="grid sm:grid-cols-3">
+                <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
                   {[
                     { icon: <IconCalendar className="h-4 w-4" />, t: "Elegí tu momento", d: "Servicio, día y hora libres, en tiempo real." },
                     { icon: <IconCheck className="h-4 w-4" />, t: "Confirmá tu cupito", d: "Nombre y teléfono. Si hay seña, la transferís al toque." },
                     { icon: <IconBell className="h-4 w-4" />, t: "Nos vemos ahí", d: "Guardalo en tu calendario y recibí recordatorio. Sin olvidos." },
                   ].map((st, i) => (
-                    <div key={st.t} className={`relative p-5 ${i > 0 ? "border-t-2 border-dashed border-ink/12 sm:border-t-0" : ""}`}>
-                      {i > 0 && (
-                        <>
-                          <div className="absolute inset-y-0 left-0 hidden border-l-2 border-dashed border-ink/12 sm:block" aria-hidden="true" />
-                          <span className="absolute left-0 top-0 hidden h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-ink/12 bg-paper sm:block" aria-hidden="true" />
-                          <span className="absolute bottom-0 left-0 hidden h-5 w-5 -translate-x-1/2 translate-y-1/2 rounded-full border-2 border-ink/12 bg-paper sm:block" aria-hidden="true" />
-                        </>
-                      )}
-                      <span className={`inline-flex h-10 w-10 -rotate-3 items-center justify-center rounded-xl font-display text-lg font-extrabold transition-transform duration-300 hover:rotate-3 ${theme.cardHeaderBg} ${theme.accentText}`}>
+                    <div key={st.t} className="p-5">
+                      <span className={`inline-flex h-9 w-9 items-center justify-center rounded-xl font-display text-sm font-bold ${theme.cardHeaderBg} ${theme.accentText}`}>
                         {i + 1}
                       </span>
-                      <p className="mt-3 font-display text-[15px] font-extrabold text-ink">{st.t}</p>
-                      <p className="mt-1 flex items-start gap-1.5 text-[13px] leading-snug text-inkmute">
-                        <span className="mt-0.5 text-ink/70">{st.icon}</span>{st.d}
+                      <p className="mt-3 font-display text-[15px] font-bold text-slate-900">{st.t}</p>
+                      <p className="mt-1 flex items-start gap-1.5 text-xs leading-relaxed text-slate-500">
+                        <span className="mt-0.5 text-slate-400">{st.icon}</span>{st.d}
                       </p>
                     </div>
                   ))}
@@ -218,7 +211,7 @@ export default function PublicPage({ slug }: { slug: string }) {
 
               <div className="mt-6 flex flex-wrap gap-2">
                 {biz.services.slice(0, 4).map((sv) => (
-                  <span key={sv.id} className="rounded-full border-2 border-ink/10 bg-card px-3.5 py-1.5 text-xs font-bold text-ink/70">
+                  <span key={sv.id} className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm">
                     {sv.name} · {fmtMoney(sv.price)}
                   </span>
                 ))}
@@ -257,16 +250,16 @@ export default function PublicPage({ slug }: { slug: string }) {
 
         {/* reseñas reales */}
         <Reveal delay={120} className="mt-20">
-          <div className="rounded-[24px] border-2 border-ink/10 bg-card p-7 shadow-block-ink sm:p-9">
-            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink/10 pb-6">
+          <div className="card p-7 sm:p-9">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-100 pb-6">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-display text-4xl font-extrabold text-ink">{avg ? avg.toFixed(1) : "5.0"}</span>
+                  <span className="font-display text-4xl font-extrabold text-slate-900">{avg ? avg.toFixed(1) : "5.0"}</span>
                   <span className={`flex gap-0.5 ${theme.ratingStar}`}>
                     {[...Array(5)].map((_, i) => <IconStar key={i} className={`h-4 w-4 ${avg !== null && i < Math.round(avg) ? "" : "opacity-25"}`} />)}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-inkmute">
+                <p className="mt-1 text-sm text-slate-500">
                   {biz.reviews.length > 0 ? `${biz.reviews.length} reseña${biz.reviews.length === 1 ? "" : "s"} de clientes reales` : "Todavía no hay reseñas. ¡Sé el primero en opinar!"}
                 </p>
               </div>
@@ -282,19 +275,19 @@ export default function PublicPage({ slug }: { slug: string }) {
             {biz.reviews.length > 0 ? (
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 {biz.reviews.map((r) => (
-                  <figure key={r.id} className="rounded-2xl border-2 border-ink/8 bg-white/60 p-5 transition-all duration-200 hover:-translate-y-1 hover:border-ink/30 hover:shadow-block-ink">
+                  <figure key={r.id} className="rounded-2xl border border-slate-200/80 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
                     <div className={`flex gap-0.5 ${theme.ratingStar}`}>
                       {[...Array(5)].map((_, i) => <IconStar key={i} className={`h-3.5 w-3.5 ${i < r.rating ? "" : "opacity-25"}`} />)}
                     </div>
-                    <blockquote className="mt-3 text-[15px] leading-snug text-ink">“{r.text}”</blockquote>
+                    <blockquote className="mt-3 text-sm leading-relaxed text-slate-700">“{r.text}”</blockquote>
                     <figcaption className="mt-3 flex items-center gap-2.5">
                       <span className={`flex h-8 w-8 items-center justify-center rounded-full ${theme.cardHeaderBg} font-display text-[10px] font-bold ${theme.accentText}`}>
                         {r.client.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                       </span>
-                      <span>
-                        <span className="block font-display text-sm font-bold text-ink">{r.client}</span>
-                        <span className="block text-xs text-inkmute">{fmtLong(r.date)}</span>
-                      </span>
+                      <div>
+                        <span className="block font-display text-sm font-bold text-slate-900">{r.client}</span>
+                        <span className="block text-xs text-slate-400">{fmtLong(r.date)}</span>
+                      </div>
                     </figcaption>
                   </figure>
                 ))}
@@ -303,17 +296,17 @@ export default function PublicPage({ slug }: { slug: string }) {
           </div>
         </Reveal>
 
-        <p className="mt-10 text-center text-sm text-inkmute">
+        <p className="mt-10 text-center text-sm text-slate-500">
           ¿Tenés un negocio y querés una página así?{" "}
-          <a href="#/auth" className="font-display font-bold text-ink underline decoration-2 underline-offset-4 transition-colors hover:opacity-75">
-            Creala gratis en 10 minutos →
+          <a href="#/auth" className="font-display font-bold text-emerald-700 underline decoration-2 underline-offset-4 transition-colors hover:text-emerald-800">
+            Creala gratis en 2 minutos →
           </a>
         </p>
       </main>
 
-      <footer className="border-t-2 border-ink/10 bg-card py-6 text-center text-xs text-inkmute">
+      <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
         <span className="inline-flex items-center gap-1.5">
-          <IconCheck className="h-3.5 w-3.5 text-emerald-600" /> Hecho con <a href="#/" className="font-display font-bold text-ink">cupito.</a> — reservas online para negocios con turno
+          <IconCheck className="h-3.5 w-3.5 text-emerald-600" /> Hecho con <a href="#/" className="font-display font-bold text-slate-900">cupito.</a> — reservas online para negocios con turno
         </span>
       </footer>
 
