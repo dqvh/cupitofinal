@@ -312,6 +312,9 @@ export default async function handler(req: Request): Promise<Response> {
         });
       }
 
+      return json({ ok: true });
+    }
+
     /* ---------------- CONFIGURAR CUENTA DE EXHIBICIÓN / DEMO ---------------- */
     if (body.action === "configure-showcase") {
       const email = String(body.email || "").toLowerCase().trim();
@@ -447,7 +450,7 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     return json({ error: "Acción inválida." }, 400);
-  } catch {
-    return json({ error: "Error interno del servidor." }, 500);
+  } catch (err: any) {
+    return json({ error: String(err?.message || "Error interno del servidor.") }, 500);
   }
 }
