@@ -110,29 +110,33 @@ export function PlanCheckout({
             <p className="font-semibold">{error}</p>
             {error.includes("MP_ACCESS_TOKEN") && (
               <div className="mt-3 border-t border-coral/20 pt-2.5">
-                <p className="text-inkmute">¿Estás probando en local o antes de poner las keys en Vercel?</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlan(plan);
-                    toast(`Plan ${PLAN_META[plan].name} activado en modo demo ✓`);
-                    if (user?.email) {
-                      sendSubscriptionWelcomeEmail({
-                        toEmail: user.email,
-                        ownerName: user.name,
-                        businessName: user.business,
-                        planName: PLAN_META[plan].name,
-                        planPrice: PLAN_META[plan].price,
-                        slug: user.slug,
-                        benefits: PLAN_BENEFITS[plan],
-                      }).catch(() => {});
-                    }
-                    onClose();
-                  }}
-                  className="mt-2 rounded-lg bg-coral/20 px-3 py-1.5 font-bold text-coral transition-colors hover:bg-coral hover:text-white"
-                >
-                  Activar {PLAN_META[plan].name} de prueba (Modo Demo)
-                </button>
+                <p className="text-inkmute">
+                  Los pagos todavía no están configurados en este entorno. Si sos el dueño, agregá MP_ACCESS_TOKEN en Vercel.
+                </p>
+                {(typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlan(plan);
+                      toast(`Plan ${PLAN_META[plan].name} activado en modo demo local ✓`);
+                      if (user?.email) {
+                        sendSubscriptionWelcomeEmail({
+                          toEmail: user.email,
+                          ownerName: user.name,
+                          businessName: user.business,
+                          planName: PLAN_META[plan].name,
+                          planPrice: PLAN_META[plan].price,
+                          slug: user.slug,
+                          benefits: PLAN_BENEFITS[plan],
+                        }).catch(() => {});
+                      }
+                      onClose();
+                    }}
+                    className="mt-2 rounded-lg bg-coral/20 px-3 py-1.5 font-bold text-coral transition-colors hover:bg-coral hover:text-white"
+                  >
+                    Activar {PLAN_META[plan].name} solo en local (demo)
+                  </button>
+                )}
               </div>
             )}
           </div>

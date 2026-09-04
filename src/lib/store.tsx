@@ -1607,9 +1607,11 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   saveProfile(business, name) {
     if (!sessionUserId) return;
+    // El slug es el link público impreso en QRs: no cambia solo por renombrar el negocio.
+    // Si el dueño quiere cambiar su link, lo hace desde Ajustes con verificación de unicidad.
     saveUsers(users.map((u) =>
       u.id === sessionUserId
-        ? { ...u, business: business.trim() || u.business, name: name.trim() || u.name, slug: slugify(business) || u.slug }
+        ? { ...u, business: business.trim() || u.business, name: name.trim() || u.name }
         : u
     ));
     emit();

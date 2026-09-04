@@ -989,10 +989,11 @@ function Testimonials() {
       <div className="gridlines absolute inset-0" aria-hidden="true" />
       <div className="relative mx-auto max-w-6xl px-5 sm:px-8">
         <Reveal className="mx-auto max-w-2xl text-center">
-          <p className="inline-flex items-center gap-2 rounded-full border border-lime/30 bg-lime/10 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-lime">Historias reales</p>
+          <p className="inline-flex items-center gap-2 rounded-full border border-lime/30 bg-lime/10 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-lime">Ejemplos ilustrativos</p>
           <h2 className="mt-5 font-display text-[clamp(2.2rem,4.5vw,3.6rem)] font-extrabold leading-[1.02] tracking-[-0.02em]">
-            Negocios que dejaron de <span className="text-coral">mendigar</span> confirmaciones.
+            Negocios que dejarían de <span className="text-coral">mendigar</span> confirmaciones.
           </h2>
+          <p className="mt-3 text-sm text-paper/60">Testimonios de ejemplo para mostrar el potencial. Se reemplazan por reseñas reales de tus primeros clientes.</p>
         </Reveal>
         <div className="mt-16 grid gap-x-8 gap-y-12 sm:grid-cols-2">
           {QUOTES.map((t, i) => (
@@ -1007,7 +1008,7 @@ function Testimonials() {
                     <span className="block font-display text-[15px] font-bold">{t.name}</span>
                     <span className="block text-xs text-inkmute">{t.biz}</span>
                   </span>
-                  <span className="ml-auto rounded-full bg-evergreen px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-lime">Cliente Cupito</span>
+                  <span className="ml-auto rounded-full bg-evergreen px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-lime">Ejemplo</span>
                 </figcaption>
               </figure>
             </Reveal>
@@ -1500,7 +1501,7 @@ function StickyMobileBar() {
           </div>
         </div>
         <a
-          href="#/login"
+          href="#/auth"
           className="btn-press btn-glow-lime shrink-0 rounded-full bg-lime px-4 py-2 font-display text-xs font-extrabold text-ink shadow-sm active:scale-95"
         >
           Empezar gratis →
