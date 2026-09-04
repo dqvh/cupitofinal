@@ -214,7 +214,12 @@ export default function Dashboard() {
       }
 
       const onboardingParam = getHashParam("onboarding") || getHashParam("setup");
-      if (onboardingParam === "1" || (data && data.services.length === 0 && !data.settings.setupDismissed)) {
+      // Solo auto-mostrar si el negocio está realmente vacío (sin servicios NI
+      // turnos NI equipo). Antes bastaba con services===0, y en un login fresco
+      // en otro celu los datos todavía no bajaron de la nube → el modal
+      // aparecía siempre aunque el negocio ya estuviera configurado.
+      const isTrulyNew = !!data && data.services.length === 0 && data.bookings.length === 0 && (data.professionals || []).length === 0 && !data.settings.setupDismissed;
+      if (onboardingParam === "1" || isTrulyNew) {
         // Si viene a pagar un plan, el checkout va PRIMERO y el onboarding después.
         // Antes el onboarding (z-85) tapaba el checkout y parecía que nunca iba a Mercado Pago.
         if (paidCheckout) {
@@ -279,6 +284,15 @@ export default function Dashboard() {
     return () => { cancelled = true; window.removeEventListener("cupito-checkout", onCheckout); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Si el onboarding se abrió por datos todavía no sincronizados (login fresco
+  // en otro celu) y la nube trae un negocio ya configurado, cerrarlo solo.
+  useEffect(() => {
+    if (!showOnboarding || !data) return;
+    if (data.settings.setupDismissed) { setShowOnboarding(false); return; }
+    if (data.services.length > 0 && data.bookings.length > 0) setShowOnboarding(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.services.length, data?.bookings.length, data?.settings.setupDismissed]);
 
   // Barrido de señas vencidas: comprobantes sin verificar por más de 24 h
   // liberan el turno solos para no dejar huecos bloqueados para siempre.
@@ -1131,7 +1145,7 @@ export default function Dashboard() {
           aria-label="Nuevo turno rápido"
         >
           <IconPlus className="h-4 w-4" />
-          <span>+ Turno</span>
+          <span>Turno</span>
         </button>
       </div>
     </div>
@@ -1315,8 +1329,8 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
               {[1, 2, 3, 4, 5, 6, 0].map((dayIdx) => {
                 const h = hours[dayIdx];
                 return (
-                  <div key={dayIdx} className={`flex items-center justify-between gap-3 rounded-2xl border-2 p-3.5 transition-all ${h.open ? "border-fern/40 bg-white shadow-sm" : "border-ink/8 bg-ink/[0.03] opacity-70"}`}>
-                    <div className="flex items-center gap-3">
+                  <div key={dayIdx} className={`flex flex-col gap-2.5 rounded-2xl border-2 p-3 transition-all sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:p-3.5 ${h.open ? "border-fern/40 bg-white shadow-sm" : "border-ink/8 bg-ink/[0.03] opacity-70"}`}>
+                    <div className="flex min-w-0 items-center gap-2.5">
                       <Toggle
                         on={h.open}
                         onChange={(v) => {
@@ -1326,7 +1340,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                         }}
                         label={`Abrir ${DAY_NAMES[dayIdx]}`}
                       />
-                      <span className={`font-display text-sm font-bold sm:text-[15px] ${h.open ? "text-ink" : "text-inkmute"}`}>
+                      <span className={`truncate font-display text-sm font-bold sm:text-[15px] ${h.open ? "text-ink" : "text-inkmute"}`}>
                         {DAY_NAMES[dayIdx]}
                       </span>
                     </div>
@@ -1334,7 +1348,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                       <div className="flex items-center gap-1.5 text-xs">
                         <input
                           type="time"
-                          className="field !h-11 !w-auto !px-2 !py-1 !text-sm font-bold"
+                          className="field !h-10 min-w-0 flex-1 !px-1.5 !py-1 !text-[13px] font-bold sm:!h-11 sm:flex-none sm:!px-2 sm:!text-sm"
                           value={h.from}
                           onChange={(e) => {
                             const next = [...hours];
@@ -1342,10 +1356,10 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                             setHours(next);
                           }}
                         />
-                        <span className="font-bold text-inkmute">a</span>
+                        <span className="shrink-0 font-bold text-inkmute">a</span>
                         <input
                           type="time"
-                          className="field !h-11 !w-auto !px-2 !py-1 !text-sm font-bold"
+                          className="field !h-10 min-w-0 flex-1 !px-1.5 !py-1 !text-[13px] font-bold sm:!h-11 sm:flex-none sm:!px-2 sm:!text-sm"
                           value={h.to}
                           onChange={(e) => {
                             const next = [...hours];
@@ -1355,7 +1369,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                         />
                       </div>
                     ) : (
-                      <span className="rounded-full bg-ink/8 px-3 py-1 text-xs font-bold text-inkmute">Cerrado</span>
+                      <span className="w-fit rounded-full bg-ink/8 px-3 py-1 text-xs font-bold text-inkmute">Cerrado</span>
                     )}
                   </div>
                 );
@@ -1553,7 +1567,7 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
   const claimPending = !!b.depositClaim && !b.paidDeposit && b.status !== "cancelada";
   const cancelled = b.status === "cancelada";
   return (
-    <div className={`card card-hover flex flex-wrap items-center gap-x-5 gap-y-3 p-4 ${cancelled ? "opacity-60" : ""}`}>
+    <div className={`card card-hover flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 overflow-hidden p-4 ${cancelled ? "opacity-60" : ""}`}>
       <span className={`flex h-14 w-16 flex-col items-center justify-center rounded-xl font-display ${cancelled ? "bg-ink/8 text-ink/40" : "bg-evergreen text-lime"}`}>
         <span className="text-lg font-extrabold leading-none">{b.time}</span>
         <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider opacity-70">{service?.duration ?? 30}′</span>
@@ -1577,7 +1591,7 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
         {b.paidDeposit && <span className="rounded-full bg-lime/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-fern">Seña cobrada</span>}
         <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${st.cls}`}>{st.label}</span>
       </span>
-      <span className="flex items-center gap-1.5">
+      <span className="flex max-w-full flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={() => onReschedule(b)}
@@ -2155,7 +2169,7 @@ function RescheduleModal({
               onChange={(e) => setNotifyWhatsapp(e.target.checked)}
               className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
             />
-            <span className="flex items-center gap-1.5">
+      <span className="flex max-w-full flex-wrap items-center gap-1.5">
               <IconWhatsApp className="h-4 w-4 text-emerald-600" />
               Abrir WhatsApp para notificar al cliente el cambio de horario
             </span>
