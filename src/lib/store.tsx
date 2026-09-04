@@ -41,7 +41,7 @@ export interface Service { id: string; name: string; price: number; duration: nu
 export interface Product { id: string; name: string; price: number; desc: string }
 export interface Review { id: string; client: string; rating: number; text: string; date: string }
 export interface Coupon { id: string; code: string; pct: number; active: boolean }
-export interface Professional { id: string; name: string; role: string; color: string }
+export interface Professional { id: string; name: string; role: string; color: string; hours?: DayHours[] }
 export interface WaitlistEntry { id: string; date: string; serviceId: string; client: string; phone: string; createdAt: number }
 
 export type BookingStatus = "pendiente" | "confirmada" | "atendida" | "cancelada" | "ausente";
@@ -511,8 +511,6 @@ export function findOverlap(
   }) as Booking | undefined;
 }
 
-/* ¿El horario está bloqueado? Soporta bloqueo puntual (time), por rango
-   (time → endTime) y día completo (sin time). */
 export function isSlotBlocked(
   slots: Pick<BlockedSlot, "date" | "time" | "endTime" | "proId">[],
   date: string,
@@ -522,11 +520,72 @@ export function isSlotBlocked(
   return slots.some((bs) => {
     if (bs.date !== date) return false;
     if (bs.proId && proId && bs.proId !== proId) return false;
+    if (bs.proId && !proId) return false;
     if (!bs.time) return true;
     if (!bs.endTime) return bs.time === time;
     const t = toMinutes(time);
     return t >= toMinutes(bs.time) && t < toMinutes(bs.endTime);
   });
+}
+
+/**
+ * Retorna los horarios a usar para un profesional (sus propios horarios si los tiene, o los del negocio como fallback).
+ */
+export function getProHours(pro: Professional | undefined, bizHours: DayHours[]): DayHours[] {
+  if (pro?.hours && Array.isArray(pro.hours) && pro.hours.length === 7) {
+    return pro.hours;
+  }
+  return bizHours;
+}
+
+/**
+ * ¿El profesional atiende y está libre en (date, time, dur)?
+ */
+export function isProAvailable(
+  pro: Professional,
+  date: string,
+  time: string,
+  dur: number,
+  bizHours: DayHours[],
+  blockedSlots: BlockedSlot[],
+  bookings: Pick<Booking, "id" | "date" | "time" | "status" | "proId" | "serviceId" | "client">[],
+  services: Pick<Service, "id" | "duration">[]
+): boolean {
+  const proHours = getProHours(pro, bizHours);
+  const dayH = proHours[dayOfWeek(date)];
+  if (!dayH || !dayH.open) return false;
+
+  const s = toMinutes(time);
+  const e = s + dur;
+
+  const inShift1 = dayH.from && dayH.to && s >= toMinutes(dayH.from) && e <= toMinutes(dayH.to);
+  const inShift2 = dayH.from2 && dayH.to2 && s >= toMinutes(dayH.from2) && e <= toMinutes(dayH.to2);
+  if (!inShift1 && !inShift2) return false;
+
+  if (isSlotBlocked(blockedSlots, date, time, pro.id)) return false;
+
+  const overlap = findOverlap({ date, time, dur, proId: pro.id }, bookings, services);
+  if (overlap) return false;
+
+  return true;
+}
+
+/**
+ * Retorna la lista de profesionales disponibles en (date, time, dur).
+ */
+export function getAvailablePros(
+  pros: Professional[],
+  date: string,
+  time: string,
+  dur: number,
+  bizHours: DayHours[],
+  blockedSlots: BlockedSlot[],
+  bookings: Pick<Booking, "id" | "date" | "time" | "status" | "proId" | "serviceId" | "client">[],
+  services: Pick<Service, "id" | "duration">[]
+): Professional[] {
+  return pros.filter((p) =>
+    isProAvailable(p, date, time, dur, bizHours, blockedSlots, bookings, services)
+  );
 }
 
 export function defaultHours(): DayHours[] {
@@ -676,7 +735,12 @@ function normalizeData(p: Partial<BizData>): BizData {
     products: Array.isArray(p.products) ? p.products : d.products,
     reviews: Array.isArray(p.reviews) ? p.reviews : d.reviews,
     coupons: Array.isArray(p.coupons) ? p.coupons : d.coupons,
-    professionals: Array.isArray(p.professionals) ? p.professionals : d.professionals,
+    professionals: Array.isArray(p.professionals)
+      ? p.professionals.map((pro: any) => ({
+          ...pro,
+          hours: Array.isArray(pro.hours) && pro.hours.length === 7 ? pro.hours : undefined,
+        }))
+      : d.professionals,
     waitlist: Array.isArray(p.waitlist) ? p.waitlist : d.waitlist,
     blockedSlots: Array.isArray(p.blockedSlots) ? p.blockedSlots : [],
     settings: {
@@ -1167,7 +1231,7 @@ interface StoreApi {
   addCoupon(c: { code: string; pct: number }): string | null;
   updateCoupon(id: string, patch: Partial<Omit<Coupon, "id">>): void;
   removeCoupon(id: string): void;
-  addProfessional(name: string, role: string): string | null;
+  addProfessional(name: string, role: string, hours?: DayHours[]): string | null;
   updateProfessional(id: string, patch: Partial<Omit<Professional, "id">>): void;
   removeProfessional(id: string): void;
   addWaitlist(e: { date: string; serviceId: string; client: string; phone: string }, ownerId?: string): Promise<string | null>;
@@ -1941,7 +2005,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveData(sessionUserId, data);
     emit();
   },
-  addProfessional(name, role) {
+  addProfessional(name, role, hours) {
     if (!sessionUserId) return "Necesitás una cuenta.";
     const data = loadData(sessionUserId);
     const owner = users.find((u) => u.id === sessionUserId);
@@ -1949,7 +2013,16 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (data.professionals.length >= limit)
       return `Tu plan ${PLAN_META[owner?.plan ?? "semilla"].name} permite hasta ${limit} profesional${limit === 1 ? "" : "es"}.`;
     if (name.trim().length < 2) return "Poné un nombre.";
-    data.professionals = [...data.professionals, { id: uid(), name: name.trim(), role: role.trim() || "Profesional", color: PRO_COLORS[data.professionals.length % PRO_COLORS.length] }];
+    data.professionals = [
+      ...data.professionals,
+      {
+        id: uid(),
+        name: name.trim(),
+        role: role.trim() || "Profesional",
+        color: PRO_COLORS[data.professionals.length % PRO_COLORS.length],
+        hours: Array.isArray(hours) && hours.length === 7 ? hours : undefined,
+      },
+    ];
     saveData(sessionUserId, data);
     emit();
     return null;
@@ -2066,11 +2139,42 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       return { ok: false, error: `Llegaste a las ${SEMILLA_MONTHLY_LIMIT} reservas del mes del plan Semilla. Subí a Crece para reservas ilimitadas.` };
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
-    if (isSlotBlocked(data.blockedSlots || [], date, time, proId)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
-    const clash = findOverlap({ date, time, dur: serviceDurationOf(data.services, serviceId), proId }, data.bookings, data.services);
-    if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
+    const dur = serviceDurationOf(data.services, serviceId);
+
+    let pro = proId;
+    if (!pro && data.professionals.length > 0) {
+      const available = getAvailablePros(
+        data.professionals,
+        date,
+        time,
+        dur,
+        data.settings.hours,
+        data.blockedSlots || [],
+        data.bookings,
+        data.services
+      );
+      if (available.length === 0) {
+        return { ok: false, error: "No hay ningún profesional disponible en ese horario." };
+      }
+      available.sort((a, b) => {
+        const ca = data.bookings.filter((x) => x.date === date && x.proId === a.id && x.status !== "cancelada").length;
+        const cb = data.bookings.filter((x) => x.date === date && x.proId === b.id && x.status !== "cancelada").length;
+        return ca - cb;
+      });
+      pro = available[0].id;
+    } else if (pro && data.professionals.length > 0) {
+      const targetPro = data.professionals.find((p) => p.id === pro);
+      if (targetPro && !isProAvailable(targetPro, date, time, dur, data.settings.hours, data.blockedSlots || [], data.bookings, data.services)) {
+        return { ok: false, error: `${targetPro.name} ya no está disponible en ese horario.` };
+      }
+    } else {
+      if (isSlotBlocked(data.blockedSlots || [], date, time)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
+      const clash = findOverlap({ date, time, dur }, data.bookings, data.services);
+      if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
+    }
+
     const id = uid();
-    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId, createdAt: Date.now() };
+    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId: pro, createdAt: Date.now() };
     data.bookings = [...data.bookings, newBooking];
     saveData(sessionUserId, data);
     saveRemoteBooking(sessionUserId, newBooking).catch(() => {});
@@ -2099,14 +2203,39 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       return { ok: false, error: "Este negocio alcanzó el límite de reservas online de este mes. Anotate en la lista de espera y te avisamos si se libera un lugar." };
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
+    const dur = serviceDurationOf(data.services, serviceId);
+
     let pro = proId;
     if (!pro && data.professionals.length > 0) {
-      const dayCount = data.bookings.filter((b) => b.date === date).length;
-      pro = data.professionals[dayCount % data.professionals.length].id;
+      const available = getAvailablePros(
+        data.professionals,
+        date,
+        time,
+        dur,
+        data.settings.hours,
+        data.blockedSlots || [],
+        data.bookings,
+        data.services
+      );
+      if (available.length === 0) {
+        return { ok: false, error: "No hay ningún profesional disponible en ese horario." };
+      }
+      available.sort((a, b) => {
+        const ca = data.bookings.filter((x) => x.date === date && x.proId === a.id && x.status !== "cancelada").length;
+        const cb = data.bookings.filter((x) => x.date === date && x.proId === b.id && x.status !== "cancelada").length;
+        return ca - cb;
+      });
+      pro = available[0].id;
+    } else if (pro && data.professionals.length > 0) {
+      const targetPro = data.professionals.find((p) => p.id === pro);
+      if (targetPro && !isProAvailable(targetPro, date, time, dur, data.settings.hours, data.blockedSlots || [], data.bookings, data.services)) {
+        return { ok: false, error: `${targetPro.name} ya no está disponible en ese horario.` };
+      }
+    } else {
+      if (isSlotBlocked(data.blockedSlots || [], date, time)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
+      const clash = findOverlap({ date, time, dur }, data.bookings, data.services);
+      if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
     }
-    if (isSlotBlocked(data.blockedSlots || [], date, time, pro)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
-    const clash = findOverlap({ date, time, dur: serviceDurationOf(data.services, serviceId), proId: pro }, data.bookings, data.services);
-    if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
     const id = uid();
     const cleanEmail = (email || "").trim();
     const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim, createdAt: Date.now() };

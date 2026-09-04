@@ -21,6 +21,8 @@ import {
   serviceDurationOf,
   findOverlap,
   isSlotBlocked,
+  getProHours,
+  toMinutes,
   type ThemeId,
   type Booking,
   type BookingStatus,
@@ -149,7 +151,7 @@ export default function Dashboard() {
   const [weekStart, setWeekStart] = useState(0);
   const [showNew, setShowNew] = useState(false);
   const [rescheduling, setRescheduling] = useState<Booking | null>(null);
-  const [prefill, setPrefill] = useState<{ client: string; phone: string; serviceId?: string; waitlistId?: string } | null>(null);
+  const [prefill, setPrefill] = useState<{ client: string; phone: string; serviceId?: string; waitlistId?: string; time?: string; proId?: string } | null>(null);
   const [serviceModal, setServiceModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [filter, setFilter] = useState<"todas" | BookingStatus>("todas");
   const [proFilter, setProFilter] = useState<string>("todos");
@@ -724,8 +726,13 @@ export default function Dashboard() {
                       services={data.services}
                       pros={data.professionals}
                       hours={data.settings.hours}
-                      onBookSlot={() => {
-                        setPrefill(null);
+                      onBookSlot={(slotPrefill) => {
+                        setPrefill({
+                          client: "",
+                          phone: "",
+                          time: slotPrefill?.time,
+                          proId: slotPrefill?.proId,
+                        });
                         setSelDate(gridDate);
                         setShowNew(true);
                       }}
@@ -1020,7 +1027,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {showNew && <BookingModal initialDate={selDate} initialClient={prefill?.client} initialPhone={prefill?.phone} initialServiceId={prefill?.serviceId} waitlistId={prefill?.waitlistId} onClose={() => { setShowNew(false); setPrefill(null); }} onCreated={(info) => setNotifyWl(info)} />}
+      {showNew && (
+        <BookingModal
+          initialDate={selDate}
+          initialClient={prefill?.client}
+          initialPhone={prefill?.phone}
+          initialServiceId={prefill?.serviceId}
+          initialTime={prefill?.time}
+          initialProId={prefill?.proId}
+          waitlistId={prefill?.waitlistId}
+          onClose={() => { setShowNew(false); setPrefill(null); }}
+          onCreated={(info) => setNotifyWl(info)}
+        />
+      )}
       {showInstallModal && (
         <InstallAppModal
           onClose={() => setShowInstallModal(false)}
@@ -1760,23 +1779,49 @@ function CalendarSyncModal({ user, onClose }: { user: User; onClose: () => void 
   );
 }
 
-function BookingModal({ initialDate, initialClient, initialPhone, initialServiceId, waitlistId, onClose, onCreated }: { initialDate: string; initialClient?: string; initialPhone?: string; initialServiceId?: string; waitlistId?: string; onClose: () => void; onCreated?: (info: { client: string; phone: string; serviceName: string; date: string; time: string; fromWaitlist: boolean }) => void }) {
+function BookingModal({
+  initialDate,
+  initialClient,
+  initialPhone,
+  initialServiceId,
+  initialTime,
+  initialProId,
+  waitlistId,
+  onClose,
+  onCreated,
+}: {
+  initialDate: string;
+  initialClient?: string;
+  initialPhone?: string;
+  initialServiceId?: string;
+  initialTime?: string;
+  initialProId?: string;
+  waitlistId?: string;
+  onClose: () => void;
+  onCreated?: (info: { client: string; phone: string; serviceName: string; date: string; time: string; fromWaitlist: boolean }) => void;
+}) {
   const { data, user, addBooking, createBookingFromWaitlist, toast } = useStore();
   const [client, setClient] = useState(initialClient ?? "");
   const [phone, setPhone] = useState(initialPhone ?? "");
   const [serviceId, setServiceId] = useState(initialServiceId ?? data?.services[0]?.id ?? "");
-  const [proId, setProId] = useState<string>(data?.professionals[0]?.id ?? "");
+  const [proId, setProId] = useState<string>(initialProId ?? data?.professionals[0]?.id ?? "");
   const [date, setDate] = useState(initialDate);
-  const [time, setTime] = useState("");
+  const [time, setTime] = useState(initialTime ?? "");
   const [error, setError] = useState<string | null>(null);
   if (!data) return null;
 
-  const dayHours = data.settings.hours[dayOfWeek(date)];
+  const targetPro = data.professionals.find((p) => p.id === proId);
+  const targetHours = getProHours(targetPro, data.settings.hours);
+  const dayHours = targetHours[dayOfWeek(date)];
   const selPro = proId || undefined;
   const selDur = serviceDurationOf(data.services, serviceId);
-  const free = slotsForDay(dayHours).filter(
-    (t) => !isSlotBlocked(data.blockedSlots || [], date, t, selPro) && !findOverlap({ date, time: t, dur: selDur, proId: selPro }, data.bookings, data.services)
-  );
+  const free = dayHours && dayHours.open
+    ? slotsForDay(dayHours).filter(
+        (t) =>
+          !isSlotBlocked(data.blockedSlots || [], date, t, selPro) &&
+          !findOverlap({ date, time: t, dur: selDur, proId: selPro }, data.bookings, data.services)
+      )
+    : [];
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -2159,116 +2204,344 @@ function TimeGridView({
   services: Service[];
   pros: Professional[];
   hours: DayHours[];
-  onBookSlot: () => void;
-  onBlockSlot: (time: string) => void;
+  onBookSlot: (prefill?: { time?: string; proId?: string }) => void;
+  onBlockSlot: (time: string, proId?: string) => void;
   onUnblockSlot: (id: string) => void;
   onReschedule: (b: Booking) => void;
   businessName: string;
 }) {
-  const dayH = hours[dayOfWeek(date)];
-  const daySlots = dayH.open ? slotsForDay(dayH) : [];
+  const [proFilter, setProFilter] = useState<string>("todos");
+  const dIdx = dayOfWeek(date);
+
+  const daySlots = useMemo(() => {
+    if (proFilter !== "todos") {
+      const p = pros.find((x) => x.id === proFilter);
+      const pH = getProHours(p, hours)[dIdx];
+      return pH.open ? slotsForDay(pH) : [];
+    }
+    if (pros.length > 0) {
+      const slotSet = new Set<string>();
+      pros.forEach((p) => {
+        const pH = getProHours(p, hours)[dIdx];
+        if (pH.open) {
+          slotsForDay(pH).forEach((s) => slotSet.add(s));
+        }
+      });
+      if (slotSet.size === 0 && hours[dIdx]?.open) {
+        slotsForDay(hours[dIdx]).forEach((s) => slotSet.add(s));
+      }
+      return Array.from(slotSet).sort((a, b) => toMinutes(a) - toMinutes(b));
+    }
+    const dayH = hours[dIdx];
+    return dayH.open ? slotsForDay(dayH) : [];
+  }, [date, proFilter, pros, hours, dIdx]);
 
   return (
     <div className="mt-4 space-y-3">
-      {!dayH.open ? (
-        <div className="card p-8 text-center text-sm text-inkmute">
-          El negocio está configurado como cerrado en este día de la semana.
+      {/* Filtro por profesional si hay más de 1 */}
+      {pros.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 pb-1">
+          <button
+            type="button"
+            onClick={() => setProFilter("todos")}
+            className={`rounded-full px-3 py-1 text-xs font-bold transition-all ${
+              proFilter === "todos"
+                ? "bg-evergreen text-lime shadow-sm"
+                : "bg-ink/8 text-inkmute hover:text-ink"
+            }`}
+          >
+            👥 Todo el equipo ({pros.length})
+          </button>
+          {pros.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setProFilter(p.id)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all ${
+                proFilter === p.id
+                  ? "bg-evergreen text-lime shadow-sm"
+                  : "bg-ink/8 text-inkmute hover:text-ink"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+              {p.name}
+            </button>
+          ))}
         </div>
-      ) : daySlots.length === 0 ? (
+      )}
+
+      {daySlots.length === 0 ? (
         <div className="card p-8 text-center text-sm text-inkmute">
-          No hay horarios configurados para este día.
+          {proFilter !== "todos"
+            ? `${pros.find((p) => p.id === proFilter)?.name || "Este profesional"} no atiende en este día.`
+            : "No hay horarios configurados o el negocio está cerrado en este día."}
         </div>
       ) : (
         <div className="divide-y divide-ink/8 rounded-2xl border-2 border-ink/10 bg-white overflow-hidden shadow-sm">
           {daySlots.map((slotTime) => {
-            const b = bookings.find((x) => x.date === date && x.time === slotTime && x.status !== "cancelada");
-            const blocked = blockedSlots.find((bs) => bs.date === date && (!bs.time || bs.time === slotTime));
-            const srv = b ? services.find((s) => s.id === b.serviceId) : null;
-            const pro = b ? pros.find((p) => p.id === b.proId) : null;
+            if (proFilter !== "todos") {
+              const currentPro = pros.find((p) => p.id === proFilter);
+              const b = bookings.find(
+                (x) => x.date === date && x.time === slotTime && x.status !== "cancelada" && x.proId === proFilter
+              );
+              const blocked = blockedSlots.find(
+                (bs) => bs.date === date && (!bs.time || bs.time === slotTime) && (!bs.proId || bs.proId === proFilter)
+              );
+              const srv = b ? services.find((s) => s.id === b.serviceId) : null;
+
+              return (
+                <div
+                  key={slotTime}
+                  className={`flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors ${
+                    b
+                      ? "bg-lime/10"
+                      : blocked
+                      ? "bg-ink/[0.04]"
+                      : "hover:bg-ink/[0.02]"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-sm font-extrabold text-ink w-14">
+                      {slotTime}
+                    </span>
+                    {b ? (
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-display font-extrabold text-ink text-sm">{b.client}</span>
+                          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            {b.status}
+                          </span>
+                        </div>
+                        <span className="text-xs text-inkmute">
+                          {srv?.name || "Servicio"} {b.phone ? `· ${formatArgentinaPhone(b.phone) || b.phone}` : ""}
+                        </span>
+                      </div>
+                    ) : blocked ? (
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-xs font-bold text-ink/70">
+                          🚫 Bloqueado: {blocked.reason}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        Disponible con {currentPro?.name}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {b ? (
+                      <>
+                        <button
+                          onClick={() => onReschedule(b)}
+                          className="btn-press rounded-lg border border-ink/15 bg-white px-2.5 py-1 text-xs font-bold text-ink hover:border-evergreen"
+                        >
+                          Reprogramar
+                        </button>
+                        {b.phone && (
+                          <a
+                            href={createWhatsAppUrl(b.phone, `Hola ${b.client}! Te escribimos de ${businessName} por tu turno hoy a las ${b.time} hs.`)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn-press rounded-lg border border-emerald-600/30 bg-emerald-50 p-1.5 text-emerald-800 hover:bg-emerald-100"
+                            title="WhatsApp"
+                          >
+                            <IconWhatsApp className="h-3.5 w-3.5 text-emerald-600" />
+                          </a>
+                        )}
+                      </>
+                    ) : blocked ? (
+                      <button
+                        onClick={() => onUnblockSlot(blocked.id)}
+                        className="text-xs font-bold text-coral hover:underline"
+                      >
+                        Desbloquear
+                      </button>
+                    ) : (
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => onBookSlot({ time: slotTime, proId: proFilter })}
+                          className="btn-press rounded-lg bg-evergreen px-3 py-1 text-xs font-bold text-lime hover:bg-pine"
+                        >
+                          + Turno
+                        </button>
+                        <button
+                          onClick={() => onBlockSlot(slotTime, proFilter)}
+                          className="btn-press rounded-lg border border-ink/15 px-2.5 py-1 text-xs font-bold text-inkmute hover:border-coral hover:text-coral"
+                        >
+                          Pausar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // Vista "todos" los profesionales
+            const slotBookings = bookings.filter((x) => x.date === date && x.time === slotTime && x.status !== "cancelada");
+            const slotBlocks = blockedSlots.filter((bs) => bs.date === date && (!bs.time || bs.time === slotTime));
+            const isGlobalBlocked = slotBlocks.some((bs) => !bs.proId);
+
+            const busyProIds = new Set(slotBookings.map((b) => b.proId).filter(Boolean));
+            const blockedProIds = new Set(slotBlocks.filter((bs) => bs.proId).map((bs) => bs.proId));
+
+            const freePros = isGlobalBlocked
+              ? []
+              : pros.filter((p) => {
+                  if (busyProIds.has(p.id) || blockedProIds.has(p.id)) return false;
+                  const pH = getProHours(p, hours)[dIdx];
+                  if (!pH || !pH.open) return false;
+                  const s = toMinutes(slotTime);
+                  const inS1 = pH.from && pH.to && s >= toMinutes(pH.from) && s + 45 <= toMinutes(pH.to);
+                  const inS2 = pH.from2 && pH.to2 && s >= toMinutes(pH.from2) && s + 45 <= toMinutes(pH.to2);
+                  return inS1 || inS2;
+                });
+
+            const hasActiveBookings = slotBookings.length > 0;
 
             return (
               <div
                 key={slotTime}
-                className={`flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors ${
-                  b
+                className={`p-3.5 transition-colors ${
+                  hasActiveBookings
                     ? "bg-lime/10"
-                    : blocked
+                    : isGlobalBlocked
                     ? "bg-ink/[0.04]"
                     : "hover:bg-ink/[0.02]"
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-sm font-extrabold text-ink w-14">
-                    {slotTime}
-                  </span>
-                  {b ? (
-                    <div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-sm font-extrabold text-ink w-14">
+                      {slotTime}
+                    </span>
+
+                    {isGlobalBlocked ? (
                       <div className="flex items-center gap-2">
-                        <span className="font-display font-extrabold text-ink text-sm">{b.client}</span>
-                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          {b.status}
+                        <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-xs font-bold text-ink/70">
+                          🚫 Bloqueado para todo el equipo: {slotBlocks[0]?.reason || "Pausado"}
                         </span>
                       </div>
-                      <span className="text-xs text-inkmute">
-                        {srv?.name || "Servicio"} {pro ? `· con ${pro.name}` : ""} {b.phone ? `· ${formatArgentinaPhone(b.phone) || b.phone}` : ""}
+                    ) : !hasActiveBookings ? (
+                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-500/10 px-2.5 py-0.5 rounded-full">
+                        {pros.length > 0
+                          ? `Disponible (${freePros.length} libre${freePros.length === 1 ? "" : "s"})`
+                          : "Disponible"}
                       </span>
-                    </div>
-                  ) : blocked ? (
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-xs font-bold text-ink/70">
-                        🚫 Bloqueado: {blocked.reason}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-semibold text-ink/40">Disponible</span>
-                  )}
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-evergreen/10 px-2.5 py-0.5 text-xs font-extrabold text-evergreen">
+                          {slotBookings.length} {slotBookings.length === 1 ? "turno" : "turnos simultáneos"}
+                        </span>
+                        {freePros.length > 0 && (
+                          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
+                            +{freePros.length} libre{freePros.length === 1 ? "" : "s"}
+                          </span>
+                        )}
+                        {freePros.length === 0 && pros.length > 0 && (
+                          <span className="rounded-full bg-ink/10 px-2 py-0.5 text-[11px] font-bold text-ink/70">
+                            Cupo completo
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isGlobalBlocked ? (
+                      <button
+                        onClick={() => onUnblockSlot(slotBlocks[0].id)}
+                        className="text-xs font-bold text-coral hover:underline"
+                      >
+                        Desbloquear
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {freePros.length > 0 || pros.length === 0 ? (
+                          <button
+                            onClick={() => onBookSlot({ time: slotTime })}
+                            className="btn-press rounded-lg bg-evergreen px-3 py-1 text-xs font-bold text-lime hover:bg-pine"
+                          >
+                            {hasActiveBookings ? "+ Turno simultáneo" : "+ Turno"}
+                          </button>
+                        ) : null}
+                        {!hasActiveBookings && (
+                          <button
+                            onClick={() => onBlockSlot(slotTime)}
+                            className="btn-press rounded-lg border border-ink/15 px-2.5 py-1 text-xs font-bold text-inkmute hover:border-coral hover:text-coral"
+                          >
+                            Pausar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {b ? (
-                    <>
-                      <button
-                        onClick={() => onReschedule(b)}
-                        className="btn-press rounded-lg border border-ink/15 bg-white px-2.5 py-1 text-xs font-bold text-ink hover:border-evergreen"
-                      >
-                        Reprogramar
-                      </button>
-                      {b.phone && (
-                        <a
-                          href={createWhatsAppUrl(b.phone, `Hola ${b.client}! Te escribimos de ${businessName} por tu turno hoy a las ${b.time} hs.`)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn-press rounded-lg border border-emerald-600/30 bg-emerald-50 p-1.5 text-emerald-800 hover:bg-emerald-100"
-                          title="WhatsApp"
+                {/* Sub-tarjetas de reservas individuales para este horario */}
+                {hasActiveBookings && (
+                  <div className="mt-3 pl-14 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {slotBookings.map((b) => {
+                      const srv = services.find((s) => s.id === b.serviceId);
+                      const bPro = pros.find((p) => p.id === b.proId);
+
+                      return (
+                        <div
+                          key={b.id}
+                          className="flex flex-col justify-between gap-2 rounded-xl border border-ink/10 bg-white p-2.5 shadow-xs"
                         >
-                          <IconWhatsApp className="h-3.5 w-3.5 text-emerald-600" />
-                        </a>
-                      )}
-                    </>
-                  ) : blocked ? (
-                    <button
-                      onClick={() => onUnblockSlot(blocked.id)}
-                      className="text-xs font-bold text-coral hover:underline"
-                    >
-                      Desbloquear
-                    </button>
-                  ) : (
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => onBookSlot()}
-                        className="btn-press rounded-lg bg-evergreen px-3 py-1 text-xs font-bold text-lime hover:bg-pine"
-                      >
-                        + Turno
-                      </button>
-                      <button
-                        onClick={() => onBlockSlot(slotTime)}
-                        className="btn-press rounded-lg border border-ink/15 px-2.5 py-1 text-xs font-bold text-inkmute hover:border-coral hover:text-coral"
-                      >
-                        Pausar
-                      </button>
-                    </div>
-                  )}
-                </div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-display text-xs font-bold text-ink truncate">
+                                  {b.client}
+                                </span>
+                                <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.2 text-[9px] font-bold text-emerald-800 shrink-0">
+                                  {b.status}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-inkmute truncate">
+                                {srv?.name || "Servicio"}
+                              </p>
+                              {bPro && (
+                                <span
+                                  className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold text-white"
+                                  style={{ background: bPro.color }}
+                                >
+                                  👤 {bPro.name}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              {b.phone && (
+                                <a
+                                  href={createWhatsAppUrl(
+                                    b.phone,
+                                    `Hola ${b.client}! Te escribimos de ${businessName} por tu turno hoy a las ${b.time} hs.`
+                                  )}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="btn-press rounded-lg border border-emerald-600/30 bg-emerald-50 p-1 text-emerald-800 hover:bg-emerald-100"
+                                  title="WhatsApp"
+                                >
+                                  <IconWhatsApp className="h-3 w-3 text-emerald-600" />
+                                </a>
+                              )}
+                              <button
+                                onClick={() => onReschedule(b)}
+                                className="btn-press rounded-lg border border-ink/15 bg-white px-2 py-1 text-[10px] font-bold text-ink hover:border-evergreen"
+                              >
+                                Reprogramar
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -2991,6 +3264,7 @@ function StatsView({ db }: { db: BizData }) {
 function TeamView() {
   const { user, data, addProfessional, updateProfessional, removeProfessional, toast } = useStore();
   const [modal, setModal] = useState(false);
+  const [editingPro, setEditingPro] = useState<Professional | null>(null);
   if (!user || !data) return null;
   const limit = PRO_LIMIT[user.plan];
 
@@ -3000,18 +3274,46 @@ function TeamView() {
         Tu plan <strong className="text-fern">{PLAN_META[user.plan].name}</strong> permite hasta <strong className="text-fern">{limit >= 99 ? "profesionales ilimitados" : `${limit} profesional${limit === 1 ? "" : "es"}`}</strong>. Usás {data.professionals.length}.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
-        {data.professionals.map((p) => (
-          <div key={p.id} className="group card card-hover flex items-center gap-4 p-5">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full font-display text-base font-extrabold text-ink" style={{ background: p.color }}>{p.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}</span>
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-lg font-extrabold text-ink">{p.name}</p>
-              <p className="text-sm text-inkmute">{p.role}</p>
+        {data.professionals.map((p) => {
+          const hasCustom = p.hours && Array.isArray(p.hours) && p.hours.length === 7;
+          return (
+            <div key={p.id} className="group card card-hover flex flex-col justify-between gap-3 p-5">
+              <div className="flex items-start gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full font-display text-base font-extrabold text-ink shadow-xs" style={{ background: p.color }}>
+                  {p.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-display text-lg font-extrabold text-ink truncate">{p.name}</p>
+                  <p className="text-sm text-inkmute">{p.role}</p>
+                  <span className={`inline-block mt-2 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${hasCustom ? "bg-evergreen/10 text-evergreen border border-evergreen/20" : "bg-ink/5 text-inkmute border border-ink/10"}`}>
+                    {hasCustom ? "🕒 Horarios propios" : "🏢 Horario del negocio"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPro(p)}
+                    aria-label={`Editar a ${p.name}`}
+                    title="Editar datos y horarios"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-all hover:border-evergreen hover:text-evergreen hover:bg-evergreen/5"
+                  >
+                    <IconPencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { removeProfessional(p.id); toast(`${p.name} salió del equipo.`, "warn"); }}
+                    aria-label={`Quitar a ${p.name}`}
+                    title="Eliminar del equipo"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute opacity-80 transition-all hover:border-coral hover:text-coral hover:bg-coral/5"
+                  >
+                    <IconTrash className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
-            <button onClick={() => { removeProfessional(p.id); toast(`${p.name} salió del equipo.`, "warn"); }} aria-label="Quitar"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute opacity-0 transition-all hover:border-coral hover:text-coral group-hover:opacity-100"><IconTrash className="h-4 w-4" /></button>
-          </div>
-        ))}
-        <button onClick={() => setModal(true)} disabled={data.professionals.length >= limit}
+          );
+        })}
+        <button onClick={() => { setEditingPro(null); setModal(true); }} disabled={data.professionals.length >= limit}
           className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-ink/25 text-inkmute transition-all duration-200 enabled:hover:-translate-y-1 enabled:hover:border-evergreen enabled:hover:text-evergreen disabled:opacity-50">
           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-ink/8"><IconPlus className="h-5 w-5" /></span>
           <span className="font-display text-base font-bold">{data.professionals.length >= limit ? "Límite del plan alcanzado" : "Agregar profesional"}</span>
@@ -3020,28 +3322,210 @@ function TeamView() {
       {data.professionals.length >= limit && (
         <p className="mt-4 text-sm text-inkmute">Necesitás más lugar? <button onClick={() => requestCheckout(user.plan === "semilla" ? "crece" : "escala")} className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-4">Subí de plan</button> para sumar profesionales. Te llevamos a MercadoPago.</p>
       )}
-      {modal && <ProModal onClose={() => setModal(false)} onSave={(n, r) => { const err = addProfessional(n, r); if (err) return err; toast(`${n} se sumó al equipo 🎉`); return null; }} />}
+      {(modal || editingPro) && (
+        <ProModal
+          initial={editingPro ?? undefined}
+          bizHours={data.settings.hours}
+          onClose={() => { setModal(false); setEditingPro(null); }}
+          onSave={(payload) => {
+            if (editingPro) {
+              updateProfessional(editingPro.id, {
+                name: payload.name,
+                role: payload.role,
+                hours: payload.hours,
+              });
+              toast(`${payload.name} actualizado ✓`);
+              return null;
+            } else {
+              const err = addProfessional(payload.name, payload.role, payload.hours);
+              if (err) return err;
+              toast(`${payload.name} se sumó al equipo 🎉`);
+              return null;
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ProModal({ onClose, onSave }: { onClose: () => void; onSave: (name: string, role: string) => string | null }) {
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
+function ProModal({
+  initial,
+  bizHours,
+  onClose,
+  onSave,
+}: {
+  initial?: Professional;
+  bizHours: DayHours[];
+  onClose: () => void;
+  onSave: (payload: { name: string; role: string; hours?: DayHours[] }) => string | null;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [role, setRole] = useState(initial?.role ?? "");
+  const [useCustomHours, setUseCustomHours] = useState(
+    !!(initial?.hours && Array.isArray(initial.hours) && initial.hours.length === 7)
+  );
+  const [hours, setHours] = useState<DayHours[]>(() => {
+    if (initial?.hours && Array.isArray(initial.hours) && initial.hours.length === 7) {
+      return initial.hours.map((h) => ({ ...h }));
+    }
+    return bizHours.map((h) => ({ ...h }));
+  });
   const [error, setError] = useState<string | null>(null);
+
+  const setDay = (i: number, patch: Partial<DayHours>) => {
+    setHours((prev) => prev.map((h, idx) => (idx === i ? { ...h, ...patch } : h)));
+  };
+
+  const order = [1, 2, 3, 4, 5, 6, 0];
+
   return (
-    <Modal title="Nuevo profesional" onClose={onClose}>
-      <form onSubmit={(e) => { e.preventDefault(); const err = onSave(name, role); if (err) return setError(err); onClose(); }} className="space-y-4">
+    <Modal title={initial ? `Editar a ${initial.name}` : "Nuevo profesional"} onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const err = onSave({
+            name,
+            role,
+            hours: useCustomHours ? hours : undefined,
+          });
+          if (err) return setError(err);
+          onClose();
+        }}
+        className="space-y-4"
+      >
         <div>
           <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Nombre *</label>
           <input className="field" placeholder="Caro Méndez" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Rol</label>
-          <input className="field" placeholder="Nail artist" value={role} onChange={(e) => setRole(e.target.value)} />
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Rol o especialidad</label>
+          <input className="field" placeholder="Nail artist, Barbero, Colorista..." value={role} onChange={(e) => setRole(e.target.value)} />
         </div>
+
+        {/* Configuración de horarios */}
+        <div className="rounded-2xl border-2 border-ink/10 bg-paper p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-display text-sm font-bold text-ink">🕒 Horarios de atención</p>
+              <p className="text-xs text-inkmute">
+                {useCustomHours
+                  ? "Este profesional tiene horarios propios."
+                  : "Usa los mismos horarios configurados para el negocio."}
+              </p>
+            </div>
+            <div className="flex rounded-xl border border-ink/12 bg-card p-1 shadow-sm shrink-0">
+              <button
+                type="button"
+                onClick={() => setUseCustomHours(false)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                  !useCustomHours
+                    ? "bg-evergreen text-lime shadow-sm"
+                    : "text-inkmute hover:text-ink"
+                }`}
+              >
+                Del negocio
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseCustomHours(true)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                  useCustomHours
+                    ? "bg-evergreen text-lime shadow-sm"
+                    : "text-inkmute hover:text-ink"
+                }`}
+              >
+                Propios
+              </button>
+            </div>
+          </div>
+
+          {useCustomHours && (
+            <div className="pop-in space-y-2 pt-2 border-t border-ink/10 max-h-64 overflow-y-auto pr-1">
+              <p className="text-[11px] font-semibold text-inkmute mb-1">
+                Configurá los días y turnos en que atiende {name.trim() || "este profesional"}:
+              </p>
+              {order.map((i) => {
+                const h = hours[i];
+                return (
+                  <div
+                    key={i}
+                    className={`rounded-xl border p-2.5 transition-colors text-xs ${
+                      h.open ? "border-ink/12 bg-white" : "border-ink/8 bg-ink/[0.03]"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Toggle
+                        on={h.open}
+                        onChange={(v) => setDay(i, { open: v })}
+                        label={`Abrir ${DAY_NAMES[i]}`}
+                      />
+                      <span className={`w-20 font-display font-bold ${h.open ? "text-ink" : "text-ink/35"}`}>
+                        {DAY_NAMES[i]}
+                      </span>
+                      {h.open && (
+                        <span className="flex items-center gap-1.5 text-xs">
+                          <input
+                            type="time"
+                            className="field !w-auto !py-1 !px-2 !text-xs"
+                            value={h.from}
+                            onChange={(e) => setDay(i, { from: e.target.value })}
+                          />
+                          <span className="text-inkmute">a</span>
+                          <input
+                            type="time"
+                            className="field !w-auto !py-1 !px-2 !text-xs"
+                            value={h.to}
+                            onChange={(e) => setDay(i, { to: e.target.value })}
+                          />
+                        </span>
+                      )}
+                      {h.open && !h.from2 && (
+                        <button
+                          type="button"
+                          onClick={() => setDay(i, { from2: "15:00", to2: "20:00" })}
+                          className="ml-auto rounded-full border border-coral/40 px-2 py-0.5 text-[10px] font-bold text-coral transition-colors hover:bg-coral hover:text-white"
+                        >
+                          + Corte
+                        </button>
+                      )}
+                    </div>
+                    {h.open && h.from2 && (
+                      <div className="pop-in mt-2 flex flex-wrap items-center gap-1.5 border-t border-dashed border-coral/20 pt-1.5 text-xs">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-coral">✂ Reabre</span>
+                        <input
+                          type="time"
+                          className="field !w-auto !py-1 !px-2 !text-xs"
+                          value={h.from2}
+                          onChange={(e) => setDay(i, { from2: e.target.value })}
+                        />
+                        <span className="text-inkmute">a</span>
+                        <input
+                          type="time"
+                          className="field !w-auto !py-1 !px-2 !text-xs"
+                          value={h.to2 ?? "20:00"}
+                          onChange={(e) => setDay(i, { to2: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setDay(i, { from2: undefined, to2: undefined })}
+                          className="ml-auto text-[11px] font-bold text-inkmute hover:text-coral hover:underline"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-        <button type="submit" className="w-full rounded-full bg-evergreen py-3.5 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Agregar al equipo</button>
+        <button type="submit" className="w-full rounded-full bg-evergreen py-3.5 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">
+          {initial ? "Guardar cambios" : "Agregar al equipo"}
+        </button>
       </form>
     </Modal>
   );

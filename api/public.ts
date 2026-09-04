@@ -107,31 +107,109 @@ export default async function handler(req: Request): Promise<Response> {
         return json({ error: "El negocio está cerrado en esa fecha." }, 400);
       }
       let pro = b.proId ? String(b.proId) : undefined;
-      if (!pro && (data.professionals || []).length > 0) {
-        const dayCount = (data.bookings || []).filter((x: any) => x.date === date).length;
-        pro = data.professionals[dayCount % data.professionals.length].id;
-      }
-      const blocked = (data.blockedSlots || []).some((bs: any) => {
-        if (bs.date !== date) return false;
-        if (bs.proId && pro && bs.proId !== pro) return false;
-        if (!bs.time) return true;
-        if (!bs.endTime) return bs.time === time;
-        const t = toMin(time);
-        return t >= toMin(bs.time) && t < toMin(bs.endTime);
-      });
-      if (blocked) return json({ error: "Este horario se encuentra bloqueado por el negocio." }, 409);
       const dur = durOf(data.services || [], serviceId);
       const s = toMin(time);
       const e = s + dur;
-      const clash = (data.bookings || []).find((x: any) => {
-        if (x.date !== date || x.status === "cancelada") return false;
-        if (x.proId && pro && x.proId !== pro) return false;
-        const bs = toMin(x.time);
-        const be = bs + durOf(data.services || [], x.serviceId);
-        return s < be && bs < e;
-      });
-      if (clash) {
-        return json({ error: clash.time === time ? `El horario ${time} ya fue tomado.` : `Se superpone con otro turno (${clash.time}).` }, 409);
+      const pros = data.professionals || [];
+
+      if (!pro && pros.length > 0) {
+        // Opción "Cualquiera": Encontrar profesionales disponibles
+        const available = pros.filter((p: any) => {
+          const pHours = (p.hours && Array.isArray(p.hours) && p.hours.length === 7) ? p.hours : (data.settings?.hours || []);
+          const [y, m, d] = String(date || "").split("-").map(Number);
+          const dayIdx = new Date(y, m - 1, d).getDay();
+          const dayH = pHours[dayIdx];
+          if (!dayH || !dayH.open) return false;
+          const inS1 = dayH.from && dayH.to && s >= toMin(dayH.from) && e <= toMin(dayH.to);
+          const inS2 = dayH.from2 && dayH.to2 && s >= toMin(dayH.from2) && e <= toMin(dayH.to2);
+          if (!inS1 && !inS2) return false;
+
+          const isBlocked = (data.blockedSlots || []).some((bs: any) => {
+            if (bs.date !== date) return false;
+            if (bs.proId && bs.proId !== p.id) return false;
+            if (!bs.time) return true;
+            if (!bs.endTime) return bs.time === time;
+            const t = toMin(time);
+            return t >= toMin(bs.time) && t < toMin(bs.endTime);
+          });
+          if (isBlocked) return false;
+
+          const clash = (data.bookings || []).find((x: any) => {
+            if (x.date !== date || x.status === "cancelada") return false;
+            if (x.proId && x.proId !== p.id) return false;
+            const bs = toMin(x.time);
+            const be = bs + durOf(data.services || [], x.serviceId);
+            return s < be && bs < e;
+          });
+          return !clash;
+        });
+
+        if (available.length === 0) {
+          return json({ error: "No hay ningún profesional disponible en ese horario." }, 409);
+        }
+
+        // Balancear carga: asignar al profesional disponible con menos turnos hoy
+        available.sort((p1: any, p2: any) => {
+          const c1 = (data.bookings || []).filter((x: any) => x.date === date && x.proId === p1.id && x.status !== "cancelada").length;
+          const c2 = (data.bookings || []).filter((x: any) => x.date === date && x.proId === p2.id && x.status !== "cancelada").length;
+          return c1 - c2;
+        });
+        pro = available[0].id;
+      } else if (pro && pros.length > 0) {
+        // Profesional específico
+        const targetPro = pros.find((p: any) => p.id === pro);
+        if (targetPro) {
+          const pHours = (targetPro.hours && Array.isArray(targetPro.hours) && targetPro.hours.length === 7) ? targetPro.hours : (data.settings?.hours || []);
+          const [y, m, d] = String(date || "").split("-").map(Number);
+          const dayIdx = new Date(y, m - 1, d).getDay();
+          const dayH = pHours[dayIdx];
+          if (!dayH || !dayH.open) return json({ error: `${targetPro.name} no atiende en esa fecha.` }, 409);
+          const inS1 = dayH.from && dayH.to && s >= toMin(dayH.from) && e <= toMin(dayH.to);
+          const inS2 = dayH.from2 && dayH.to2 && s >= toMin(dayH.from2) && e <= toMin(dayH.to2);
+          if (!inS1 && !inS2) return json({ error: `${targetPro.name} no atiende en ese horario.` }, 409);
+
+          const isBlocked = (data.blockedSlots || []).some((bs: any) => {
+            if (bs.date !== date) return false;
+            if (bs.proId && bs.proId !== pro) return false;
+            if (!bs.time) return true;
+            if (!bs.endTime) return bs.time === time;
+            const t = toMin(time);
+            return t >= toMin(bs.time) && t < toMin(bs.endTime);
+          });
+          if (isBlocked) return json({ error: "Este horario se encuentra bloqueado." }, 409);
+
+          const clash = (data.bookings || []).find((x: any) => {
+            if (x.date !== date || x.status === "cancelada") return false;
+            if (x.proId && x.proId !== pro) return false;
+            const bs = toMin(x.time);
+            const be = bs + durOf(data.services || [], x.serviceId);
+            return s < be && bs < e;
+          });
+          if (clash) {
+            return json({ error: clash.time === time ? `${targetPro.name} ya tiene un turno a las ${time}.` : `Se superpone con otro turno de ${targetPro.name}.` }, 409);
+          }
+        }
+      } else {
+        // Negocio sin profesionales cargados (un solo dueño)
+        const blocked = (data.blockedSlots || []).some((bs: any) => {
+          if (bs.date !== date) return false;
+          if (bs.proId && pro && bs.proId !== pro) return false;
+          if (!bs.time) return true;
+          if (!bs.endTime) return bs.time === time;
+          const t = toMin(time);
+          return t >= toMin(bs.time) && t < toMin(bs.endTime);
+        });
+        if (blocked) return json({ error: "Este horario se encuentra bloqueado por el negocio." }, 409);
+        const clash = (data.bookings || []).find((x: any) => {
+          if (x.date !== date || x.status === "cancelada") return false;
+          if (x.proId && pro && x.proId !== pro) return false;
+          const bs = toMin(x.time);
+          const be = bs + durOf(data.services || [], x.serviceId);
+          return s < be && bs < e;
+        });
+        if (clash) {
+          return json({ error: clash.time === time ? `El horario ${time} ya fue tomado.` : `Se superpone con otro turno (${clash.time}).` }, 409);
+        }
       }
       const id = uid();
       const status = b.status === "pendiente" ? "pendiente" : "confirmada";

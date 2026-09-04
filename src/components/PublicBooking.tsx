@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
   THEMES, SEMILLA_MONTHLY_LIMIT, monthBookingCount, findOverlap, isSlotBlocked,
+  getProHours, isProAvailable, getAvailablePros, toMinutes,
   type User, type BizData, type BizSettings, type Coupon, type ColorTheme,
 } from "../lib/store";
 import {
@@ -174,40 +175,97 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
   const service = biz.services.find((s) => s.id === serviceId);
   const pro = biz.professionals.find((p) => p.id === proId);
 
+  const bookedPro = useMemo(() => {
+    if (pro) return pro;
+    if (!confirmedId) return null;
+    const b = biz.bookings.find((x) => x.id === confirmedId);
+    if (!b || !b.proId) return null;
+    return biz.professionals.find((p) => p.id === b.proId) || null;
+  }, [pro, confirmedId, biz.bookings, biz.professionals]);
+
   const now = new Date();
   const todayKey = dateKey(now);
   const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-  const hoursFor = (key: string) => settings.hours[dayOfWeek(key)];
+  const dur = service?.duration ?? 45;
+
+  const isDayOpen = (key: string) => {
+    const dIdx = dayOfWeek(key);
+    if ((settings.closedDates || []).includes(key)) return false;
+    if (pro) {
+      const proH = getProHours(pro, settings.hours)[dIdx];
+      return !!proH?.open;
+    }
+    if (hasPros) {
+      return biz.professionals.some((p) => {
+        const proH = getProHours(p, settings.hours)[dIdx];
+        return !!proH?.open;
+      });
+    }
+    return !!settings.hours[dIdx]?.open;
+  };
+
+  const getRawSlotsFor = (key: string): string[] => {
+    const dIdx = dayOfWeek(key);
+    if (pro) {
+      const proH = getProHours(pro, settings.hours)[dIdx];
+      return proH?.open ? slotsForDay(proH) : [];
+    }
+    if (hasPros) {
+      const set = new Set<string>();
+      biz.professionals.forEach((p) => {
+        const proH = getProHours(p, settings.hours)[dIdx];
+        if (proH?.open) {
+          slotsForDay(proH).forEach((s) => set.add(s));
+        }
+      });
+      return Array.from(set).sort((a, b) => toMinutes(a) - toMinutes(b));
+    }
+    const h = settings.hours[dIdx];
+    return h?.open ? slotsForDay(h) : [];
+  };
+
   const isClosed = (key: string) => {
-    if (!hoursFor(key).open) return true;
+    if (!isDayOpen(key)) return true;
     if ((settings.closedDates || []).includes(key)) return true;
     if ((biz.blockedSlots || []).some((bs) => bs.date === key && !bs.time && (!bs.proId || !proId || bs.proId === proId))) return true;
     if (key === todayKey) {
-      const todaySlots = slotsForDay(hoursFor(key));
+      const todaySlots = getRawSlotsFor(key);
       if (todaySlots.length > 0 && todaySlots.every((t) => t <= currentHHMM)) return true;
     }
     return false;
   };
-  const rawSlots = selectedDate ? slotsForDay(hoursFor(selectedDate)) : [];
-  const busyTimes = (key: string) => {
-    const h = hoursFor(key);
-    if (!h.open) return [] as string[];
-    const dur = service?.duration ?? 45;
-    const pro = proId ?? undefined;
-    return slotsForDay(h).filter(
-      (t) =>
-        isSlotBlocked(biz.blockedSlots || [], key, t, pro) ||
-        !!findOverlap({ date: key, time: t, dur, proId: pro }, biz.bookings, biz.services)
-    );
+
+  const rawSlots = selectedDate ? getRawSlotsFor(selectedDate) : [];
+
+  const isTimeAvailable = (key: string, t: string) => {
+    if (pro) {
+      return isProAvailable(pro, key, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services);
+    }
+    if (hasPros) {
+      return getAvailablePros(biz.professionals, key, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services).length > 0;
+    }
+    const h = settings.hours[dayOfWeek(key)];
+    if (!h?.open) return false;
+    const s = toMinutes(t);
+    const e = s + dur;
+    const inS1 = h.from && h.to && s >= toMinutes(h.from) && e <= toMinutes(h.to);
+    const inS2 = h.from2 && h.to2 && s >= toMinutes(h.from2) && e <= toMinutes(h.to2);
+    if (!inS1 && !inS2) return false;
+    if (isSlotBlocked(biz.blockedSlots || [], key, t)) return false;
+    return !findOverlap({ date: key, time: t, dur }, biz.bookings, biz.services);
   };
-  const takenTimes = busyTimes;
+
   const slots = (selectedDate === todayKey ? rawSlots.filter((t) => t > currentHHMM) : rawSlots)
-    .filter((t) => !takenTimes(selectedDate ?? "").includes(t));
-  const allTaken = rawSlots.length > 0 && slots.every((t) => takenTimes(selectedDate ?? "").includes(t));
+    .filter((t) => selectedDate && isTimeAvailable(selectedDate, t));
+
+  const allTaken = rawSlots.length > 0 && slots.length === 0;
   const monthLimitReached = !paid && monthBookingCount(biz) >= SEMILLA_MONTHLY_LIMIT;
-  const hasBreak = selectedDate ? !!hoursFor(selectedDate).from2 : false;
-  const breakInfo = selectedDate ? { to: hoursFor(selectedDate).to, from2: hoursFor(selectedDate).from2 } : null;
+
+  const currentProHours = pro ? getProHours(pro, settings.hours) : settings.hours;
+  const dayHoursForSelected = selectedDate ? currentProHours[dayOfWeek(selectedDate)] : null;
+  const hasBreak = dayHoursForSelected ? !!dayHoursForSelected.from2 : false;
+  const breakInfo = dayHoursForSelected && dayHoursForSelected.from2 ? { to: dayHoursForSelected.to, from2: dayHoursForSelected.from2 } : null;
 
   const productsTotal = Object.entries(items).reduce((acc, [pid, qty]) => acc + (biz.products.find((p) => p.id === pid)?.price ?? 0) * qty, 0);
   const itemCount = Object.values(items).reduce((a, b) => a + b, 0);
@@ -425,14 +483,42 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
               <p className="text-xs font-bold uppercase tracking-wider text-inkmute">2 · ¿Con quién?</p>
               <button onClick={() => setStep(0)} className="rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-ink">← Servicio</button>
             </div>
+
+            {/* Opción destacada: Cualquier profesional disponible */}
+            <button
+              type="button"
+              onClick={() => { setProId(null); setStep(2); }}
+              className={`group flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${
+                proId === null
+                  ? "border-evergreen bg-evergreen/10 shadow-sm"
+                  : "border-ink/10 bg-white/70 hover:border-evergreen hover:bg-white"
+              }`}
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-evergreen font-display text-sm font-extrabold text-lime shadow-sm">
+                ✨
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-[15px] font-bold text-ink">Cualquier profesional</span>
+                  <span className="rounded-full bg-lime/40 px-2 py-0.5 text-[10px] font-extrabold text-evergreen">Más rápido</span>
+                </div>
+                <span className="text-xs text-inkmute">Sin preferencia · Te asignamos el primer turno libre</span>
+              </div>
+              <IconChevron className="ml-auto h-4 w-4 text-ink/30 transition-transform group-hover:translate-x-1 group-hover:text-ink" />
+            </button>
+
             {biz.professionals.map((p) => (
               <button key={p.id} onClick={() => { setProId(p.id); setStep(2); }}
-                className="group flex items-center gap-3 rounded-xl border-2 border-ink/10 bg-white/60 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/50 hover:bg-white hover:shadow-sm">
+                className={`group flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${
+                  proId === p.id
+                    ? "border-evergreen bg-evergreen/5 shadow-sm"
+                    : "border-ink/10 bg-white/60 hover:border-ink/50 hover:bg-white"
+                }`}>
                 <span className="flex h-10 w-10 items-center justify-center rounded-full font-display text-sm font-extrabold text-ink" style={{ background: p.color }}>
                   {p.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                 </span>
-                <span>
-                  <span className="block font-display text-[15px] font-bold">{p.name}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-display text-[15px] font-bold text-ink">{p.name}</span>
                   <span className="text-xs text-inkmute">{p.role}</span>
                 </span>
                 <IconChevron className="ml-auto h-4 w-4 text-ink/30 transition-transform group-hover:translate-x-1 group-hover:text-ink" />
@@ -828,11 +914,21 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
                   <span className="text-inkmute">Servicio</span>
                   <span className="font-bold text-ink">{service.name}</span>
                 </div>
-                {pro && (
+                {pro ? (
                   <div className="flex items-center justify-between">
                     <span className="text-inkmute">Profesional</span>
                     <span className="font-bold text-ink">{pro.name}</span>
                   </div>
+                ) : (
+                  bookedPro && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-inkmute">Profesional</span>
+                      <span className="font-bold text-ink">
+                        {bookedPro.name}{" "}
+                        <span className="text-[10px] font-bold text-evergreen bg-evergreen/10 px-1.5 py-0.5 rounded">Asignado</span>
+                      </span>
+                    </div>
+                  )
                 )}
                 <div className="flex items-center justify-between">
                   <span className="text-inkmute">Día y horario</span>
