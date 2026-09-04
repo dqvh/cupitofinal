@@ -23,6 +23,7 @@ import {
   isSlotBlocked,
   getProHours,
   toMinutes,
+  type User,
   type ThemeId,
   type Booking,
   type BookingStatus,
@@ -241,7 +242,7 @@ export default function Dashboard() {
         if (preapprovalId) store.saveMpPreapprovalId(preapprovalId);
         clearPendingCheckout();
         store.toast(`Pago confirmado. Ya estás en el plan ${PLAN_META[plan].name} ✓`);
-        if (user.email) {
+        if (user && user.email) {
           sendSubscriptionWelcomeEmail({
             toEmail: user.email,
             ownerName: user.name,

@@ -2476,11 +2476,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Sincronización continua de datos frescos desde Supabase para el negocio logueado
   useEffect(() => {
     if (!sessionUserId || !isSupabaseConfigured) return;
+    const uid = sessionUserId;
     forbiddenNoticedFor.current = null;
     const checkForbidden = () => {
       const f = takeForbiddenUser();
-      if (f && f.userId === sessionUserId && forbiddenNoticedFor.current !== sessionUserId) {
-        forbiddenNoticedFor.current = sessionUserId;
+      if (f && f.userId === uid && forbiddenNoticedFor.current !== uid) {
+        forbiddenNoticedFor.current = uid;
         toast(
           f.status === 400
             ? "La nube rechazó el guardado: corré el SQL nuevo en Supabase y después tocá algo para reintentar"
@@ -2489,12 +2490,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
       }
     };
-    api.syncUserDataFromCloud(sessionUserId);
+    api.syncUserDataFromCloud(uid);
     const interval = setInterval(() => {
-      api.syncUserDataFromCloud(sessionUserId);
+      api.syncUserDataFromCloud(uid);
       checkForbidden();
     }, 6000);
-    const onFocus = () => api.syncUserDataFromCloud(sessionUserId);
+    const onFocus = () => api.syncUserDataFromCloud(uid);
     window.addEventListener("focus", onFocus);
     return () => {
       clearInterval(interval);

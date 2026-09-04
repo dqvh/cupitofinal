@@ -4,6 +4,7 @@ import {
   THEMES, SEMILLA_MONTHLY_LIMIT, monthBookingCount, findOverlap, isSlotBlocked,
   getProHours, isProAvailable, getAvailablePros, toMinutes,
   type User, type BizData, type BizSettings, type Coupon, type ColorTheme,
+  type Booking, type Service, type Professional,
 } from "../lib/store";
 import {
   IconCheck, IconCalendar, IconChevron, IconBag, IconTicket, IconPlus, IconUsers,
@@ -145,10 +146,11 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
   const lookupVal = useMemo(() => normalizeArgentinaPhone(lookupPhone), [lookupPhone]);
 
   const filteredServices = useMemo(() => {
+    if (!biz) return [];
     const q = serviceSearch.trim().toLowerCase();
     if (!q) return biz.services;
     return biz.services.filter((s) => s.name.toLowerCase().includes(q));
-  }, [biz.services, serviceSearch]);
+  }, [biz?.services, serviceSearch]);
 
   useEffect(() => {
     if (done) {
@@ -656,7 +658,7 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
                           <IconSun className="h-3.5 w-3.5 text-amber-500" /> Mañana · hasta el corte
                         </span>
                         <span className="text-[10px] font-bold text-inkmute">
-                          {slots.filter((t) => t < (breakInfo.to ?? "99:99") && !takenTimes(selectedDate ?? "").includes(t)).length} disponibles
+                          {slots.filter((t) => t < (breakInfo.to ?? "99:99")).length} disponibles
                         </span>
                       </div>
                       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
@@ -674,7 +676,7 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
                           <IconMoon className="h-3.5 w-3.5 text-indigo-500" /> Tarde · después del corte
                         </span>
                         <span className="text-[10px] font-bold text-inkmute">
-                          {slots.filter((t) => t >= (breakInfo.to ?? "99:99") && !takenTimes(selectedDate ?? "").includes(t)).length} disponibles
+                          {slots.filter((t) => t >= (breakInfo.to ?? "99:99")).length} disponibles
                         </span>
                       </div>
                       <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
@@ -687,7 +689,7 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className="text-[11px] font-extrabold uppercase tracking-widest text-inkmute">Horarios disponibles</span>
                       <span className="text-[10px] font-bold text-inkmute">
-                        {slots.filter((t) => !takenTimes(selectedDate ?? "").includes(t)).length} libres
+                        {slots.length} libres
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">{slots.map((t) => slotBtn(t))}</div>
@@ -1079,7 +1081,7 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
   );
 
   function slotBtn(t: string) {
-    const busy = takenTimes(selectedDate ?? "").includes(t);
+    const busy = !selectedDate || !isTimeAvailable(selectedDate, t);
     return (
       <button key={t} disabled={busy} onClick={() => { setTime(t); setError(null); }}
         className={`rounded-lg border-2 py-2 font-display text-sm font-bold transition-all duration-150 ${busy ? "cursor-not-allowed border-ink/8 bg-ink/5 text-ink/25 line-through" : time === t ? theme.activeSlot : "border-ink/10 bg-white/60 hover:-translate-y-0.5 hover:border-ink/40"}`}>
