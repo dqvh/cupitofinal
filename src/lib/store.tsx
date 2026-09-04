@@ -299,7 +299,117 @@ export function semillaLimitReached(owner: Pick<User, "plan"> | undefined, data:
   if (!owner || owner.plan !== "semilla") return false;
   return monthBookingCount(data) >= SEMILLA_MONTHLY_LIMIT;
 }
-export const isPaid = (u: User) => u.plan !== "semilla";
+/* Estado inteligente de suscripción: Mercado Pago automático vs Pago manual / transferencia */
+export type SubStatusKind =
+  | "free"
+  | "mp_active"
+  | "mp_cancelled"
+  | "manual_active"
+  | "manual_expiring_soon"
+  | "manual_grace_period"
+  | "expired";
+
+export function getSubscriptionStatus(u: Pick<User, "plan" | "subscription"> | undefined | null): {
+  kind: SubStatusKind;
+  daysRemaining: number;
+  isExpired: boolean;
+  isGracePeriod: boolean;
+  isExpiringSoon: boolean;
+  hasMpAutoDebit: boolean;
+} {
+  if (!u || u.plan === "semilla") {
+    return {
+      kind: "free",
+      daysRemaining: 0,
+      isExpired: false,
+      isGracePeriod: false,
+      isExpiringSoon: false,
+      hasMpAutoDebit: false,
+    };
+  }
+
+  const sub = u.subscription;
+  const hasMpAutoDebit = Boolean(sub?.mpPreapprovalId);
+  const now = Date.now();
+  const nextRenewal = sub?.nextRenewal ?? (now + 30 * 86400000);
+  const diffDays = Math.ceil((nextRenewal - now) / (1000 * 60 * 60 * 24));
+
+  if (hasMpAutoDebit) {
+    if (sub?.status === "cancelada") {
+      const isExpired = now > nextRenewal;
+      return {
+        kind: isExpired ? "expired" : "mp_cancelled",
+        daysRemaining: Math.max(0, diffDays),
+        isExpired,
+        isGracePeriod: false,
+        isExpiringSoon: diffDays <= 5 && !isExpired,
+        hasMpAutoDebit: true,
+      };
+    }
+    return {
+      kind: "mp_active",
+      daysRemaining: Math.max(0, diffDays),
+      isExpired: false,
+      isGracePeriod: false,
+      isExpiringSoon: false,
+      hasMpAutoDebit: true,
+    };
+  }
+
+  // Suscripción manual / transferencia
+  const GRACE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000;
+  const isPastRenewal = now > nextRenewal;
+  const isPastGrace = now > (nextRenewal + GRACE_PERIOD_MS);
+
+  if (isPastGrace) {
+    return {
+      kind: "expired",
+      daysRemaining: 0,
+      isExpired: true,
+      isGracePeriod: false,
+      isExpiringSoon: false,
+      hasMpAutoDebit: false,
+    };
+  }
+
+  if (isPastRenewal) {
+    return {
+      kind: "manual_grace_period",
+      daysRemaining: 0,
+      isExpired: false,
+      isGracePeriod: true,
+      isExpiringSoon: false,
+      hasMpAutoDebit: false,
+    };
+  }
+
+  if (diffDays <= 5) {
+    return {
+      kind: "manual_expiring_soon",
+      daysRemaining: Math.max(0, diffDays),
+      isExpired: false,
+      isGracePeriod: false,
+      isExpiringSoon: true,
+      hasMpAutoDebit: false,
+    };
+  }
+
+  return {
+    kind: "manual_active",
+    daysRemaining: Math.max(0, diffDays),
+    isExpired: false,
+    isGracePeriod: false,
+    isExpiringSoon: false,
+    hasMpAutoDebit: false,
+  };
+}
+
+export const isPaid = (u: User) => {
+  if (u.plan === "semilla") return false;
+  const status = getSubscriptionStatus(u);
+  return !status.isExpired;
+};
+
 /* La cuenta demo vive solo en cada dispositivo: jamás se sube ni se trae de la nube */
 export const DEMO_EMAIL = "demo@cupito.app";
 export const DEMO_SLUG = "cupito-demo";

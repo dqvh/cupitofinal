@@ -44,6 +44,7 @@ export default function Landing() {
         <Faq />
       </main>
       <StickyMobileBar />
+      <LiveSocialProofToast />
       <Footer />
     </div>
   );
@@ -223,6 +224,7 @@ function Hero() {
       <div className="pointer-events-none absolute inset-x-0 -top-40 flex justify-center overflow-hidden" aria-hidden="true">
         <div className="h-[650px] w-[900px] rounded-full bg-gradient-to-b from-emerald-100/70 via-emerald-50/40 to-transparent blur-3xl" />
       </div>
+      <div className="pointer-events-none absolute inset-0 gridlines-dark opacity-40 [mask-image:radial-gradient(ellipse_at_top,black_40%,transparent_75%)]" aria-hidden="true" />
 
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         <div className="mx-auto max-w-3xl text-center">
@@ -1703,6 +1705,64 @@ function StickyMobileBar() {
           Empezar gratis →
         </a>
       </div>
+    </div>
+  );
+}
+
+/* ============ SOCIAL PROOF FLOTANTE (ESTILO SAAS MODERNO) ============ */
+function LiveSocialProofToast() {
+  const [visible, setVisible] = useState(false);
+  const [index, setIndex] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
+
+  const notifications = [
+    { client: "Valen R.", service: "Corte Tradicional & Barba", business: "Barber Studio", time: "hace 2 min" },
+    { client: "Sofía M.", service: "Semipermanente & Spa", business: "Nails Lounge", time: "hace 4 min" },
+    { client: "Lucas B.", service: "Fade & Peinado", business: "Peluquería Central", time: "hace 6 min" },
+    { client: "Martina D.", service: "Limpieza facial profunda", business: "Estética Sol", time: "hace 9 min" },
+  ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!visible || dismissed) return;
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % notifications.length);
+        setVisible(true);
+      }, 500);
+    }, 7000);
+    return () => clearInterval(interval);
+  }, [visible, dismissed, notifications.length]);
+
+  if (dismissed || !visible) return null;
+  const curr = notifications[index];
+
+  return (
+    <div className="pop-in fixed bottom-6 left-6 z-40 hidden md:flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-3 shadow-xl shadow-slate-900/5 backdrop-blur-md max-w-sm">
+      <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-xs font-bold text-emerald-700 border border-emerald-200/60">
+        {curr.client[0]}
+        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-slate-900 truncate">
+          <strong>{curr.client}</strong> reservó <span className="text-emerald-700 font-medium">{curr.service}</span>
+        </p>
+        <p className="text-[10px] text-slate-500 truncate">
+          en {curr.business} · <span className="text-slate-400">{curr.time}</span>
+        </p>
+      </div>
+      <button
+        onClick={() => setDismissed(true)}
+        aria-label="Cerrar notificación"
+        className="text-slate-400 hover:text-slate-600 p-1 text-xs"
+      >
+        ✕
+      </button>
     </div>
   );
 }

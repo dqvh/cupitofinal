@@ -10,6 +10,7 @@ import {
   fmtLong,
   fmtDateHuman,
   isPaid,
+  getSubscriptionStatus,
   PLAN_META,
   PRO_LIMIT,
   defaultHours,
@@ -387,25 +388,41 @@ export default function Dashboard() {
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* ---------- sidebar ---------- */}
-        <aside className="sticky top-0 z-40 hidden h-screen w-64 shrink-0 flex-col bg-evergreen text-paper lg:flex">
-          <a href="#/" className="flex items-center gap-2.5 px-6 pb-5 pt-7">
-            <LogoMark className="h-9 w-9 text-fern" />
-            <span className="font-display text-2xl font-bold tracking-tight">cupito<span className="text-lime">.</span></span>
+        <aside className="sticky top-0 z-40 hidden h-screen w-64 shrink-0 flex-col bg-[#071d15] text-white border-r border-white/5 lg:flex">
+          <a href="#/" className="flex items-center gap-3 px-6 pb-6 pt-7">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-xs">
+              <LogoMark className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-display text-xl font-extrabold tracking-tight text-white leading-none">
+                cupito<span className="text-emerald-400">.</span>
+              </span>
+              <span className="text-[10px] font-semibold text-white/40 tracking-wider uppercase mt-1">Panel de control</span>
+            </div>
           </a>
           <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
             {SECTIONS.map((sec) => (
               <div key={sec.label}>
-                <p className="px-4 pb-1.5 text-[10px] font-extrabold uppercase tracking-[0.2em] text-paper/35">{sec.label}</p>
+                <p className="px-4 pb-2 text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/30">{sec.label}</p>
                 <div className="space-y-0.5">
                   {sec.items.map((n) => {
                     const active = view === n.id;
                     return (
                       <button key={n.id} onClick={() => setView(n.id)}
-                        className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition-all duration-200 ${active ? "bg-lime text-ink shadow-[3px_3px_0_rgba(205,244,99,0.25)]" : "text-paper/65 hover:bg-paper/10 hover:text-paper"}`}>
-                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-evergreen text-lime" : "bg-paper/10 text-paper/70"}`}>{n.icon({ className: "h-4 w-4" })}</span>
+                        className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all duration-150 ${
+                          active
+                            ? "bg-white/12 text-white shadow-xs border border-white/10"
+                            : "text-white/60 hover:bg-white/[0.06] hover:text-white"
+                        }`}>
+                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                          active ? "bg-emerald-500 text-slate-950 font-bold shadow-xs shadow-emerald-500/30" : "bg-white/[0.06] text-white/70 group-hover:text-white"
+                        }`}>
+                          {n.icon({ className: "h-3.5 w-3.5" })}
+                        </span>
                         <span className="min-w-0 flex-1 truncate">{n.label}</span>
+                        {active && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
                         {n.id === "lista" && data.waitlist.length > 0 && (
-                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-coral px-1.5 text-[10px] font-extrabold text-white">{data.waitlist.length}</span>
+                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-extrabold text-white">{data.waitlist.length}</span>
                         )}
                       </button>
                     );
@@ -414,15 +431,15 @@ export default function Dashboard() {
               </div>
             ))}
           </nav>
-          <div className="border-t border-paper/10 p-4 space-y-2">
-            <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center gap-2 rounded-full bg-lime py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">
-              <IconLink className="h-4 w-4" /> Ver mi página
+          <div className="border-t border-white/10 p-4 space-y-2.5">
+            <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 font-display text-xs font-bold text-slate-950 transition-all hover:bg-emerald-400 shadow-sm shadow-emerald-500/20">
+              <IconLink className="h-3.5 w-3.5" /> Ver mi página ↗
             </a>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={promptInstall}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-paper/15 bg-paper/5 px-2 py-2 font-display text-[11px] font-bold text-paper transition-all hover:bg-paper/10 hover:border-lime"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 font-display text-[11px] font-medium text-white/80 transition-all hover:bg-white/[0.08] hover:text-white"
                 title="Instalar como app en la pantalla del celular"
               >
                 📲 {isStandalone ? "App lista" : "Instalar"}
@@ -430,19 +447,22 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={() => setShowCalendarModal(true)}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-paper/15 bg-paper/5 px-2 py-2 font-display text-[11px] font-bold text-paper transition-all hover:bg-paper/10 hover:border-lime"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 font-display text-[11px] font-medium text-white/80 transition-all hover:bg-white/[0.08] hover:text-white"
                 title="Sincronizar turnos con el calendario del celular"
               >
-                <IconCalendar className="h-3.5 w-3.5 text-lime" /> Calendario
+                <IconCalendar className="h-3.5 w-3.5 text-emerald-400" /> Calendario
               </button>
             </div>
-            <div className="flex items-center gap-3 rounded-xl bg-pine/70 p-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime font-display text-xs font-bold text-ink">
+            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 border border-emerald-500/40 font-display text-xs font-bold text-emerald-300">
                 {user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
               </span>
-              <span className="min-w-0">
-                <span className="block truncate font-display text-sm font-bold">{user.business}</span>
-                <span className="block truncate text-xs text-paper/50">Plan {PLAN_META[user.plan].name}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-display text-sm font-bold text-white">{user.business}</span>
+                <span className="flex items-center gap-1.5 text-xs text-white/50">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Plan {PLAN_META[user.plan].name}
+                </span>
               </span>
             </div>
           </div>
@@ -451,70 +471,70 @@ export default function Dashboard() {
         {/* ---------- main ---------- */}
         <div className="min-w-0 flex-1">
           {/* topbar mobile */}
-          <div className="sticky top-0 z-40 border-b border-ink/10 bg-evergreen text-paper lg:hidden">
-            <div className="flex items-center justify-between px-5 py-3">
+          <div className="sticky top-0 z-40 border-b border-white/10 bg-[#071d15] text-white lg:hidden">
+            <div className="flex items-center justify-between px-4 py-3">
               <a href="#/" className="flex items-center gap-2">
-                <LogoMark className="h-8 w-8 text-fern" />
-                <span className="font-display text-xl font-bold">cupito<span className="text-lime">.</span></span>
+                <LogoMark className="h-7 w-7 text-emerald-400" />
+                <span className="font-display text-lg font-bold tracking-tight">cupito<span className="text-emerald-400">.</span></span>
               </a>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={promptInstall}
-                  className="rounded-full bg-lime/20 border border-lime/40 px-3 py-1.5 font-display text-xs font-bold text-lime"
-                >
-                  📲 {isStandalone ? "App lista" : "Instalar"}
-                </button>
-                <button
-                  type="button"
                   onClick={() => setShowCalendarModal(true)}
-                  className="rounded-full bg-paper/10 px-2.5 py-1.5 font-display text-xs font-bold text-paper"
+                  className="rounded-full bg-white/10 border border-white/10 px-2.5 py-1.5 font-display text-xs font-bold text-white"
                   title="Sincronizar calendario"
                 >
                   📅 Cal
                 </button>
-                <a href={`/${user.slug}`} className="rounded-full bg-lime px-3.5 py-1.5 font-display text-xs font-bold text-ink">Mi página</a>
+                <a href={`/${user.slug}`} className="rounded-full bg-emerald-500 px-3.5 py-1.5 font-display text-xs font-bold text-slate-950 shadow-sm">
+                  Mi página ↗
+                </a>
               </div>
             </div>
-            <div className="no-scrollbar flex gap-2 overflow-x-auto px-5 pb-3">
+            <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 pb-3">
               {SECTIONS.flatMap((s) => s.items).map((n) => (
                 <button key={n.id} onClick={() => setView(n.id)}
-                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all ${view === n.id ? "bg-lime text-ink" : "bg-paper/10 text-paper/70"}`}>
+                  className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                    view === n.id ? "bg-white text-slate-900 shadow-xs" : "bg-white/10 text-white/70 hover:bg-white/15"
+                  }`}>
                   {n.label}
-                  {n.id === "lista" && data.waitlist.length > 0 && <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-coral px-1 text-[9px] font-extrabold text-white">{data.waitlist.length}</span>}
+                  {n.id === "lista" && data.waitlist.length > 0 && <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold text-white">{data.waitlist.length}</span>}
                 </button>
               ))}
             </div>
           </div>
 
           <main className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-ink/10 pb-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-6">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-ink/35">Panel · {sectionOf(view)}</p>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Panel · {sectionOf(view)}
+                  </span>
                   <CopyButton
                     text={`https://cupito.app/${user.slug}`}
                     label="Copiar mi link"
                     copiedLabel="¡Link copiado!"
-                    className="border border-ink/15 shadow-none hover:border-ink/40"
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-xs hover:border-slate-300 hover:text-slate-900"
                   />
                 </div>
-                <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">{viewTitle[0]}</h1>
-                <p className="mt-1 text-sm text-inkmute">{viewTitle[1]}</p>
+                <h1 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">{viewTitle[0]}</h1>
+                <p className="mt-1 text-sm text-slate-500">{viewTitle[1]}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowCalendarModal(true)}
-                  className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border-2 border-ink/15 bg-white/70 px-4 py-2 font-display text-xs font-bold text-ink hover:bg-white hover:border-ink/40"
+                  className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-2 font-display text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300"
                   title="Sincronizar turnos con el calendario de tu celular"
                 >
-                  <IconCalendar className="h-3.5 w-3.5 text-fern" /> Calendario
+                  <IconCalendar className="h-3.5 w-3.5 text-emerald-600" /> Calendario
                 </button>
                 <button
                   type="button"
                   onClick={promptInstall}
-                  className="btn-press hidden md:inline-flex items-center gap-1.5 rounded-full border-2 border-lime/50 bg-lime/20 px-3.5 py-2 font-display text-xs font-bold text-fern hover:bg-lime/30"
+                  className="btn-press hidden md:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 font-display text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
                   title="Instalar en la pantalla de inicio del celular"
                 >
                   📲 {isStandalone ? "App lista" : "Instalar app"}
@@ -523,27 +543,111 @@ export default function Dashboard() {
                   href={`/${user.slug}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border-2 border-ink/15 bg-white/70 px-4 py-2 font-display text-xs font-bold text-ink hover:bg-white hover:border-ink/40"
+                  className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 font-display text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300"
                 >
-                  <IconLink className="h-3.5 w-3.5" /> Ver mi página ↗
+                  <IconLink className="h-3.5 w-3.5 text-slate-500" /> Ver mi página ↗
                 </a>
                 <button
                   onClick={() => { setPrefill(null); setShowNew(true); }}
-                  className="btn-press group inline-flex items-center gap-2 rounded-full bg-coral px-5 py-2.5 font-display text-sm font-bold text-white shadow-block-coral hover:bg-coral/90 active:translate-y-0"
+                  className="btn-press group inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2.5 font-display text-sm font-bold text-white shadow-md shadow-slate-900/10 hover:bg-slate-800"
                 >
-                  <IconPlus className="h-4 w-4" /> Nueva reserva
+                  <IconPlus className="h-4 w-4 text-emerald-400" /> Nueva reserva
                 </button>
               </div>
             </div>
 
+            {/* Smart Subscription Banners (Avisos inteligentes de vencimiento) */}
+            {(() => {
+              const subStatus = getSubscriptionStatus(user);
+              if (subStatus.isExpired) {
+                return (
+                  <div className="pop-in mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/90 p-4 shadow-sm text-rose-950">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-sm">
+                        <IconLock className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="font-display text-sm font-bold">
+                          Tu período del Plan {PLAN_META[user.plan].name} ha finalizado
+                        </p>
+                        <p className="text-xs text-rose-800">
+                          Tu cuenta pasó a modo básico (Semilla). Activá el débito automático con Mercado Pago para reactivar profesionales ilimitados y reservas sin tope.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutPlan(user.plan === "semilla" ? "crece" : user.plan)}
+                      className="btn-press rounded-full bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-rose-700"
+                    >
+                      Activar con Mercado Pago
+                    </button>
+                  </div>
+                );
+              }
+              if (subStatus.isGracePeriod) {
+                return (
+                  <div className="pop-in mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm text-amber-950">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm">
+                        <IconBell className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="font-display text-sm font-bold">
+                          Tu período de {PLAN_META[user.plan].name} venció · Estás en período de gracia de 3 días
+                        </p>
+                        <p className="text-xs text-amber-800">
+                          Activá el débito automático con Mercado Pago para que tu negocio continúe operando sin cortes.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutPlan(user.plan)}
+                      className="btn-press rounded-full bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-amber-700"
+                    >
+                      Renovar con Mercado Pago
+                    </button>
+                  </div>
+                );
+              }
+              if (subStatus.isExpiringSoon && !subStatus.hasMpAutoDebit) {
+                return (
+                  <div className="pop-in mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm text-amber-950">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm">
+                        <IconClock className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <p className="font-display text-sm font-bold">
+                          Tu período manual de {PLAN_META[user.plan].name} vence en {subStatus.daysRemaining} días ({fmtDateHuman(new Date(user.subscription?.nextRenewal || Date.now()).toISOString())})
+                        </p>
+                        <p className="text-xs text-amber-800">
+                          Activá el débito mensual en Mercado Pago para que se renueve solo y no tengas que transferir cada mes.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutPlan(user.plan)}
+                      className="btn-press rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-slate-800"
+                    >
+                      Activar con Mercado Pago
+                    </button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} onOpenOnboarding={() => setShowOnboarding(true)} />}
 
             {pendingClaims > 0 && (
-              <div className="pop-in mt-6 flex items-center gap-3 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3">
-                <IconBell className="h-5 w-5 shrink-0 text-coral" />
-                <p className="flex-1 text-sm font-semibold text-ink">
+              <div className="pop-in mt-6 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 shadow-xs">
+                <IconBell className="h-5 w-5 shrink-0 text-rose-600" />
+                <p className="flex-1 text-sm font-semibold text-slate-900">
                   {pendingClaims} seña{pendingClaims === 1 ? "" : "s"} esperando tu verificación — revisá tu homebanking y acreditá o rechazá desde Reservas.
-                  <span className="block text-xs font-normal text-inkmute">Se liberan solas si pasan 24 h sin verificar{oldestClaimHrs > 0 ? ` · la más vieja lleva ${oldestClaimHrs} h` : ""}.</span>
+                  <span className="block text-xs font-normal text-slate-500">Se liberan solas si pasan 24 h sin verificar{oldestClaimHrs > 0 ? ` · la más vieja lleva ${oldestClaimHrs} h` : ""}.</span>
                 </p>
               </div>
             )}
@@ -552,7 +656,7 @@ export default function Dashboard() {
             {view === "hoy" && (
               <div className="pop-in mt-8">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setWeekStart((w) => w - 7)} aria-label="Semana anterior" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/12 bg-card text-ink transition-all hover:-translate-x-0.5 hover:border-evergreen"><IconChevron className="h-4 w-4 rotate-180" /></button>
+                  <button onClick={() => setWeekStart((w) => w - 7)} aria-label="Semana anterior" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4 rotate-180" /></button>
                   <div className="no-scrollbar flex flex-1 gap-2 overflow-x-auto py-1">
                     {week.map((d) => {
                       const k = dateKey(d);
@@ -560,29 +664,32 @@ export default function Dashboard() {
                       const isSel = selDate === k;
                       return (
                         <button key={k} onClick={() => setSelDate(k)}
-                          className={`flex min-w-[72px] flex-col items-center rounded-xl border-2 px-3 py-2.5 transition-all duration-200 ${isSel ? "border-evergreen bg-evergreen text-lime shadow-[4px_4px_0_rgba(205,244,99,0.35)]" : "border-ink/12 bg-card text-ink hover:-translate-y-0.5 hover:border-evergreen"}`}>
-                          <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">{k === today ? "Hoy" : d.toLocaleDateString("es-ES", { weekday: "short" }).slice(0, 3)}</span>
-                          <span className="font-display text-xl font-extrabold leading-tight">{d.getDate()}</span>
-                          <span className={`mt-0.5 rounded-full px-2 text-[10px] font-bold ${isSel ? "bg-lime text-ink" : count > 0 ? "bg-lime/60 text-ink" : "bg-ink/8 text-ink/40"}`}>{count} turno{count === 1 ? "" : "s"}</span>
+                          className={`flex min-w-[78px] flex-col items-center rounded-2xl border px-3.5 py-3 transition-all duration-150 ${isSel ? "border-slate-900 bg-slate-900 text-white shadow-sm ring-2 ring-emerald-500/20" : "border-slate-200/80 bg-white text-slate-800 hover:border-slate-300 hover:shadow-xs"}`}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${isSel ? "text-slate-300" : "text-slate-400"}`}>{k === today ? "Hoy" : d.toLocaleDateString("es-ES", { weekday: "short" }).slice(0, 3)}</span>
+                          <span className="font-display text-xl font-extrabold leading-tight mt-0.5">{d.getDate()}</span>
+                          <span className={`mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${isSel ? "bg-emerald-500 text-slate-950" : count > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60" : "bg-slate-100 text-slate-400"}`}>{count} turno{count === 1 ? "" : "s"}</span>
                         </button>
                       );
                     })}
                   </div>
-                  <button onClick={() => setWeekStart((w) => w + 7)} aria-label="Semana siguiente" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/12 bg-card text-ink transition-all hover:translate-x-0.5 hover:border-evergreen"><IconChevron className="h-4 w-4" /></button>
+                  <button onClick={() => setWeekStart((w) => w + 7)} aria-label="Semana siguiente" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4" /></button>
                 </div>
-                <button onClick={() => { setWeekStart(0); setSelDate(today); }} className="mt-1 text-xs font-bold text-fern underline-offset-4 hover:underline">Ir a hoy</button>
+                <button onClick={() => { setWeekStart(0); setSelDate(today); }} className="mt-1.5 text-xs font-bold text-emerald-700 underline-offset-4 hover:underline">Ir a hoy</button>
 
                 <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                  <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} />
-                  <StatCard label="Ingresos asegurados" value={fmtMoney(dayIncome)} icon={<IconWallet className="h-5 w-5" />} accent />
-                  <StatCard label="Ocupación" value={`${occupancy}%`} icon={<IconChart className="h-5 w-5" />} />
+                  <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} badge="Hoy" trend="En tu grilla" />
+                  <StatCard label="Ingresos estimados" value={fmtMoney(dayIncome)} icon={<IconWallet className="h-5 w-5" />} accent badge="Estimado" trend="Según servicios" />
+                  <StatCard label="Ocupación" value={`${occupancy}%`} icon={<IconChart className="h-5 w-5" />} badge="Capacidad" trend="Del horario de atención" />
                 </div>
 
                 {data.professionals.length > 0 && (
                   <div className="mt-6 flex flex-wrap gap-2">
-                    <button onClick={() => setProFilter("todos")} className={`rounded-full border-2 px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${proFilter === "todos" ? "border-evergreen bg-evergreen text-lime" : "border-ink/12 bg-card text-inkmute hover:border-evergreen"}`}>Todos</button>
+                    <button onClick={() => setProFilter("todos")} className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === "todos" ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>Todos</button>
                     {data.professionals.map((p) => (
-                      <button key={p.id} onClick={() => setProFilter(p.id)} className={`rounded-full border-2 px-4 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${proFilter === p.id ? "border-evergreen bg-evergreen text-lime" : "border-ink/12 bg-card text-inkmute hover:border-evergreen"}`}>{p.name}</button>
+                      <button key={p.id} onClick={() => setProFilter(p.id)} className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === p.id ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color || "#10b981" }} />
+                        {p.name}
+                      </button>
                     ))}
                   </div>
                 )}
@@ -1154,24 +1261,77 @@ export default function Dashboard() {
 
 /* ================= subcomponentes ================= */
 
-function StatCard({ label, value, icon, accent = false }: { label: string; value: string; icon: ReactNode; accent?: boolean }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  accent = false,
+  badge,
+  trend,
+}: {
+  label: string;
+  value: string;
+  icon: ReactNode;
+  accent?: boolean;
+  badge?: string;
+  trend?: string;
+}) {
   return (
-    <div className={`card card-hover flex items-center gap-4 p-5 ${accent ? "!border-limedeep/70 !bg-lime/25" : ""}`}>
-      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent ? "bg-evergreen text-lime" : "bg-ink/8 text-fern"}`}>{icon}</span>
-      <span>
-        <span className="block text-xs font-bold uppercase tracking-wider text-inkmute">{label}</span>
-        <span className="font-display text-2xl font-extrabold text-ink">{value}</span>
-      </span>
+    <div
+      className={`group relative overflow-hidden rounded-2xl border p-5 transition-all duration-200 ${
+        accent
+          ? "border-emerald-200/80 bg-gradient-to-br from-emerald-50/50 via-white to-white shadow-xs hover:shadow-md hover:border-emerald-300"
+          : "border-slate-200/80 bg-white shadow-xs hover:shadow-md hover:border-slate-300"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          {label}
+        </span>
+        <span
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+            accent
+              ? "bg-emerald-600 text-white shadow-xs shadow-emerald-600/20"
+              : "bg-slate-100 text-slate-700 group-hover:bg-slate-200/80"
+          }`}
+        >
+          {icon}
+        </span>
+      </div>
+
+      <div className="mt-3 flex items-baseline justify-between gap-2">
+        <span className="font-display text-3xl font-extrabold tracking-tight text-slate-900">
+          {value}
+        </span>
+        {badge && (
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide ${
+              accent
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-slate-100 text-slate-600"
+            }`}
+          >
+            {badge}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-2.5 flex items-center gap-1.5 text-xs text-slate-500">
+        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        <span>{trend || "Actualizado en tiempo real"}</span>
+      </div>
     </div>
   );
 }
 
 function EmptyState({ text, sub, action }: { text: string; sub: string; action?: ReactNode }) {
   return (
-    <div className="mt-5 flex flex-col items-center rounded-2xl border-2 border-dashed border-ink/20 bg-card/60 px-6 py-12 text-center">
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-ink/8 text-ink/40"><IconCalendar className="h-7 w-7" /></span>
-      <p className="mt-4 font-display text-xl font-extrabold text-ink">{text}</p>
-      <p className="mt-1 max-w-sm text-sm text-inkmute">{sub}</p>
+    <div className="mt-5 flex flex-col items-center rounded-2xl border border-dashed border-slate-200 bg-white/80 px-6 py-12 text-center shadow-xs">
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <IconCalendar className="h-6 w-6" />
+      </span>
+      <p className="mt-4 font-display text-lg font-bold text-slate-900">{text}</p>
+      <p className="mt-1 max-w-sm text-sm text-slate-500">{sub}</p>
       {action && <div className="mt-5">{action}</div>}
     </div>
   );
@@ -1567,38 +1727,46 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
   const claimPending = !!b.depositClaim && !b.paidDeposit && b.status !== "cancelada";
   const cancelled = b.status === "cancelada";
   return (
-    <div className={`card card-hover flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 overflow-hidden p-4 ${cancelled ? "opacity-60" : ""}`}>
-      <span className={`flex h-14 w-16 flex-col items-center justify-center rounded-xl font-display ${cancelled ? "bg-ink/8 text-ink/40" : "bg-evergreen text-lime"}`}>
-        <span className="text-lg font-extrabold leading-none">{b.time}</span>
+    <div className={`group flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:border-slate-300 hover:shadow-sm ${cancelled ? "opacity-60 bg-slate-50/50" : ""}`}>
+      <span className={`flex h-13 w-15 flex-col items-center justify-center rounded-xl font-display ${cancelled ? "bg-slate-100 text-slate-400" : "bg-slate-900 text-white shadow-xs"}`}>
+        <span className="text-base font-extrabold leading-none">{b.time}</span>
         <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider opacity-70">{service?.duration ?? 30}′</span>
       </span>
       <span className="min-w-36 flex-1">
-        <span className={`block font-display text-base font-extrabold text-ink ${cancelled ? "line-through" : ""}`}>{b.client}</span>
-        <span className="block text-sm text-inkmute">{service ? `${service.name} · ${fmtMoney(service.price)}` : "Servicio eliminado"}{pro ? ` · con ${pro.name}` : ""}</span>
-        <span className="block text-xs text-ink/50">{b.phone || "sin contacto"}</span>
-        {claimPending && <span className="block text-xs font-semibold text-coral">Comprobante: {b.depositClaim!.txId}</span>}
+        <span className={`block font-display text-base font-bold text-slate-900 ${cancelled ? "line-through text-slate-400" : ""}`}>{b.client}</span>
+        <span className="block text-xs font-medium text-slate-500">
+          {service ? `${service.name} · ${fmtMoney(service.price)}` : "Servicio eliminado"}
+          {pro ? (
+            <span className="inline-flex items-center gap-1 ml-1.5 font-semibold text-slate-700">
+              <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: pro.color || "#10b981" }} />
+              con {pro.name}
+            </span>
+          ) : ""}
+        </span>
+        <span className="block text-xs text-slate-400 mt-0.5">{b.phone || "sin contacto"}</span>
+        {claimPending && <span className="block text-xs font-bold text-rose-600 mt-0.5">Comprobante seña: {b.depositClaim!.txId}</span>}
         {b.items && b.items.length > 0 && (
           <span className="mt-1.5 flex flex-wrap gap-1">
-            <span className="inline-flex items-center gap-1 rounded-full bg-lime/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-fern"><IconBag className="h-3 w-3" /> Tienda</span>
-            {b.items.map((it) => { const p = products.find((x) => x.id === it.productId); return <span key={it.productId} className="rounded-full bg-ink/8 px-2 py-0.5 text-[10px] font-bold text-ink/70">{it.qty}× {p?.name ?? "Producto"}</span>; })}
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 text-[10px] font-bold text-emerald-800"><IconBag className="h-3 w-3" /> Tienda</span>
+            {b.items.map((it) => { const p = products.find((x) => x.id === it.productId); return <span key={it.productId} className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">{it.qty}× {p?.name ?? "Producto"}</span>; })}
           </span>
         )}
       </span>
       <span className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${b.source === "online" ? "bg-fern/15 text-fern" : "bg-ink/10 text-ink/60"}`}>{b.source === "online" ? "● Online" : "Manual"}</span>
-        {b.reviewRequested && <span className="rounded-full bg-lime/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-fern">💌 Reseña pedida</span>}
-        {claimPending && <span className="rounded-full bg-coral/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-coral">💸 Seña a verificar</span>}
-        {b.paidDeposit && <span className="rounded-full bg-lime/40 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-fern">Seña cobrada</span>}
-        <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${st.cls}`}>{st.label}</span>
+        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${b.source === "online" ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-slate-100 border border-slate-200 text-slate-500"}`}>{b.source === "online" ? "● Online" : "Manual"}</span>
+        {b.reviewRequested && <span className="rounded-full bg-sky-50 border border-sky-200 px-2.5 py-0.5 text-[10px] font-bold text-sky-700">💌 Reseña</span>}
+        {claimPending && <span className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[10px] font-bold text-rose-700 animate-pulse">💸 Seña a verificar</span>}
+        {b.paidDeposit && <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">✓ Seña cobrada</span>}
+        <span className={`rounded-full px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider ${st.cls}`}>{st.label}</span>
       </span>
       <span className="flex max-w-full flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={() => onReschedule(b)}
           title="Reprogramar fecha u horario"
-          className="btn-press flex h-8 items-center gap-1 rounded-full border border-ink/20 bg-paper px-2.5 text-xs font-bold text-ink transition-colors hover:border-evergreen hover:text-evergreen"
+          className="btn-press flex h-8 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:border-slate-300"
         >
-          <IconCalendar className="h-3.5 w-3.5 text-fern" />
+          <IconCalendar className="h-3.5 w-3.5 text-slate-500" />
           <span className="hidden sm:inline">Reprogramar</span>
         </button>
         {b.phone && (
@@ -1607,7 +1775,7 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
             target="_blank"
             rel="noreferrer"
             title="Enviar recordatorio por WhatsApp"
-            className="btn-press flex h-8 items-center gap-1 rounded-full border border-emerald-600/30 bg-emerald-50 px-2.5 text-xs font-bold text-emerald-800 transition-all hover:bg-emerald-100"
+            className="btn-press flex h-8 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-800 shadow-xs transition-all hover:bg-emerald-100"
           >
             <IconWhatsApp className="h-3.5 w-3.5 text-emerald-600" />
             <span className="hidden sm:inline">WhatsApp</span>
@@ -1624,23 +1792,23 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
           target="_blank"
           rel="noreferrer"
           title="Guardar este turno en Google Calendar"
-          className="btn-press flex h-8 items-center gap-1 rounded-full border border-sky-600/30 bg-sky-50 px-2 text-xs font-bold text-sky-800 transition-all hover:bg-sky-100"
+          className="btn-press flex h-8 items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 text-xs font-semibold text-sky-800 shadow-xs transition-all hover:bg-sky-100"
         >
           <IconCalendar className="h-3.5 w-3.5 text-sky-600" />
           <span className="hidden sm:inline">Cal</span>
         </a>
         {claimPending && (
           <>
-            <button onClick={() => onVerify(b.id)} className="btn-press rounded-full bg-fern px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-evergreen">Acreditar</button>
-            <button onClick={() => onReject(b.id)} className="btn-press rounded-full border-2 border-coral/40 px-3.5 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">Rechazar</button>
+            <button onClick={() => onVerify(b.id)} className="btn-press rounded-full bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-700">Acreditar</button>
+            <button onClick={() => onReject(b.id)} className="btn-press rounded-full border border-rose-300 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100">Rechazar</button>
           </>
         )}
-        {b.status === "pendiente" && !claimPending && <button onClick={() => onStatus(b.id, "confirmada")} className="btn-press rounded-full bg-evergreen px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-pine">Confirmar</button>}
-        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "atendida")} className="btn-press rounded-full bg-fern px-3.5 py-2 text-xs font-bold text-lime transition-all hover:bg-evergreen">Atendida ✓</button>}
-        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "ausente")} className="btn-press rounded-full border-2 border-amber-500/50 px-3.5 py-2 text-xs font-bold text-amber-800 transition-colors hover:bg-amber-500 hover:text-white">No vino</button>}
-        {(b.status === "atendida" || b.status === "cancelada" || b.status === "ausente") && <button onClick={() => onStatus(b.id, "pendiente")} className="btn-press rounded-full border-2 border-ink/15 px-3.5 py-2 text-xs font-bold text-inkmute transition-colors hover:border-evergreen hover:text-evergreen">Restaurar</button>}
-        {!cancelled && b.status !== "ausente" && <button onClick={() => onStatus(b.id, "cancelada")} className="btn-press rounded-full border-2 border-coral/40 px-3.5 py-2 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">Cancelar</button>}
-        <button onClick={() => onDelete(b.id)} aria-label="Eliminar reserva" className="flex h-8 w-8 items-center justify-center rounded-full text-ink/35 transition-colors hover:bg-coral/10 hover:text-coral"><IconTrash className="h-4 w-4" /></button>
+        {b.status === "pendiente" && !claimPending && <button onClick={() => onStatus(b.id, "confirmada")} className="btn-press rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-slate-800">Confirmar</button>}
+        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "atendida")} className="btn-press rounded-full bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-700">Atendida ✓</button>}
+        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "ausente")} className="btn-press rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100">No vino</button>}
+        {(b.status === "atendida" || b.status === "cancelada" || b.status === "ausente") && <button onClick={() => onStatus(b.id, "pendiente")} className="btn-press rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-600 shadow-xs transition-colors hover:bg-slate-50 hover:text-slate-900">Restaurar</button>}
+        {!cancelled && b.status !== "ausente" && <button onClick={() => onStatus(b.id, "cancelada")} className="btn-press rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-xs transition-colors hover:bg-rose-50">Cancelar</button>}
+        <button onClick={() => onDelete(b.id)} aria-label="Eliminar reserva" className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"><IconTrash className="h-4 w-4" /></button>
       </span>
     </div>
   );
@@ -3902,6 +4070,7 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
     toast("Suscripción cancelada en Mercado Pago. No se te cobra más ✓", "warn");
   };
   const sub = user.subscription;
+  const subStatus = getSubscriptionStatus(user);
   const monthUsed = data ? monthBookingCount(data) : 0;
   const monthPct = Math.min(100, Math.round((monthUsed / SEMILLA_MONTHLY_LIMIT) * 100));
 
@@ -3918,86 +4087,153 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
     <div className="pop-in mt-8 space-y-6">
       {/* Uso del plan gratuito */}
       {current === "semilla" && (
-        <div className="card border-2 border-ink/12 bg-card p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="font-display text-base font-extrabold text-ink">Reservas de este mes: {monthUsed}/{SEMILLA_MONTHLY_LIMIT}</p>
-              <p className="mt-0.5 text-xs text-inkmute">{monthUsed >= SEMILLA_MONTHLY_LIMIT ? "Llegaste al tope: las nuevas reservas se pausan hasta el mes que viene o subiendo a Crece." : "Al llegar al tope, las reservas online se pausan hasta el mes siguiente."}</p>
+              <p className="font-display text-base font-bold text-slate-900">Reservas de este mes: {monthUsed}/{SEMILLA_MONTHLY_LIMIT}</p>
+              <p className="mt-0.5 text-xs text-slate-500">{monthUsed >= SEMILLA_MONTHLY_LIMIT ? "Llegaste al tope: las nuevas reservas se pausan hasta el mes que viene o subiendo a Crece." : "Al llegar al tope, las reservas online se pausan hasta el mes siguiente."}</p>
             </div>
             <button
               type="button"
               onClick={() => onSelect("crece")}
-              className="rounded-full bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine"
+              className="btn-press rounded-full bg-slate-900 px-5 py-2.5 font-display text-xs font-bold text-white transition-all hover:bg-slate-800 shadow-xs"
             >
               Reservas ilimitadas con Crece
             </button>
           </div>
-          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-ink/8">
-            <div className={`h-full rounded-full transition-all ${monthPct >= 100 ? "bg-coral" : "bg-fern"}`} style={{ width: `${monthPct}%` }} />
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className={`h-full rounded-full transition-all ${monthPct >= 100 ? "bg-rose-500" : "bg-emerald-500"}`} style={{ width: `${monthPct}%` }} />
           </div>
         </div>
       )}
+
       {/* Detalle de la suscripción actual si es de pago */}
       {current !== "semilla" && (
-        <div className="card border-2 border-evergreen/30 bg-card p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-display text-xl font-extrabold text-ink">
-                  Suscripción {PLAN_META[current].name}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="font-display text-xl font-extrabold text-slate-900">
+                  Plan {PLAN_META[current].name}
                 </span>
-                <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${sub?.status === "cancelada" ? "bg-coral/15 text-coral" : "bg-evergreen text-lime"}`}>
-                  {sub?.status === "cancelada" ? "Cancelada (Vence pronto)" : "Activa con Mercado Pago ✓"}
-                </span>
+                {subStatus.hasMpAutoDebit ? (
+                  <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${sub?.status === "cancelada" ? "bg-rose-50 border border-rose-200 text-rose-700" : "bg-emerald-50 border border-emerald-200 text-emerald-700"}`}>
+                    {sub?.status === "cancelada" ? "Cancelada (Vence pronto)" : "● Débito automático en Mercado Pago"}
+                  </span>
+                ) : (
+                  <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${
+                    subStatus.isExpired
+                      ? "bg-rose-50 border border-rose-200 text-rose-700"
+                      : subStatus.isGracePeriod
+                      ? "bg-amber-50 border border-amber-200 text-amber-800"
+                      : "bg-blue-50 border border-blue-200 text-blue-700"
+                  }`}>
+                    {subStatus.isExpired
+                      ? "🔴 Período vencido"
+                      : subStatus.isGracePeriod
+                      ? "⚠️ Período de gracia (3 días)"
+                      : "⚡ Pago manual / Transferencia"}
+                  </span>
+                )}
               </div>
-              <p className="mt-1 text-xs sm:text-sm text-inkmute">
-                {sub?.status === "cancelada"
-                  ? `Tu suscripción no se renovará. Vas a mantener los beneficios de ${PLAN_META[current].name} hasta el ${nextDateStr}.`
-                  : `Próxima renovación automática: ${nextDateStr} · ${PLAN_META[current].price}`}
+
+              <p className="mt-1 text-xs sm:text-sm text-slate-600">
+                {subStatus.hasMpAutoDebit ? (
+                  sub?.status === "cancelada"
+                    ? `Tu suscripción no se renovará. Vas a mantener los beneficios de ${PLAN_META[current].name} hasta el ${nextDateStr}.`
+                    : `Próximo cobro automático en tu tarjeta: ${nextDateStr} · ${PLAN_META[current].price}`
+                ) : subStatus.isExpired ? (
+                  `Tu período abonado finalizó el ${nextDateStr}. Activá tu débito con Mercado Pago para reactivar todas tus funciones.`
+                ) : (
+                  `Vigente hasta el ${nextDateStr} · Quedan ${subStatus.daysRemaining} días.`
+                )}
               </p>
             </div>
 
             <div>
-              {sub?.status === "cancelada" ? (
-                <button
-                  type="button"
-                  onClick={() => onSelect(current)}
-                  className="rounded-full bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime shadow-sm transition-all hover:bg-pine"
-                >
-                  Volver a suscribirme
-                </button>
+              {subStatus.hasMpAutoDebit ? (
+                sub?.status === "cancelada" ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelect(current)}
+                    className="btn-press rounded-full bg-slate-900 px-5 py-2.5 font-display text-xs font-bold text-white shadow-xs transition-all hover:bg-slate-800"
+                  >
+                    Reanudar suscripción
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmCancel(true)}
+                    className="btn-press rounded-full border border-rose-200 bg-white px-5 py-2.5 font-display text-xs font-bold text-rose-600 shadow-xs transition-all hover:bg-rose-50"
+                  >
+                    Cancelar suscripción
+                  </button>
+                )
               ) : (
                 <button
                   type="button"
-                  onClick={() => setConfirmCancel(true)}
-                  className="rounded-full border-2 border-coral/40 px-5 py-2.5 font-display text-xs font-bold text-coral transition-all hover:bg-coral hover:text-white"
+                  onClick={() => onSelect(current)}
+                  className="btn-press rounded-full bg-emerald-600 px-5 py-2.5 font-display text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-700"
                 >
-                  Cancelar suscripción
+                  Activar con Mercado Pago
                 </button>
               )}
             </div>
           </div>
 
+          {/* Tarjeta de transición a Débito Automático si fue pagado manual */}
+          {!subStatus.hasMpAutoDebit && (
+            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="max-w-xl">
+                  <p className="font-display text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                    <span className="text-emerald-600">🔄</span> ¿Querés que tu plan no venza mes a mes?
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                    Activá el débito automático con Mercado Pago. Ingresás tu tarjeta una sola vez y Mercado Pago renueva tu plan mes a mes de forma automática, sin que tengas que transferir a mano cada 30 días.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://wa.me/5491100000000?text=${encodeURIComponent(`Hola! Quiero renovar mi plan ${PLAN_META[current].name} de ${user.business} por transferencia.`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-press rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Renovar por transferencia
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(current)}
+                    className="btn-press rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                  >
+                    Activar débito automático
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {confirmCancel && (
-            <div className="pop-in mt-5 rounded-2xl border-2 border-coral/30 bg-coral/5 p-4">
-              <p className="font-display text-sm font-extrabold text-ink">¿Querés cancelar la renovación automática?</p>
-              <p className="mt-1 text-xs text-inkmute leading-relaxed">
-                Se cancela de verdad en Mercado Pago: no se te cobra más. Vas a poder seguir usando {PLAN_META[current].name} hasta el <strong>{nextDateStr}</strong> y después tu cuenta pasa a Semilla.
+            <div className="pop-in mt-5 rounded-2xl border border-rose-200 bg-rose-50/60 p-4">
+              <p className="font-display text-sm font-bold text-slate-900">¿Querés cancelar la renovación automática?</p>
+              <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+                Se cancela en Mercado Pago: no se te cobrará más. Vas a poder seguir usando {PLAN_META[current].name} hasta el <strong>{nextDateStr}</strong> y luego tu cuenta volverá a Semilla.
               </p>
-              {cancelError && <p className="mt-2 rounded-xl border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{cancelError}</p>}
+              {cancelError && <p className="mt-2 rounded-xl border border-rose-200 bg-rose-100/70 px-3 py-2 text-xs font-semibold text-rose-700">{cancelError}</p>}
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={cancelling}
                   onClick={() => { void doCancel(); }}
-                  className="rounded-full bg-coral px-4 py-2 font-display text-xs font-bold text-white transition-all hover:bg-coral/90 disabled:opacity-60"
+                  className="rounded-full bg-rose-600 px-4 py-2 font-display text-xs font-bold text-white transition-all hover:bg-rose-700 disabled:opacity-60"
                 >
                   {cancelling ? "Cancelando en Mercado Pago…" : "Sí, cancelar en Mercado Pago"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmCancel(false)}
-                  className="rounded-full border-2 border-ink/20 px-4 py-2 font-display text-xs font-bold text-ink transition-colors hover:bg-ink/5"
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 font-display text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   Mantener suscripción
                 </button>
@@ -4012,49 +4248,66 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
           const active = current === p;
           const isPopular = p === "crece";
           return (
-            <div key={p} className={`card relative flex flex-col justify-between p-6 transition-all ${active ? "!border-limedeep !bg-lime/20 shadow-block-ink" : isPopular ? "border-fern/40 bg-card hover:border-evergreen shadow-sm" : "border-ink/12 bg-card hover:border-evergreen"}`}>
+            <div
+              key={p}
+              className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-all duration-200 ${
+                active
+                  ? "border-2 border-emerald-500 bg-emerald-50/20 shadow-md ring-4 ring-emerald-500/10"
+                  : isPopular
+                  ? "border-slate-900 bg-white shadow-md hover:border-slate-950"
+                  : "border-slate-200 bg-white shadow-xs hover:border-slate-300 hover:shadow-sm"
+              }`}
+            >
               {isPopular && !active && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-coral px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow-sm">
-                  ⭐ Recomendado
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-900 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-xs">
+                  ⭐ Más elegido
                 </span>
               )}
               {active && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-evergreen px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-lime">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-xs">
                   ✓ Tu plan actual
                 </span>
               )}
               <div>
                 <div className="flex items-baseline justify-between gap-2">
-                  <h3 className="font-display text-2xl font-extrabold text-ink">{PLAN_META[p].name}</h3>
-                  {p === "semilla" && <span className="rounded-full bg-fern/15 px-2.5 py-0.5 text-xs font-bold text-fern">Gratis</span>}
+                  <h3 className="font-display text-2xl font-extrabold text-slate-900">{PLAN_META[p].name}</h3>
+                  {p === "semilla" && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">Gratis</span>}
                 </div>
-                <p className="mt-3 font-display text-3xl font-extrabold text-fern">{PLAN_META[p].price}</p>
-                <p className="mt-1 text-xs text-inkmute">
+                <p className="mt-3 font-display text-3xl font-extrabold text-slate-900">{PLAN_META[p].price}</p>
+                <p className="mt-1 text-xs text-slate-500">
                   {p === "semilla" ? "Sin tarjeta ni compromisos" : "Suscripción mensual o anual"}
                 </p>
 
-                <ul className="mt-5 space-y-2 border-t border-ink/10 pt-4">
+                <ul className="mt-5 space-y-2.5 border-t border-slate-100 pt-4">
                   {desc[p].map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-xs text-ink/80 leading-snug">
-                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-lime text-ink"><IconCheck className="h-2.5 w-2.5" /></span>
+                    <li key={item} className="flex items-start gap-2.5 text-xs text-slate-600 leading-snug">
+                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                        <IconCheck className="h-2.5 w-2.5" />
+                      </span>
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="mt-6 border-t border-ink/10 pt-4">
+              <div className="mt-6 border-t border-slate-100 pt-4">
                 {active ? (
-                  <div className="flex items-center justify-center gap-2 rounded-full bg-evergreen/10 py-3 font-display text-xs font-bold text-evergreen">
-                    <IconCheck className="h-4 w-4" /> Plan en uso
+                  <div className="flex items-center justify-center gap-2 rounded-full bg-slate-100 py-3 font-display text-xs font-bold text-slate-700">
+                    <IconCheck className="h-4 w-4 text-emerald-600" /> Plan en uso
                   </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => onSelect(p)}
-                    className={`flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-display text-xs font-bold transition-all hover:-translate-y-0.5 ${p === "semilla" ? "border-2 border-ink/20 text-ink hover:border-evergreen hover:bg-evergreen hover:text-lime" : "bg-evergreen text-lime hover:bg-pine shadow-block-ink"}`}
+                    className={`btn-press flex w-full items-center justify-center gap-2 rounded-full py-3.5 font-display text-xs font-bold transition-all ${
+                      p === "semilla"
+                        ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-xs"
+                        : isPopular
+                        ? "bg-slate-900 text-white hover:bg-slate-800 shadow-sm"
+                        : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                    }`}
                   >
-                    {p === "semilla" ? "Bajar a Semilla (Gratis)" : `Pagar ${PLAN_META[p].name} con Mercado Pago`}
+                    {p === "semilla" ? "Bajar a Semilla (Gratis)" : `Elegir ${PLAN_META[p].name} con Mercado Pago`}
                     <IconArrow className="h-3.5 w-3.5" />
                   </button>
                 )}
@@ -4064,10 +4317,10 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
         })}
       </div>
 
-      <div className="rounded-2xl border-2 border-ink/10 bg-card p-5 text-sm text-inkmute">
-        <p className="font-bold text-ink">💳 ¿Cómo funciona el cambio de plan?</p>
-        <p className="mt-1 text-xs sm:text-sm leading-relaxed">
-          Al tocar en <strong>Pagar con Mercado Pago</strong>, se abre la ventana de suscripción donde podés elegir pago mensual o anual con descuento. Una vez autorizado el pago en Mercado Pago, tu cuenta se actualiza automáticamente con todos los beneficios. Podés cancelar la suscripción automática en cualquier momento desde esta misma pestaña.
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-xs">
+        <p className="font-bold text-slate-900">💳 ¿Cómo funciona el cobro de la suscripción?</p>
+        <p className="mt-1 text-xs sm:text-sm leading-relaxed text-slate-500">
+          Al tocar en <strong>Elegir con Mercado Pago</strong>, se abre el checkout oficial de Mercado Pago. Podés ingresar tu tarjeta de débito o crédito para que el cobro sea automático todos los meses. Si en algún momento querés cancelar o cambiar de plan, lo hacés con 1 clic desde este panel sin trámites ni llamadas.
         </p>
       </div>
     </div>

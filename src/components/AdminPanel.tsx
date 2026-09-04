@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { useStore, getAdminKey, setAdminKey, PLAN_META, fmtLong, fmtMoney, type Plan, type User, type UserSubscription } from "../lib/store";
+import { useStore, getAdminKey, setAdminKey, PLAN_META, getSubscriptionStatus, fmtLong, fmtMoney, type Plan, type User, type UserSubscription } from "../lib/store";
 import {
   LogoMark,
   IconLock,
@@ -187,7 +187,7 @@ function Gate({ hasCode }: { hasCode: boolean }) {
 
 function Console() {
   const store = useStore();
-  const { users, adminLogout, adminDeleteUser, loginAs, getData, toast, isCloudSyncActive } = store;
+  const { users, adminLogout, adminDeleteUser, adminUpdateUser, loginAs, getData, toast, isCloudSyncActive } = store;
   const [q, setQ] = useState("");
   const [planFilter, setPlanFilter] = useState<"todos" | Plan | "expiring">("todos");
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
@@ -422,9 +422,55 @@ function Console() {
                             <CopyButton text={`https://cupito.app/${u.slug}`} label="" copiedLabel="✓" className="!p-1 !bg-transparent" />
                           </span>
 
-                          {sub?.nextRenewal && (
-                            <span className="text-inkmute">
-                              📅 Vence: <strong className="text-ink">{renewalDate?.toLocaleDateString("es-AR")}</strong> ({sub.billing})
+                          {u.plan !== "semilla" && (
+                            <span className="inline-flex flex-wrap items-center gap-1.5 text-xs">
+                              {sub?.mpPreapprovalId ? (
+                                <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                  ● MP Débito aut.
+                                </span>
+                              ) : (
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  getSubscriptionStatus(u).isExpired
+                                    ? "bg-rose-50 border border-rose-200 text-rose-700"
+                                    : getSubscriptionStatus(u).isGracePeriod
+                                    ? "bg-amber-50 border border-amber-200 text-amber-800"
+                                    : "bg-blue-50 border border-blue-200 text-blue-700"
+                                }`}>
+                                  {getSubscriptionStatus(u).isExpired
+                                    ? "🔴 Vencido"
+                                    : getSubscriptionStatus(u).isGracePeriod
+                                    ? "⚠️ En gracia"
+                                    : `⚡ Manual (${getSubscriptionStatus(u).daysRemaining}d)`}
+                                </span>
+                              )}
+                              {sub?.nextRenewal && (
+                                <span className="text-inkmute text-[11px]">
+                                  📅 Vence: <strong className="text-ink">{renewalDate?.toLocaleDateString("es-AR")}</strong> ({sub.billing})
+                                </span>
+                              )}
+                              {!sub?.mpPreapprovalId && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentRenewal = sub?.nextRenewal && sub.nextRenewal > Date.now() ? sub.nextRenewal : Date.now();
+                                    const nextRenewal = currentRenewal + 30 * 24 * 3600 * 1000;
+                                    adminUpdateUser(u.id, {
+                                      subscription: {
+                                        billing: sub?.billing || "mensual",
+                                        activeSince: sub?.activeSince || Date.now(),
+                                        nextRenewal,
+                                        autoRenew: true,
+                                        status: "activa",
+                                      },
+                                    });
+                                    toast(`+30 días agregados a ${u.business} ✓`);
+                                  }}
+                                  className="rounded-md border border-ink/15 bg-white px-2 py-0.5 text-[10px] font-bold text-fern hover:border-fern hover:bg-lime/20 transition-colors shadow-xs"
+                                  title="Sumar 30 días de vigencia por pago manual o transferencia"
+                                >
+                                  +30 días
+                                </button>
+                              )}
                             </span>
                           )}
                         </div>
