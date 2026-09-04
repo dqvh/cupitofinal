@@ -4151,10 +4151,14 @@ function BusinessTab({ user, onSave }: { user: { business: string; name: string;
   const [business, setBusiness] = useState(user.business);
   const [name, setName] = useState(user.name);
 
+  // Solo resincronizar si el valor guardado cambió de verdad (no en cada
+  // pulso de la nube cada 6s, que te borraba lo que estabas escribiendo).
+  const savedKey = `${user.business}::${user.name}`;
   useEffect(() => {
     setBusiness(user.business);
     setName(user.name);
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedKey]);
 
   return (
     <div className="card p-6">
@@ -4189,6 +4193,16 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
     theme: (settings.theme || "evergreen") as ThemeId,
   });
 
+  // Solo resincronizar si lo guardado cambió de verdad (no en cada
+  // pulso de la nube, que te borraba lo que estabas escribiendo).
+  const savedPageKey = JSON.stringify([
+    settings.description || "",
+    settings.address || "",
+    settings.whatsapp || "",
+    settings.instagram || "",
+    settings.mapsUrl || "",
+    settings.theme || "evergreen",
+  ]);
   useEffect(() => {
     setF({
       description: settings.description || "",
@@ -4198,7 +4212,8 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
       mapsUrl: settings.mapsUrl || "",
       theme: (settings.theme || "evergreen") as ThemeId,
     });
-  }, [settings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedPageKey]);
 
   const handleSave = () => {
     onSave({
@@ -4314,13 +4329,19 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
     holder: settings.transferHolder || "",
   });
 
+  const savedPayKey = JSON.stringify([
+    settings.transferAlias || "",
+    settings.transferCBU || "",
+    settings.transferHolder || "",
+  ]);
   useEffect(() => {
     setF({
       alias: settings.transferAlias || "",
       cbu: settings.transferCBU || "",
       holder: settings.transferHolder || "",
     });
-  }, [settings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedPayKey]);
 
   if (!paid) {
     return (

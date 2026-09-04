@@ -29,6 +29,7 @@ import {
   sbHasSession,
   sbGetAccessToken,
   takeForbiddenUser,
+  clearRemoteForbidden,
 } from "./supabase";
 import { sendReviewRequestEmail } from "./email";
 
@@ -1494,15 +1495,16 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         users = [...withoutDup, user];
         safeSet(USERS_KEY, JSON.stringify(users));
         saveSession(user.id);
+        // Conectar la sesión ANTES de guardar: sin JWT la nube rechaza
+        // el primer guardado (RLS) y aparece "La nube rechazó el guardado".
+        await sbSignIn(em, password).catch(() => {});
+        clearRemoteForbidden(user.id);
         const fresh = defaultData();
         fresh.services = [
           { id: "srv-1", name: "Atención General", duration: 30, price: 0 },
         ];
         saveData(user.id, fresh);
         setFreshSignup();
-
-        // Conectar la sesión en el cliente (token Auth)
-        await sbSignIn(em, password).catch(() => {});
 
         emit();
         return null;
