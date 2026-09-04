@@ -169,6 +169,7 @@ export default function Dashboard() {
   const [notifyWl, setNotifyWl] = useState<{ client: string; phone: string; serviceName: string; date: string; time: string } | null>(null);
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarProId, setCalendarProId] = useState<string | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
 
@@ -948,7 +949,14 @@ export default function Dashboard() {
             )}
 
             {/* ============ EQUIPO ============ */}
-            {view === "equipo" && <TeamView />}
+            {view === "equipo" && (
+              <TeamView
+                onSyncCalendar={(proId) => {
+                  setCalendarProId(proId);
+                  setShowCalendarModal(true);
+                }}
+              />
+            )}
 
             {/* ============ TIENDA ============ */}
             {view === "tienda" && (
@@ -1051,7 +1059,12 @@ export default function Dashboard() {
       {showCalendarModal && (
         <CalendarSyncModal
           user={user}
-          onClose={() => setShowCalendarModal(false)}
+          professionals={data.professionals}
+          initialProId={calendarProId || undefined}
+          onClose={() => {
+            setShowCalendarModal(false);
+            setCalendarProId(null);
+          }}
         />
       )}
       {notifyWl && <WaitlistNotifyModal info={notifyWl} businessName={user.business} onClose={() => setNotifyWl(null)} />}
@@ -1707,17 +1720,80 @@ function InstallAppModal({ onClose, onPrompt, hasDeferred }: { onClose: () => vo
 }
 
 /* ============ MODAL: SINCRONIZAR CALENDARIO ============ */
-function CalendarSyncModal({ user, onClose }: { user: User; onClose: () => void }) {
-  const calUrl = `https://cupito.app/api/calendar?id=${encodeURIComponent(user.id)}`;
-  const webcalUrl = `webcal://cupito.app/api/calendar?id=${encodeURIComponent(user.id)}`;
+function CalendarSyncModal({
+  user,
+  professionals,
+  initialProId,
+  onClose,
+}: {
+  user: User;
+  professionals?: Professional[];
+  initialProId?: string;
+  onClose: () => void;
+}) {
+  const pros = professionals || [];
+  const [selectedProId, setSelectedProId] = useState<string>(initialProId || "todos");
+
+  const selectedPro = pros.find((p) => p.id === selectedProId);
+  const proParam = selectedPro ? `&proId=${encodeURIComponent(selectedPro.id)}` : "";
+
+  const calUrl = `https://cupito.app/api/calendar?id=${encodeURIComponent(user.id)}${proParam}`;
+  const webcalUrl = `webcal://cupito.app/api/calendar?id=${encodeURIComponent(user.id)}${proParam}`;
   const gcalUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
+
+  const whatsappShareText = selectedPro
+    ? `Hola ${selectedPro.name}! Te paso tu enlace personal para sincronizar tus turnos de Cupito en el calendario de tu celu:\n\n🍏 En iPhone: abrí este link y tocá "Suscribirse":\n${webcalUrl}\n\n🤖 En Android / Google Calendar:\n${gcalUrl}\n\n¡Cualquier turno nuevo o reprogramación se te actualiza solo!`
+    : `Hola! Te paso el enlace para sincronizar los turnos de ${user.business} en el calendario de tu celu:\n\n🍏 En iPhone: abrí este link y tocá "Suscribirse":\n${webcalUrl}\n\n🤖 En Android / Google Calendar:\n${gcalUrl}`;
 
   return (
     <Modal title="📅 Calendario del Celular" onClose={onClose}>
       <div className="space-y-4 text-ink">
         <p className="text-sm text-inkmute">
-          Sincronizá todos tus turnos en tiempo real con la app de Calendario de tu iPhone o Android. Cualquier turno nuevo o cambio se actualiza automáticamente en tu celu.
+          Sincronizá los turnos en tiempo real con la app de Calendario de tu iPhone o Android. Cualquier reserva nueva o cambio se actualiza automáticamente en tu celu.
         </p>
+
+        {/* Pestañas de selección: Todo el equipo o Profesional individual */}
+        {pros.length > 0 && (
+          <div className="rounded-2xl border border-ink/10 bg-paper p-3 space-y-2">
+            <label className="text-[11px] font-extrabold uppercase tracking-wider text-inkmute">
+              ¿De quién querés sincronizar la agenda?
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedProId("todos")}
+                className={`rounded-full px-3 py-1 text-xs font-bold transition-all ${
+                  selectedProId === "todos"
+                    ? "bg-evergreen text-lime shadow-sm"
+                    : "bg-white border border-ink/10 text-inkmute hover:text-ink"
+                }`}
+              >
+                👥 Todo el negocio
+              </button>
+              {pros.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelectedProId(p.id)}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all ${
+                    selectedProId === p.id
+                      ? "bg-evergreen text-lime shadow-sm"
+                      : "bg-white border border-ink/10 text-inkmute hover:text-ink"
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
+                  Solo {p.name}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-[11px] text-inkmute">
+              {selectedPro
+                ? `Mostrando únicamente los turnos asignados a ${selectedPro.name}. Ideal para que ${selectedPro.name} lo configure en su propio celular.`
+                : "Mostrando todos los turnos del negocio. Ideal para el dueño o la recepción."}
+            </p>
+          </div>
+        )}
 
         <div className="space-y-2.5">
           <a
@@ -1729,7 +1805,9 @@ function CalendarSyncModal({ user, onClose }: { user: User; onClose: () => void 
             <div className="flex items-center gap-3 text-left">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-xl">🍏</span>
               <div>
-                <p className="font-display text-sm font-bold text-ink">iPhone (Apple Calendar)</p>
+                <p className="font-display text-sm font-bold text-ink">
+                  iPhone (Apple Calendar) {selectedPro && <span className="text-fern font-normal">· {selectedPro.name}</span>}
+                </p>
                 <p className="text-[11px] text-inkmute">Abre la app Calendario y toca "Suscribirse"</p>
               </div>
             </div>
@@ -1745,7 +1823,9 @@ function CalendarSyncModal({ user, onClose }: { user: User; onClose: () => void 
             <div className="flex items-center gap-3 text-left">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-xl">🤖</span>
               <div>
-                <p className="font-display text-sm font-bold text-ink">Google Calendar</p>
+                <p className="font-display text-sm font-bold text-ink">
+                  Google Calendar {selectedPro && <span className="text-fern font-normal">· {selectedPro.name}</span>}
+                </p>
                 <p className="text-[11px] text-inkmute">Para celulares Android o Gmail en la compu</p>
               </div>
             </div>
@@ -1753,9 +1833,24 @@ function CalendarSyncModal({ user, onClose }: { user: User; onClose: () => void 
           </a>
         </div>
 
+        {/* Compartir por WhatsApp a ese profesional */}
+        {selectedPro && (
+          <a
+            href={createWhatsAppUrl("", whatsappShareText)}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-600/30 bg-emerald-50 py-3 text-xs font-bold text-emerald-800 transition-all hover:bg-emerald-100"
+          >
+            <IconWhatsApp className="h-4 w-4 text-emerald-600" />
+            Enviar enlace a {selectedPro.name} por WhatsApp
+          </a>
+        )}
+
         <div className="rounded-2xl border border-ink/10 bg-paper p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-inkmute uppercase tracking-wider">Enlace iCal de suscripción:</span>
+            <span className="text-xs font-bold text-inkmute uppercase tracking-wider">
+              Enlace iCal de suscripción {selectedPro && `(${selectedPro.name})`}:
+            </span>
             <CopyButton text={calUrl} label="Copiar link" copiedLabel="✓ Copiado" className="!py-1 !px-2.5 !text-[11px]" />
           </div>
           <p className="font-mono text-[11px] text-ink/70 break-all bg-white p-2 rounded-lg border border-ink/10 select-all">
@@ -1769,10 +1864,10 @@ function CalendarSyncModal({ user, onClose }: { user: User; onClose: () => void 
         <div className="flex justify-end">
           <a
             href={calUrl}
-            download={`cupito-${user.slug}.ics`}
+            download={`cupito-${user.slug}${selectedPro ? `-${selectedPro.name.toLowerCase().replace(/[^a-z0-9]/g, "")}` : ""}.ics`}
             className="btn-press inline-flex items-center gap-1.5 text-xs font-bold text-fern hover:underline"
           >
-            ⬇️ Descargar archivo .ics completo
+            ⬇️ Descargar archivo .ics {selectedPro ? `de ${selectedPro.name}` : "completo"}
           </a>
         </div>
       </div>
@@ -3354,7 +3449,7 @@ function StatsView({ db }: { db: BizData }) {
 }
 
 /* ============ EQUIPO ============ */
-function TeamView() {
+function TeamView({ onSyncCalendar }: { onSyncCalendar?: (proId: string) => void } = {}) {
   const { user, data, addProfessional, updateProfessional, removeProfessional, toast } = useStore();
   const [modal, setModal] = useState(false);
   const [editingPro, setEditingPro] = useState<Professional | null>(null);
@@ -3383,6 +3478,17 @@ function TeamView() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
+                  {onSyncCalendar && (
+                    <button
+                      type="button"
+                      onClick={() => onSyncCalendar(p.id)}
+                      aria-label={`Sincronizar calendario de ${p.name}`}
+                      title={`Sincronizar turnos de ${p.name} al celular`}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-all hover:border-evergreen hover:text-evergreen hover:bg-evergreen/5"
+                    >
+                      <IconCalendar className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setEditingPro(p)}

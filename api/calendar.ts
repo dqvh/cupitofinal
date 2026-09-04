@@ -43,6 +43,7 @@ export default async function handler(req: Request): Promise<Response> {
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get("id") || "";
   const slug = searchParams.get("slug") || "";
+  const proId = searchParams.get("proId") || "";
 
   if (!userId && !slug) {
     return new Response("Falta parámetro id o slug del negocio", { status: 400 });
@@ -88,7 +89,12 @@ export default async function handler(req: Request): Promise<Response> {
     const now = new Date();
     const nowUtc = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}00Z`;
 
-    const activeBookings = bookings.filter((b: any) => b && b.date && b.status !== "cancelada");
+    const filterPro = pros.find((p: any) => p.id === proId);
+    const activeBookings = bookings.filter((b: any) => {
+      if (!b || !b.date || b.status === "cancelada") return false;
+      if (proId && b.proId !== proId) return false;
+      return true;
+    });
 
     const events: string[] = [];
     for (const b of activeBookings) {
@@ -99,7 +105,9 @@ export default async function handler(req: Request): Promise<Response> {
 
       const { start, end } = toUtcIcal(b.date, b.time, srvDur);
 
-      const summary = `${srvName} - ${b.client || "Cliente"}`;
+      const summary = filterPro
+        ? `${srvName} - ${b.client || "Cliente"}`
+        : `${srvName} - ${b.client || "Cliente"}${pro?.name ? ` (${pro.name})` : ""}`;
       const descLines = [
         `Cliente: ${b.client || "Sin nombre"}`,
         `Teléfono: ${b.phone || "No indicado"}`,
@@ -124,13 +132,21 @@ export default async function handler(req: Request): Promise<Response> {
       ].join("\r\n"));
     }
 
+    const calName = filterPro
+      ? `Cupito - ${filterPro.name} (${user.business || "Agenda"})`
+      : `Cupito - ${user.business || "Mi Agenda"}`;
+
+    const proSlug = filterPro
+      ? `-${filterPro.name.toLowerCase().replace(/[^a-z0-9]/g, "")}`
+      : "";
+
     const ical = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
       "PRODID:-//Cupito//Cupito Reservas//ES",
       "CALSCALE:GREGORIAN",
       "METHOD:PUBLISH",
-      `X-WR-CALNAME:Cupito - ${escapeIcal(user.business || "Mi Agenda")}`,
+      `X-WR-CALNAME:${escapeIcal(calName)}`,
       "X-WR-TIMEZONE:America/Argentina/Buenos_Aires",
       "REFRESH-INTERVAL;VALUE=DURATION:PT15M",
       "X-PUBLISHED-TTL:PT15M",
@@ -142,7 +158,7 @@ export default async function handler(req: Request): Promise<Response> {
       status: 200,
       headers: {
         "Content-Type": "text/calendar; charset=utf-8",
-        "Content-Disposition": `inline; filename="cupito-${user.slug || "agenda"}.ics"`,
+        "Content-Disposition": `inline; filename="cupito-${user.slug || "agenda"}${proSlug}.ics"`,
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Access-Control-Allow-Origin": "*",
       },
