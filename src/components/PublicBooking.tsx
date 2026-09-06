@@ -10,7 +10,8 @@ import {
   getProHours, isProAvailable, getAvailablePros, toMinutes,
   type User, type BizData,
 } from "../lib/store";
-import { CopyButton, ConfettiBurst } from "./kit";
+import { CopyButton } from "./kit";
+import CustomSelect from "./ui/CustomSelect";
 import { normalizeArgentinaPhone, cleanPhoneDigits, createWhatsAppUrl } from "../lib/phone";
 import { sound } from "../lib/audio";
 import { sendBookingConfirmationEmail } from "../lib/email";
@@ -402,7 +403,7 @@ export default function PublicBooking({
   };
 
   const bookingCardContent = (
-    <div className="booking-shell">
+    <div className={`booking-shell ${isPreview ? "preview-shell" : ""}`}>
       {/* Columna Izquierda: Tarjeta del Negocio */}
       <aside className="business-card">
         <div className="large-logo">
@@ -480,28 +481,46 @@ export default function PublicBooking({
         {done ? (
           /* Pantalla de confirmación */
           <div className="success">
-            <ConfettiBurst />
-            <CheckCircle2 size={58} />
-            <h2>
+            <CheckCircle2 size={58} className="text-emerald-600" />
+            <h2 style={{ fontSize: 26, fontWeight: 750, color: "#0f172a", marginTop: 14 }}>
               {depositOn && depositAmount > 0
                 ? "¡Turno reservado! Un paso más para confirmar"
                 : "¡Tu turno está confirmado!"}
             </h2>
-            <p>
-              {client}, te esperamos en <b>{user.business}</b>.
-              <br />
-              <b>{service?.name}</b>
-              <br />
-              {shownDate} a las {time} hs · con {pro ? pro.name : "nuestro equipo"}
-              <br />
-              Total: {fmtMoney((service?.price || 0) + productsTotal)} ·{" "}
-              {depositOn && depositAmount > 0 ? "Seña pendiente de transferencia" : "Pago en el local"}
-            </p>
+            
+            <div
+              style={{
+                margin: "20px 0 24px",
+                padding: "20px",
+                background: "#f8fafc",
+                border: "1.5px solid #e2e8f0",
+                borderRadius: 16,
+                textAlign: "left",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <p style={{ margin: 0, fontSize: 15, color: "#334155", fontWeight: 500 }}>
+                {client}, te esperamos en <b style={{ color: "#0f172a" }}>{user.business}</b>.
+              </p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>{service?.name}</span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: "var(--business-accent, #16845f)" }}>
+                  {fmtMoney((service?.price || 0) + productsTotal)}
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>
+                📅 {shownDate} a las <b style={{ color: "#0f172a" }}>{time} hs</b> · con {pro ? pro.name : "nuestro equipo"}
+              </p>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: depositOn && depositAmount > 0 ? "#b45309" : "#059669" }}>
+                {depositOn && depositAmount > 0 ? "⚠️ Seña pendiente de transferencia" : "✓ Pago en el local"}
+              </p>
+            </div>
 
             {/* Aviso de transferencia si requiere seña */}
             {depositOn && depositAmount > 0 && (
               <div className="notice" style={{ textAlign: "left" }}>
-                <b>Transferí la seña de {fmtMoney(depositAmount)}</b>
+                <b style={{ fontSize: 15, color: "#92400e", display: "block" }}>Transferí la seña de {fmtMoney(depositAmount)}</b>
                 <div
                   style={{
                     margin: "12px 0",
@@ -509,13 +528,13 @@ export default function PublicBooking({
                     alignItems: "center",
                     justifyContent: "space-between",
                     background: "white",
-                    padding: "10px 14px",
-                    borderRadius: 8,
-                    border: "1px solid #dcebe2",
+                    padding: "12px 16px",
+                    borderRadius: 12,
+                    border: "1.5px solid #fde68a",
                   }}
                 >
-                  <span style={{ fontSize: 14 }}>
-                    Alias / CBU: <b>{settings.transferAlias || settings.transferCBU || "Consultá con el local"}</b>
+                  <span style={{ fontSize: 14, color: "#1e293b" }}>
+                    Alias / CBU: <b style={{ color: "#0f172a" }}>{settings.transferAlias || settings.transferCBU || "Consultá con el local"}</b>
                   </span>
                   {(settings.transferAlias || settings.transferCBU) && (
                     <CopyButton
@@ -527,12 +546,12 @@ export default function PublicBooking({
                 </div>
 
                 {settings.transferHolder && (
-                  <p style={{ margin: "6px 0", fontSize: 13 }}>
-                    Titular: <b>{settings.transferHolder}</b>
+                  <p style={{ margin: "6px 0", fontSize: 14, color: "#78350f" }}>
+                    Titular: <b style={{ color: "#451a03" }}>{settings.transferHolder}</b>
                   </p>
                 )}
 
-                <p style={{ margin: "10px 0 14px", fontSize: 13 }}>
+                <p style={{ margin: "10px 0 16px", fontSize: 14, color: "#92400e" }}>
                   Enviá el comprobante al WhatsApp del local para que confirmen tu turno en el sistema.
                 </p>
 
@@ -542,9 +561,20 @@ export default function PublicBooking({
                     target="_blank"
                     rel="noreferrer"
                     className="btn primary"
-                    style={{ width: "100%" }}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      textAlign: "center",
+                      gap: 8,
+                      padding: "14px 20px",
+                      fontSize: 15,
+                      fontWeight: 700,
+                    }}
                   >
-                    <MessageCircle size={16} /> Enviar comprobante por WhatsApp
+                    <MessageCircle size={18} />
+                    <span>Enviar comprobante por WhatsApp</span>
                   </a>
                 )}
               </div>
@@ -633,14 +663,35 @@ export default function PublicBooking({
                           </small>
                         </div>
                         {isSelected ? (
-                          <Check size={18} style={{ color: "var(--business-accent, #16845f)" }} />
+                          <span
+                            style={{
+                              width: 22,
+                              height: 22,
+                              minWidth: 22,
+                              minHeight: 22,
+                              flexShrink: 0,
+                              borderRadius: "50%",
+                              background: "var(--business-accent, #16845f)",
+                              color: "white",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Check size={14} strokeWidth={3} />
+                          </span>
                         ) : (
                           <span
                             style={{
-                              width: 18,
-                              height: 18,
-                              border: "1px solid #d0ded6",
+                              width: 22,
+                              height: 22,
+                              minWidth: 22,
+                              minHeight: 22,
+                              flexShrink: 0,
+                              border: "2px solid #cbd5e1",
                               borderRadius: "50%",
+                              background: "white",
+                              display: "inline-block",
                             }}
                           />
                         )}
@@ -673,21 +724,27 @@ export default function PublicBooking({
                   {hasPros && (
                     <label>
                       Profesional
-                      <select
+                      <CustomSelect
                         value={proId || ""}
-                        onChange={(e) => {
-                          setProId(e.target.value || null);
+                        onChange={(val) => {
+                          setProId(val || null);
                           setTime(null);
                           setError(null);
                         }}
-                      >
-                        <option value="">Cualquier profesional (Sin preferencia · Más rápido)</option>
-                        {biz.professionals.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.role})
-                          </option>
-                        ))}
-                      </select>
+                        options={[
+                          {
+                            value: "",
+                            label: "Cualquier profesional disponible",
+                            sublabel: "Sin preferencia · Más rápido",
+                          },
+                          ...biz.professionals.map((p) => ({
+                            value: p.id,
+                            label: p.name,
+                            sublabel: p.role,
+                          })),
+                        ]}
+                        placeholder="Elegir profesional"
+                      />
                     </label>
                   )}
 
@@ -972,7 +1029,7 @@ export default function PublicBooking({
   // Si está incrustado en el preview del Dashboard, no necesita la barra de navegación exterior completa
   if (isPreview) {
     return (
-      <div style={{ '--business-accent': accentColor } as React.CSSProperties}>
+      <div className="preview-container w-full" style={{ '--business-accent': accentColor } as React.CSSProperties}>
         {bookingCardContent}
       </div>
     );
@@ -1206,16 +1263,18 @@ export default function PublicBooking({
 
                   <label>
                     Puntuación
-                    <select
-                      value={newReviewRating}
-                      onChange={(e) => setNewReviewRating(Number(e.target.value))}
-                    >
-                      <option value={5}>⭐⭐⭐⭐⭐ Excelente (5 estrellas)</option>
-                      <option value={4}>⭐⭐⭐⭐ Muy bueno (4 estrellas)</option>
-                      <option value={3}>⭐⭐⭐ Bueno (3 estrellas)</option>
-                      <option value={2}>⭐⭐ Regular (2 estrellas)</option>
-                      <option value={1}>⭐ Malo (1 estrella)</option>
-                    </select>
+                    <CustomSelect
+                      value={String(newReviewRating)}
+                      onChange={(val) => setNewReviewRating(Number(val))}
+                      options={[
+                        { value: "5", label: "⭐⭐⭐⭐⭐ Excelente (5 estrellas)" },
+                        { value: "4", label: "⭐⭐⭐⭐ Muy bueno (4 estrellas)" },
+                        { value: "3", label: "⭐⭐⭐ Bueno (3 estrellas)" },
+                        { value: "2", label: "⭐⭐ Regular (2 estrellas)" },
+                        { value: "1", label: "⭐ Malo (1 estrella)" },
+                      ]}
+                      placeholder="Calificación"
+                    />
                   </label>
 
                   <label>

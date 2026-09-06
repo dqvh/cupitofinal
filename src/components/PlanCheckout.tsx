@@ -59,7 +59,7 @@ export function PlanCheckout({
         <div className="pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" onClick={(e) => e.stopPropagation()}>
           <h3 className="font-display text-2xl font-extrabold">Plan Semilla</h3>
           <p className="mt-2 text-sm text-inkmute">Gratis para siempre: 25 reservas al mes, 1 profesional y tu link. Sin tarjeta.</p>
-          <button onClick={pickFree} className="mt-6 w-full rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">
+          <button onClick={pickFree} className="mt-6 w-full rounded-full bg-slate-900 hover:bg-slate-800 py-4 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-sm">
             Quedarme en Semilla
           </button>
           <button onClick={onClose} className="mt-3 w-full text-center text-sm font-bold text-inkmute hover:text-ink">Cancelar</button>
@@ -83,10 +83,10 @@ export function PlanCheckout({
         </div>
 
         <div className="relative mt-5 inline-flex w-full rounded-full border-2 border-ink/12 bg-paper p-1">
-          <span className={`absolute bottom-1 top-1 w-[calc(50%-4px)] rounded-full bg-evergreen transition-transform duration-300 ${billing === "mensual" ? "translate-x-0" : "translate-x-full"}`} style={{ left: 4 }} aria-hidden="true" />
+          <span className={`absolute bottom-1 top-1 w-[calc(50%-4px)] rounded-full bg-slate-900 transition-transform duration-300 ${billing === "mensual" ? "translate-x-0" : "translate-x-full"}`} style={{ left: 4 }} aria-hidden="true" />
           {(["mensual", "anual"] as const).map((b) => (
             <button key={b} type="button" onClick={() => setBilling(b)}
-              className={`relative z-10 flex-1 rounded-full py-2 font-display text-xs font-bold uppercase tracking-wider ${billing === b ? "text-lime" : "text-ink/45"}`}>
+              className={`relative z-10 flex-1 rounded-full py-2 font-display text-xs font-bold uppercase tracking-wider transition-colors ${billing === b ? "text-white" : "text-ink/60"}`}>
               {b}{b === "anual" ? " · 2 meses off" : ""}
             </button>
           ))}
@@ -100,7 +100,7 @@ export function PlanCheckout({
         <ul className="mt-5 space-y-2">
           {FEATURES[plan].map((f) => (
             <li key={f} className="flex items-start gap-2.5 text-sm text-ink/80">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime text-ink"><IconCheck className="h-3 w-3" /></span>{f}
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-800"><IconCheck className="h-3 w-3" /></span>{f}
             </li>
           ))}
         </ul>
@@ -143,8 +143,8 @@ export function PlanCheckout({
         )}
 
         <button onClick={() => pay(plan)} disabled={processing}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-lime py-4 font-display text-base font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep disabled:opacity-60 shadow-block-ink">
-          {processing ? (<><span className="blinkdot h-2.5 w-2.5 rounded-full bg-ink" /> Conectando con Mercado Pago…</>) : (<>Pagar con Mercado Pago <IconArrow className="h-4 w-4" /></>)}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 py-4 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 disabled:opacity-60 shadow-md shadow-emerald-900/20">
+          {processing ? (<><span className="blinkdot h-2.5 w-2.5 rounded-full bg-white" /> Conectando con Mercado Pago…</>) : (<>Pagar con Mercado Pago <IconArrow className="h-4 w-4" /></>)}
         </button>
         <p className="mt-3 text-center text-[11px] leading-snug text-inkmute">
           Tu suscripción se procesa en el sitio seguro de Mercado Pago.

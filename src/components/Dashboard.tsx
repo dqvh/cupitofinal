@@ -1009,7 +1009,7 @@ export default function Dashboard() {
 
                     {dayBookings.length === 0 ? (
                       <EmptyState text="Nadie reservó este día… todavía." sub="Creá una reserva manual o compartí tu link para que lleguen solas."
-                        action={<button onClick={() => { setPrefill(null); setShowNew(true); }} className="inline-flex items-center gap-2 rounded-full bg-evergreen px-5 py-2.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5"><IconPlus className="h-4 w-4" /> Crear reserva</button>} />
+                        action={<button onClick={() => { setPrefill(null); setShowNew(true); }} className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 font-display text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition-all hover:-translate-y-0.5"><IconPlus className="h-4 w-4" /> Crear reserva</button>} />
                     ) : (
                       <div className="mt-4 space-y-3">
                         {dayBookings.map((b) => (
@@ -1057,14 +1057,14 @@ export default function Dashboard() {
                 {/* Barra de herramientas operativa */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 pb-4">
                   <div className="flex items-center gap-2">
-                    <div className="flex rounded-xl border border-ink/12 bg-card p-1 shadow-sm">
+                    <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-1 shadow-xs">
                       <button
                         type="button"
                         onClick={() => setReservasMode("lista")}
                         className={`rounded-lg px-3 py-1.5 font-display text-xs font-bold transition-all ${
                           reservasMode === "lista"
-                            ? "bg-evergreen text-lime shadow-sm"
-                            : "text-inkmute hover:text-ink"
+                            ? "bg-slate-900 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
                         }`}
                       >
                         📋 Lista
@@ -1074,8 +1074,8 @@ export default function Dashboard() {
                         onClick={() => setReservasMode("grilla")}
                         className={`rounded-lg px-3 py-1.5 font-display text-xs font-bold transition-all ${
                           reservasMode === "grilla"
-                            ? "bg-evergreen text-lime shadow-sm"
-                            : "text-inkmute hover:text-ink"
+                            ? "bg-slate-900 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
                         }`}
                       >
                         📊 Grilla Horaria
@@ -1090,7 +1090,7 @@ export default function Dashboard() {
                         setBlockPrefillTime(undefined);
                         setShowBlockModal(true);
                       }}
-                      className="btn-press flex items-center gap-1.5 rounded-xl border border-ink/15 bg-card px-3 py-1.5 font-display text-xs font-bold text-ink hover:border-coral hover:text-coral transition-colors"
+                      className="btn-press flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-display text-xs font-bold text-slate-700 hover:border-coral hover:text-coral transition-colors shadow-xs"
                     >
                       🚫 Bloquear horario
                     </button>
@@ -1105,7 +1105,7 @@ export default function Dashboard() {
                         );
                         toast("Archivo Excel (.csv) descargado ✓");
                       }}
-                      className="btn-press flex items-center gap-1.5 rounded-xl border border-ink/15 bg-card px-3 py-1.5 font-display text-xs font-bold text-ink hover:border-evergreen hover:text-evergreen transition-colors"
+                      className="btn-press flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-display text-xs font-bold text-slate-700 hover:border-emerald-600 hover:text-emerald-700 transition-colors shadow-xs"
                       title="Exportar todas las reservas con formato compatible con Excel"
                     >
                       📥 Exportar Excel (.csv)
@@ -1116,7 +1116,7 @@ export default function Dashboard() {
                         setPrefill(null);
                         setShowNew(true);
                       }}
-                      className="btn-press flex items-center gap-1.5 rounded-xl bg-evergreen px-3.5 py-1.5 font-display text-xs font-bold text-lime shadow-sm hover:bg-pine"
+                      className="btn-press flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 font-display text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
                     >
                       <IconPlus className="h-3.5 w-3.5" /> + Reserva
                     </button>
@@ -1128,7 +1128,7 @@ export default function Dashboard() {
                     {/* Selector de fecha para Grilla Horaria */}
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wider text-inkmute">Día:</span>
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Día:</span>
                         <input
                           type="date"
                           className="field !w-auto !py-1.5 !text-xs font-semibold"
@@ -1138,14 +1138,14 @@ export default function Dashboard() {
                         <button
                           type="button"
                           onClick={() => setGridDate(today)}
-                          className={`rounded-lg px-2.5 py-1 text-xs font-bold ${gridDate === today ? "bg-evergreen text-lime" : "bg-ink/8 text-inkmute hover:text-ink"}`}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-bold ${gridDate === today ? "bg-slate-900 text-white font-bold" : "bg-slate-100 text-slate-600 hover:text-slate-900"}`}
                         >
                           Hoy
                         </button>
                         <button
                           type="button"
                           onClick={() => setGridDate(dateKey(addDays(new Date(), 1)))}
-                          className="rounded-lg bg-ink/8 px-2.5 py-1 text-xs font-bold text-inkmute hover:text-ink"
+                          className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 hover:text-slate-900"
                         >
                           Mañana
                         </button>
@@ -1192,7 +1192,7 @@ export default function Dashboard() {
                             <button
                               key={f}
                               onClick={() => setFilter(f)}
-                              className={`btn-press whitespace-nowrap rounded-full border-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${filter === f ? "border-evergreen bg-evergreen text-lime" : "border-ink/12 bg-card text-inkmute hover:border-evergreen"}`}
+                              className={`btn-press whitespace-nowrap rounded-full border-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${filter === f ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}
                             >
                               {f === "todas" ? "Todas" : STATUS[f].label} ({count})
                             </button>
@@ -1230,7 +1230,7 @@ export default function Dashboard() {
                               setPrefill(null);
                               setShowNew(true);
                             }}
-                            className="inline-flex items-center gap-2 rounded-full bg-evergreen px-5 py-2.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5"
+                            className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 font-display text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition-all hover:-translate-y-0.5"
                           >
                             <IconPlus className="h-4 w-4" /> Nueva reserva
                           </button>
@@ -1333,14 +1333,14 @@ export default function Dashboard() {
                 ) : (
                   <div className="space-y-6">
                     {isPaid(user) && user.plan === "escala" ? (
-                      <div className="flex items-center gap-2 rounded-2xl border-2 border-evergreen/25 bg-lime/15 px-4 py-3">
-                        <span className="rounded-full bg-evergreen px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-lime">Prioridad inteligente</span>
-                        <p className="text-xs text-inkmute">Tus clientes recurrentes aparecen primero. Exclusivo de tu plan Escala.</p>
+                      <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 shadow-xs">
+                        <span className="rounded-full bg-emerald-700 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">Prioridad inteligente</span>
+                        <p className="text-xs font-semibold text-emerald-950">Tus clientes recurrentes aparecen primero. Exclusivo de tu plan Escala.</p>
                       </div>
                     ) : (
-                      <button onClick={() => setCheckoutPlan("escala")} className="flex w-full items-center gap-2 rounded-2xl border-2 border-dashed border-ink/20 bg-white/50 px-4 py-3 text-left transition-all hover:border-evergreen/50">
+                      <button onClick={() => setCheckoutPlan("escala")} className="flex w-full items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-3 text-left transition-all hover:border-emerald-600/50">
                         <span className="text-sm">⚡</span>
-                        <p className="text-xs text-inkmute"><strong className="text-ink">Tip:</strong> en el plan Escala la lista se ordena sola: recurrentes primero. <span className="font-bold text-fern underline underline-offset-2">Ver Escala</span></p>
+                        <p className="text-xs text-slate-500"><strong className="text-slate-900">Tip:</strong> en el plan Escala la lista se ordena sola: recurrentes primero. <span className="font-bold text-emerald-700 underline underline-offset-2">Ver Escala</span></p>
                       </button>
                     )}
                     {Object.entries(sortWaitlist(data.waitlist, data.bookings, user.plan).sort((a, b) => a.date.localeCompare(b.date)).reduce<Record<string, typeof data.waitlist>>((acc, w) => { (acc[w.date] ||= []).push(w); return acc; }, {})).map(([d, list]) => (
@@ -1353,16 +1353,16 @@ export default function Dashboard() {
                                 <p className="flex flex-wrap items-center gap-1.5 font-display text-[15px] font-bold text-ink">
                                   {w.client}
                                   {user.plan === "escala" && isRecurrentClient(w, data.bookings) && (
-                                    <span className="rounded-full bg-lime px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-ink">⭐ Recurrente</span>
+                                    <span className="rounded-full bg-amber-100 border border-amber-300/80 px-2.5 py-0.5 text-[10px] font-bold text-amber-900 shadow-xs">⭐ Recurrente</span>
                                   )}
                                 </p>
                                 <p className="text-xs text-inkmute">{w.phone} · {serviceOf(w.serviceId)?.name ?? "Servicio"}</p>
                               </div>
                               <div className="flex shrink-0 gap-1.5">
                                 <button onClick={() => { setPrefill({ client: w.client, phone: w.phone, serviceId: w.serviceId, waitlistId: w.id }); setShowNew(true); }}
-                                  className="rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Darle turno</button>
+                                  className="rounded-full bg-emerald-600 px-4 py-2 font-display text-xs font-bold text-white shadow-xs transition-all hover:-translate-y-0.5 hover:bg-emerald-700">Darle turno</button>
                                 <button onClick={() => { store.removeWaitlist(w.id); toast("Quitado de la lista.", "warn"); }} aria-label="Quitar"
-                                  className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral"><IconTrash className="h-3.5 w-3.5" /></button>
+                                  className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors hover:border-coral hover:text-coral"><IconTrash className="h-3.5 w-3.5" /></button>
                               </div>
                             </div>
                           ))}
@@ -1439,24 +1439,24 @@ export default function Dashboard() {
                 </div>
                 <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
                   <div>
-                    <div className="rounded-2xl border-2 border-ink/12 bg-evergreen p-6 text-paper shadow-block">
+                    <div className="rounded-2xl border border-slate-900 bg-slate-900 p-6 text-white shadow-md">
                       <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-lime">Tu link de reservas</p>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-lime px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-ink">
-                          <span className="blinkdot h-1.5 w-1.5 rounded-full bg-fern" /> En línea
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Tu link de reservas</p>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                          <span className="blinkdot h-1.5 w-1.5 rounded-full bg-emerald-400" /> En línea
                         </span>
                       </div>
-                      <p className="mt-4 break-all font-display text-2xl font-extrabold text-lime sm:text-3xl">cupito.app/{user.slug}</p>
+                      <p className="mt-4 break-all font-display text-2xl font-extrabold text-white sm:text-3xl">cupito.app/{user.slug}</p>
                       <div className="mt-5 flex flex-wrap gap-2.5">
                         <button onClick={() => { const url = `https://cupito.app/${user.slug}`; navigator.clipboard?.writeText(url).then(() => toast("Link copiado 📋"), () => toast(url, "warn")); }}
-                          className="rounded-full bg-lime px-5 py-2.5 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">Copiar link</button>
+                          className="rounded-full bg-emerald-500 px-5 py-2.5 font-display text-sm font-bold text-slate-950 transition-all hover:-translate-y-0.5 hover:bg-emerald-400 shadow-sm">Copiar link</button>
                         <button
                           onClick={() => setShowShareModal(true)}
-                          className="rounded-full border-2 border-lime bg-lime/15 px-4 py-2.5 font-display text-sm font-bold text-lime transition-all hover:bg-lime hover:text-ink"
+                          className="rounded-full border border-white/20 bg-white/10 px-4 py-2.5 font-display text-sm font-bold text-white transition-all hover:bg-white/20"
                         >
                           💬 Mensajes WhatsApp / Instagram
                         </button>
-                        <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="rounded-full border-2 border-paper/25 px-5 py-2.5 font-display text-sm font-bold text-paper transition-all hover:border-lime hover:text-lime">Abrir mi página ↗</a>
+                        <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="rounded-full border border-white/20 px-5 py-2.5 font-display text-sm font-bold text-white transition-all hover:bg-white/10">Abrir mi página ↗</a>
                       </div>
                     </div>
                     <div className="card mt-5 p-5">
@@ -1465,13 +1465,15 @@ export default function Dashboard() {
                       <div className="mt-3"><QrBlock url={`https://cupito.app/${user.slug}`} onPrint={() => setShowPrintModal(true)} /></div>
                     </div>
                   </div>
-                  <div>
-                    <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-inkmute">
-                      <IconSpark className="h-4 w-4 text-coral" /> Así lo ven tus clientes — probalo en vivo
+                  <div className="flex flex-col items-center">
+                    <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 self-start">
+                      <IconSpark className="h-4 w-4 text-emerald-600" /> Así lo ven tus clientes — probalo en vivo
                     </p>
-                    <PublicBooking />
-                    <p className="mt-4 rounded-xl bg-ink/5 px-4 py-3 text-sm text-inkmute">
-                      💡 Reservá un turno acá y mirá cómo aparece <strong className="text-ink">al instante</strong> en tu Agenda del día.
+                    <div className="w-full max-w-[440px]">
+                      <PublicBooking isPreview={true} />
+                    </div>
+                    <p className="mt-4 w-full rounded-xl bg-slate-100/80 border border-slate-200/80 px-4 py-3 text-xs font-medium text-slate-600">
+                      💡 Reservá un turno acá y mirá cómo aparece <strong className="text-slate-900">al instante</strong> en tu Agenda del día.
                     </p>
                   </div>
                 </div>
@@ -1687,7 +1689,7 @@ export default function Dashboard() {
       <div className="fixed bottom-5 right-5 z-40 sm:hidden pop-in">
         <button
           onClick={() => { setPrefill(null); setShowNew(true); sound.playPop(); }}
-          className="btn-press flex items-center gap-2 rounded-full bg-evergreen px-4 py-3 font-display text-xs font-black text-lime shadow-xl shadow-evergreen/40 border-2 border-lime/30 active:scale-95"
+          className="btn-press flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 px-4 py-3 font-display text-xs font-black text-white shadow-xl shadow-emerald-900/30 border-2 border-white/20 active:scale-95"
           aria-label="Nuevo turno rápido"
         >
           <IconPlus className="h-4 w-4" />
@@ -1793,22 +1795,22 @@ function SetupGuide({ onGo, onCheckout, onOpenOnboarding }: { onGo: (v: View) =>
     <div className="pop-in mt-8 overflow-hidden rounded-[22px] border-2 border-evergreen bg-evergreen text-paper shadow-block">
       <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-6">
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-lime/20 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.2em] text-lime">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.2em] text-emerald-300">
             <IconSpark className="h-3.5 w-3.5" /> Primeros pasos
           </span>
           <h2 className="mt-2 font-display text-2xl font-extrabold">Tu local está listo para configurarse</h2>
           <p className="mt-1 text-sm text-paper/70">En pocos minutos tenés tus servicios, horarios y tu link listo para compartir.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={onOpenOnboarding} className="rounded-full bg-lime px-4 py-2 font-display text-xs font-bold text-ink transition-all hover:bg-limedeep shadow-sm">
+          <button type="button" onClick={onOpenOnboarding} className="rounded-full bg-emerald-400 px-4 py-2 font-display text-xs font-extrabold text-slate-950 transition-all hover:bg-emerald-300 shadow-sm">
             ✨ Abrir Asistente
           </button>
-          <button type="button" onClick={() => updateSettings({ setupDismissed: true })} className="text-xs font-bold text-paper/50 underline-offset-4 hover:text-lime hover:underline">Ocultar</button>
+          <button type="button" onClick={() => updateSettings({ setupDismissed: true })} className="text-xs font-bold text-paper/60 underline-offset-4 hover:text-emerald-300 hover:underline">Ocultar</button>
         </div>
       </div>
       <div className="mt-3 px-6 pb-2">
         <div className="h-1.5 overflow-hidden rounded-full bg-paper/15">
-          <div className="h-full rounded-full bg-lime transition-all" style={{ width: `${(done / steps.length) * 100}%` }} />
+          <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${(done / steps.length) * 100}%` }} />
         </div>
         <p className="mt-2 text-xs font-bold text-paper/55">{done} de {steps.length} listos</p>
       </div>
@@ -1816,14 +1818,14 @@ function SetupGuide({ onGo, onCheckout, onOpenOnboarding }: { onGo: (v: View) =>
         {steps.map((s, i) => (
           <li key={s.id}>
             <button type="button" onClick={s.go} className="flex w-full items-center gap-4 px-6 py-4 text-left transition-colors hover:bg-paper/8">
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${s.done ? "bg-lime text-ink" : "bg-paper/10 text-paper"}`}>
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${s.done ? "bg-emerald-400 text-slate-950" : "bg-paper/10 text-paper"}`}>
                 {s.done ? <IconCheck className="h-4 w-4" /> : i + 1}
               </span>
               <span className="min-w-0 flex-1">
                 <span className={`block font-display text-sm font-bold ${s.done ? "text-paper/50 line-through" : "text-paper"}`}>{s.title}</span>
                 <span className="block text-xs text-paper/55">{s.hint}</span>
               </span>
-              {!s.done && <IconArrow className="h-4 w-4 shrink-0 text-lime" />}
+              {!s.done && <IconArrow className="h-4 w-4 shrink-0 text-emerald-400" />}
             </button>
           </li>
         ))}
@@ -1978,7 +1980,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
             <button
               type="button"
               onClick={saveHoursAndNext}
-              className="mt-4 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine active:translate-y-0 active:scale-[0.98] shadow-block-ink"
+              className="mt-4 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 py-4 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] shadow-md shadow-emerald-900/20"
             >
               Guardar horarios y continuar <IconArrow className="h-4 w-4" />
             </button>
@@ -2036,7 +2038,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                 type="button"
                 onClick={saveServiceAndNext}
                 disabled={!serviceName.trim()}
-                className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine active:translate-y-0 active:scale-[0.98] disabled:opacity-50 shadow-block-ink"
+                className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 py-4 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:opacity-50 shadow-md shadow-emerald-900/20"
               >
                 {serviceName.trim() ? "Guardar servicio y continuar" : "Ingresá el nombre del servicio"} <IconArrow className="h-4 w-4" />
               </button>
@@ -2054,14 +2056,14 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
         {/* Paso 2: Link público y contacto */}
         {step === 2 && (
           <div className="pop-in mt-6 space-y-5">
-            <div className="rounded-2xl border-2 border-evergreen/30 bg-lime/20 p-4">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-evergreen">Tu link de reservas online</p>
+            <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/60 p-4">
+              <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-950">Tu link de reservas online</p>
               <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-white p-2.5 border-2 border-ink/10">
                 <span className="truncate text-xs font-bold text-ink font-mono sm:text-sm">{publicUrl}</span>
                 <button
                   type="button"
                   onClick={copyLink}
-                  className="shrink-0 rounded-lg bg-evergreen px-3 py-1.5 text-xs font-bold text-lime hover:bg-pine"
+                  className="shrink-0 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors"
                 >
                   {copied ? "¡Copiado! ✓" : "Copiar link"}
                 </button>
@@ -2102,7 +2104,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                   <button
                     type="button"
                     onClick={() => onGoToPlan("crece")}
-                    className="rounded-full bg-lime px-4 py-2 font-display text-xs font-bold text-ink hover:bg-limedeep"
+                    className="rounded-full bg-emerald-600 hover:bg-emerald-700 px-4 py-2 font-display text-xs font-bold text-white shadow-sm transition-colors"
                   >
                     Ver Plan Crece
                   </button>
@@ -2113,7 +2115,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
             <button
               type="button"
               onClick={finishOnboarding}
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-evergreen py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine shadow-block-ink"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 py-4 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-md shadow-emerald-900/20"
             >
               ¡Terminar y empezar a recibir turnos! 🎉
             </button>
@@ -2782,7 +2784,7 @@ function InstallAppModal({ onClose, onPrompt, hasDeferred }: { onClose: () => vo
         {hasDeferred && (
           <button
             onClick={() => { onPrompt(); onClose(); }}
-            className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-evergreen py-3.5 font-display text-sm font-bold text-lime shadow-md hover:bg-pine"
+            className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 py-3.5 font-display text-sm font-bold text-white shadow-md transition-colors"
           >
             📲 Instalar en este celular ahora
           </button>
@@ -2881,7 +2883,7 @@ function CalendarSyncModal({
                 onClick={() => setSelectedProId("todos")}
                 className={`rounded-full px-3 py-1 text-xs font-bold transition-all ${
                   selectedProId === "todos"
-                    ? "bg-evergreen text-lime shadow-sm"
+                    ? "bg-slate-900 text-white shadow-sm"
                     : "bg-white border border-ink/10 text-inkmute hover:text-ink"
                 }`}
               >
@@ -2894,7 +2896,7 @@ function CalendarSyncModal({
                   onClick={() => setSelectedProId(p.id)}
                   className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all ${
                     selectedProId === p.id
-                      ? "bg-evergreen text-lime shadow-sm"
+                      ? "bg-slate-900 text-white shadow-sm"
                       : "bg-white border border-ink/10 text-inkmute hover:text-ink"
                   }`}
                 >
@@ -2917,7 +2919,7 @@ function CalendarSyncModal({
             href={webcalUrl}
             target="_blank"
             rel="noreferrer"
-            className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink/15 bg-white p-3.5 transition-all hover:border-evergreen hover:shadow-sm"
+            className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink/15 bg-white p-3.5 transition-all hover:border-slate-900 hover:shadow-sm"
           >
             <div className="flex items-center gap-3 text-left">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-xl">🍏</span>
@@ -2928,14 +2930,14 @@ function CalendarSyncModal({
                 <p className="text-[11px] text-inkmute">Abre la app Calendario y toca "Suscribirse"</p>
               </div>
             </div>
-            <span className="rounded-full bg-evergreen px-3 py-1 text-xs font-bold text-lime">Conectar</span>
+            <span className="rounded-full bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1 text-xs font-bold text-white shadow-sm transition-colors">Conectar</span>
           </a>
 
           <a
             href={gcalUrl}
             target="_blank"
             rel="noreferrer"
-            className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink/15 bg-white p-3.5 transition-all hover:border-evergreen hover:shadow-sm"
+            className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink/15 bg-white p-3.5 transition-all hover:border-slate-900 hover:shadow-sm"
           >
             <div className="flex items-center gap-3 text-left">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-xl">🤖</span>
@@ -2946,7 +2948,7 @@ function CalendarSyncModal({
                 <p className="text-[11px] text-inkmute">Para celulares Android o Gmail en la compu</p>
               </div>
             </div>
-            <span className="rounded-full bg-evergreen px-3 py-1 text-xs font-bold text-lime">Conectar</span>
+            <span className="rounded-full bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1 text-xs font-bold text-white shadow-sm transition-colors">Conectar</span>
           </a>
         </div>
 
@@ -3139,7 +3141,7 @@ function BookingModal({
                 key={t}
                 onClick={() => setTime(t)}
                 className={`rounded-lg border-2 py-1.5 font-display text-sm font-bold transition-all ${
-                  time === t ? "border-evergreen bg-evergreen text-lime" : "border-ink/10 bg-white hover:border-evergreen"
+                  time === t ? "border-emerald-600 bg-emerald-600 text-white shadow-xs" : "border-slate-200 bg-white text-slate-800 hover:border-slate-400"
                 }`}
               >
                 {t}
@@ -3306,7 +3308,7 @@ function RescheduleModal({
           </button>
           <button
             type="submit"
-            className="btn-press rounded-full bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime hover:bg-pine shadow-sm"
+            className="btn-press rounded-full bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 font-display text-xs font-bold text-white shadow-sm transition-colors"
           >
             Guardar reprogramación →
           </button>
@@ -3447,7 +3449,7 @@ function BlockModal({
           <button type="button" onClick={onClose} className="rounded-xl border border-ink/15 px-4 py-2.5 font-display text-xs font-bold text-inkmute hover:text-ink">
             Cancelar
           </button>
-          <button type="submit" className="rounded-xl bg-evergreen px-5 py-2.5 font-display text-xs font-bold text-lime shadow-sm hover:bg-pine">
+          <button type="submit" className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 font-display text-xs font-bold text-white shadow-sm transition-colors">
             Guardar bloqueo
           </button>
         </div>
@@ -3542,7 +3544,7 @@ function TimeGridView({
             onClick={() => setProFilter("todos")}
             className={`rounded-full px-3 py-1 text-xs font-bold transition-all ${
               proFilter === "todos"
-                ? "bg-evergreen text-lime shadow-sm"
+                ? "bg-slate-900 text-white shadow-sm"
                 : "bg-ink/8 text-inkmute hover:text-ink"
             }`}
           >
@@ -3555,7 +3557,7 @@ function TimeGridView({
               onClick={() => setProFilter(p.id)}
               className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all ${
                 proFilter === p.id
-                  ? "bg-evergreen text-lime shadow-sm"
+                  ? "bg-slate-900 text-white shadow-sm"
                   : "bg-ink/8 text-inkmute hover:text-ink"
               }`}
             >
@@ -3679,7 +3681,7 @@ function TimeGridView({
                       <div className="flex gap-1.5">
                         <button
                           onClick={() => onBookSlot({ time: slotTime, proId: proFilter })}
-                          className="btn-press rounded-lg bg-evergreen px-3 py-1 text-xs font-bold text-lime hover:bg-pine"
+                          className="btn-press rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1 text-xs font-bold text-white shadow-sm transition-colors"
                         >
                           + Turno
                         </button>
@@ -3734,7 +3736,7 @@ function TimeGridView({
                 key={slotTime}
                 className={`p-3.5 transition-colors ${
                   hasActiveBookings
-                    ? "bg-lime/10"
+                    ? "bg-emerald-50/70"
                     : isGlobalBlocked
                     ? "bg-ink/[0.04]"
                     : "hover:bg-ink/[0.02]"
@@ -3760,7 +3762,7 @@ function TimeGridView({
                       </span>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <span className="rounded-full bg-evergreen/10 px-2.5 py-0.5 text-xs font-extrabold text-evergreen">
+                        <span className="rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-xs font-extrabold text-emerald-950">
                           {slotBookings.length} {slotBookings.length === 1 ? "turno" : "turnos simultáneos"}
                         </span>
                         {freePros.length > 0 && (
@@ -3790,7 +3792,7 @@ function TimeGridView({
                         {freePros.length > 0 || pros.length === 0 ? (
                           <button
                             onClick={() => onBookSlot({ time: slotTime })}
-                            className="btn-press rounded-lg bg-evergreen px-3 py-1 text-xs font-bold text-lime hover:bg-pine"
+                            className="btn-press rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1 text-xs font-bold text-white shadow-sm transition-colors"
                           >
                             {hasActiveBookings ? "+ Turno simultáneo" : "+ Turno"}
                           </button>
@@ -4062,7 +4064,7 @@ function ClientsCRMView({
                             onSaveNote(c.cleanPhone, draftNote);
                             setEditingPhone(null);
                           }}
-                          className="rounded-lg bg-evergreen px-3 py-1 text-xs font-bold text-lime shadow-sm hover:bg-pine"
+                          className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1 text-xs font-bold text-white shadow-sm transition-colors"
                         >
                           Guardar
                         </button>
@@ -4150,7 +4152,7 @@ function ShareTemplatesModal({ business, slug, onClose }: { business: string; sl
                 onClick={() => {
                   navigator.clipboard?.writeText(t.text).then(() => toast("¡Mensaje copiado al portapapeles! 📋"));
                 }}
-                className="btn-press rounded-lg bg-evergreen px-4 py-1.5 font-display text-xs font-bold text-lime hover:bg-pine shadow-sm"
+                className="btn-press rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 font-display text-xs font-bold text-white shadow-sm transition-colors"
               >
                 Copiar mensaje 📋
               </button>
@@ -4203,11 +4205,11 @@ function PrintPosterModal({ business, slug, onClose }: { business: string; slug:
 
           <div className="space-y-1.5 rounded-xl bg-ink/[0.03] p-3 text-left text-[11px] font-medium text-ink/75">
             <p className="flex items-center gap-1.5">
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-evergreen text-[9px] font-bold text-lime">1</span>
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-[9px] font-bold text-white">1</span>
               <span>Elegí tu servicio y horario</span>
             </p>
             <p className="flex items-center gap-1.5">
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-evergreen text-[9px] font-bold text-lime">2</span>
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-[9px] font-bold text-white">2</span>
               <span>Confirmá tu turno al instante</span>
             </p>
           </div>
@@ -4221,7 +4223,7 @@ function PrintPosterModal({ business, slug, onClose }: { business: string; slug:
           <button onClick={onClose} className="rounded-xl border border-ink/15 px-4 py-2 text-xs font-bold text-inkmute hover:text-ink">
             Cerrar
           </button>
-          <button onClick={handlePrint} className="rounded-xl bg-evergreen px-5 py-2 text-xs font-bold text-lime shadow-sm hover:bg-pine">
+          <button onClick={handlePrint} className="rounded-xl bg-slate-900 hover:bg-slate-800 px-5 py-2 text-xs font-bold text-white shadow-sm transition-colors">
             🖨️ Imprimir cartel (A4)
           </button>
         </div>
@@ -4267,7 +4269,7 @@ function ServiceModal({ service, onClose }: { service?: Service; onClose: () => 
           </div>
         </div>
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-        <button type="submit" className="min-h-[52px] w-full rounded-full bg-evergreen py-3.5 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine active:translate-y-0 active:scale-[0.98]">{service ? "Guardar cambios" : "Publicar servicio"}</button>
+        <button type="submit" className="min-h-[52px] w-full rounded-full bg-emerald-600 hover:bg-emerald-700 py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] shadow-md shadow-emerald-900/20">{service ? "Guardar cambios" : "Publicar servicio"}</button>
       </form>
     </Modal>
   );
@@ -4385,7 +4387,7 @@ function StatsView({ db }: { db: BizData }) {
         {isEscala && (
           <button
             onClick={exportCSV}
-            className="inline-flex items-center gap-2 rounded-full border-2 border-evergreen bg-evergreen/10 px-5 py-2.5 font-display text-xs font-bold text-evergreen transition-all hover:bg-evergreen hover:text-lime"
+            className="inline-flex items-center gap-2 rounded-full border-2 border-slate-900 bg-slate-900/5 px-5 py-2.5 font-display text-xs font-bold text-slate-900 transition-all hover:bg-slate-900 hover:text-white"
           >
             📊 Exportar reservas a Excel (CSV)
           </button>
@@ -4396,7 +4398,7 @@ function StatsView({ db }: { db: BizData }) {
         {kpis.map((k) => (
           <div key={k.label} className={`card card-hover p-5 ${k.accent ? "!border-limedeep/70 !bg-lime/25" : ""}`}>
             <div className="flex items-start justify-between">
-              <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${k.accent ? "bg-evergreen text-lime" : "bg-ink/8 text-fern"}`}>{k.icon}</span>
+              <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${k.accent ? "bg-emerald-600 text-white" : "bg-ink/8 text-fern"}`}>{k.icon}</span>
               {k.delta !== null && (
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${k.delta >= 0 ? "bg-fern/15 text-fern" : "bg-coral/15 text-coral"}`}>{k.delta >= 0 ? "▲" : "▼"} {Math.abs(k.delta)}%</span>
               )}
@@ -4423,9 +4425,9 @@ function StatsView({ db }: { db: BizData }) {
         <Reveal className="card p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-display text-lg font-extrabold text-ink">Reservas · últimos 14 días</h3>
-            <span className="rounded-full bg-lime/40 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-fern">{perDay.reduce((a, d) => a + d.count, 0)} turnos</span>
+            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-bold text-emerald-800">{perDay.reduce((a, d) => a + d.count, 0)} turnos</span>
           </div>
-          <div className="mt-6 flex gap-2">
+          <div className="mt-8 pt-4 flex gap-2">
             <div className="flex h-44 w-7 flex-col justify-between text-right text-[9px] font-bold text-ink/35" aria-hidden="true">
               <span>{maxDay}</span><span>{Math.ceil(maxDay / 2)}</span><span>0</span>
             </div>
@@ -4441,11 +4443,11 @@ function StatsView({ db }: { db: BizData }) {
                     const isToday = i === perDay.length - 1;
                     return (
                       <div key={d.k} className="group relative flex h-full flex-1 items-end">
-                        <div className={`anim-bar-v w-full rounded-t-[5px] ${isToday ? "bg-lime ring-2 ring-limedeep/50" : "bg-fern"} transition-colors duration-200 group-hover:bg-limedeep`}
+                        <div className={`anim-bar-v w-full rounded-t-[5px] ${isToday ? "bg-emerald-500 ring-2 ring-emerald-600/40" : "bg-emerald-700"} transition-colors duration-200 group-hover:bg-emerald-600`}
                           style={{ height: `${d.count === 0 ? 3 : Math.max(8, (d.count / maxDay) * 100)}%`, animationDelay: `${i * 45}ms` }} />
-                        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-center opacity-0 shadow-lg transition-all duration-200 group-hover:-translate-y-1 group-hover:opacity-100">
-                          <p className="text-[10px] font-extrabold text-lime">{d.count} turno{d.count === 1 ? "" : "s"}</p>
-                          <p className="text-[9px] font-semibold text-paper/70">{fmtLong(d.k)}{isToday ? " · hoy" : ""}</p>
+                        <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-1.5 text-center opacity-0 shadow-xl transition-all duration-200 group-hover:-translate-y-1 group-hover:opacity-100">
+                          <p className="text-xs font-bold text-white">{d.count} turno{d.count === 1 ? "" : "s"}</p>
+                          <p className="text-[10px] font-medium text-slate-300">{fmtLong(d.k)}{isToday ? " · hoy" : ""}</p>
                         </div>
                       </div>
                     );
@@ -4528,7 +4530,7 @@ function StatsView({ db }: { db: BizData }) {
           <div className="card relative overflow-hidden border-2 border-evergreen/25 bg-gradient-to-br from-card via-lime/5 to-card p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-5">
               <div className="max-w-xl">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-evergreen px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-lime">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-700 px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
                   ⭐ Exclusivo Plan Escala
                 </span>
                 <h3 className="mt-2 font-display text-xl font-extrabold text-ink">
@@ -4541,7 +4543,7 @@ function StatsView({ db }: { db: BizData }) {
               <button
                 type="button"
                 onClick={() => requestCheckout("escala")}
-                className="inline-flex items-center gap-2 rounded-full bg-evergreen px-6 py-3 font-display text-xs font-bold text-lime shadow-block-ink transition-all hover:-translate-y-0.5 hover:bg-pine"
+                className="inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 px-6 py-3 font-display text-xs font-bold text-white shadow-md shadow-emerald-900/20 transition-all hover:-translate-y-0.5"
               >
                 Desbloquear con Plan Escala <IconArrow className="h-3.5 w-3.5" />
               </button>
@@ -4564,7 +4566,7 @@ function StatsView({ db }: { db: BizData }) {
             href={`/${user?.slug}`}
             target="_blank"
             rel="noreferrer"
-            className="rounded-full border-2 border-ink/15 px-5 py-2 font-display text-xs font-bold text-ink transition-all hover:-translate-y-0.5 hover:border-evergreen hover:bg-evergreen hover:text-lime"
+            className="rounded-full border-2 border-ink/15 px-5 py-2 font-display text-xs font-bold text-ink transition-all hover:-translate-y-0.5 hover:border-slate-900 hover:bg-slate-900 hover:text-white"
           >
             Ver en mi página pública ↗
           </a>
@@ -4777,7 +4779,7 @@ function ProModal({
                 onClick={() => setUseCustomHours(false)}
                 className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
                   !useCustomHours
-                    ? "bg-evergreen text-lime shadow-sm"
+                    ? "bg-slate-900 text-white shadow-sm"
                     : "text-inkmute hover:text-ink"
                 }`}
               >
@@ -4788,7 +4790,7 @@ function ProModal({
                 onClick={() => setUseCustomHours(true)}
                 className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
                   useCustomHours
-                    ? "bg-evergreen text-lime shadow-sm"
+                    ? "bg-slate-900 text-white shadow-sm"
                     : "text-inkmute hover:text-ink"
                 }`}
               >
@@ -4880,7 +4882,7 @@ function ProModal({
         </div>
 
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-        <button type="submit" className="w-full rounded-full bg-evergreen py-3.5 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">
+        <button type="submit" className="min-h-[52px] w-full rounded-full bg-emerald-600 hover:bg-emerald-700 py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-md shadow-emerald-900/20">
           {initial ? "Guardar cambios" : "Agregar al equipo"}
         </button>
       </form>
@@ -4951,7 +4953,7 @@ function ProductModal({ product, onClose }: { product?: Product; onClose: () => 
           <input className="field" type="number" min="1" placeholder="8000" value={price} onChange={(e) => setPrice(e.target.value)} />
         </div>
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-        <button type="submit" className="w-full rounded-full bg-evergreen py-3.5 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">{product ? "Guardar cambios" : "Publicar producto"}</button>
+        <button type="submit" className="min-h-[52px] w-full rounded-full bg-emerald-600 hover:bg-emerald-700 py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-md shadow-emerald-900/20">{product ? "Guardar cambios" : "Publicar producto"}</button>
       </form>
     </Modal>
   );
@@ -5020,7 +5022,7 @@ function CouponModal({ onClose }: { onClose: () => void }) {
           <div className="flex justify-between text-xs font-bold text-ink/40"><span>5%</span><span>90%</span></div>
         </div>
         {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-        <button type="submit" className="w-full rounded-full bg-evergreen py-3.5 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Crear cupón</button>
+        <button type="submit" className="min-h-[52px] w-full rounded-full bg-emerald-600 hover:bg-emerald-700 py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-md shadow-emerald-900/20">Crear cupón</button>
       </form>
     </Modal>
   );
@@ -5322,7 +5324,7 @@ function QrBlock({ url, onPrint }: { url: string; onPrint?: () => void }) {
           Descargar QR
         </a>
         {onPrint && (
-          <button onClick={onPrint} className="flex-1 rounded-xl bg-evergreen py-2.5 text-center font-display text-xs font-bold text-lime transition-all hover:bg-pine shadow-sm">
+          <button onClick={onPrint} className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 py-2.5 text-center font-display text-xs font-bold text-white transition-all shadow-sm">
             🖨️ Imprimir cartel
           </button>
         )}
@@ -5337,7 +5339,7 @@ function LockedFeature({ icon, title, desc, onUpgrade }: { icon: ReactNode; titl
       <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-ink/8 text-ink/50">{icon}</span>
       <h3 className="mt-4 font-display text-2xl font-extrabold text-ink">{title}</h3>
       <p className="mt-2 leading-relaxed text-inkmute">{desc}</p>
-      <button onClick={onUpgrade} className="mt-6 inline-flex items-center gap-2 rounded-full bg-lime px-7 py-3.5 font-display text-base font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">
+      <button onClick={onUpgrade} className="mt-6 inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 px-7 py-3.5 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-md shadow-emerald-900/20">
         Activar con el plan Crece <IconArrow className="h-4 w-4" />
       </button>
     </div>
@@ -5365,9 +5367,9 @@ function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: N
       <div className="no-scrollbar flex gap-1 overflow-x-auto border-b-2 border-ink/10">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`relative flex shrink-0 items-center gap-2 px-4 py-3 font-display text-sm font-bold transition-colors ${tab === t.id ? "text-evergreen" : "text-inkmute hover:text-ink"}`}>
+            className={`relative flex shrink-0 items-center gap-2 px-4 py-3 font-display text-sm font-bold transition-colors ${tab === t.id ? "text-slate-900" : "text-slate-500 hover:text-slate-900"}`}>
             {t.icon}{t.label}
-            {tab === t.id && <span className="absolute inset-x-2 -bottom-0.5 h-1 rounded-full bg-lime" />}
+            {tab === t.id && <span className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full bg-emerald-600" />}
           </button>
         ))}
       </div>
@@ -5419,7 +5421,7 @@ function BusinessTab({ user, onSave }: { user: { business: string; name: string;
           <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Email</label>
           <input className="field cursor-not-allowed bg-ink/5 text-inkmute" value={user.email} disabled />
         </div>
-        <button onClick={() => onSave(business, name)} className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">Guardar cambios</button>
+        <button onClick={() => onSave(business, name)} className="rounded-full bg-emerald-600 px-6 py-2.5 font-display text-sm font-bold text-white shadow-xs transition-all hover:-translate-y-0.5 hover:bg-emerald-700">Guardar cambios</button>
       </div>
     </div>
   );
@@ -5556,7 +5558,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
       <button
         type="button"
         onClick={handleSave}
-        className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine"
+        className="rounded-full bg-emerald-600 px-6 py-2.5 font-display text-sm font-bold text-white shadow-xs transition-all hover:-translate-y-0.5 hover:bg-emerald-700"
       >
         Guardar mi página
       </button>
@@ -5636,7 +5638,7 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
           <button
             type="button"
             onClick={handleSave}
-            className="rounded-full bg-evergreen px-6 py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine"
+            className="rounded-full bg-emerald-600 px-6 py-2.5 font-display text-sm font-bold text-white shadow-xs transition-all hover:-translate-y-0.5 hover:bg-emerald-700"
           >
             Guardar datos de cobro
           </button>
@@ -5746,7 +5748,7 @@ function HoursCard({
                 }}
                 className={`btn-press rounded-xl border-2 py-2.5 px-3 text-center font-display text-xs font-bold transition-all ${
                   isSel
-                    ? "border-evergreen bg-evergreen text-lime shadow-sm"
+                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
                     : "border-ink/12 bg-white text-ink hover:border-ink/40"
                 }`}
               >
@@ -5786,7 +5788,7 @@ function HoursCard({
                 }
               }
             }}
-            className="btn-press rounded-xl bg-evergreen px-4 py-2 text-xs font-bold text-lime shadow-sm hover:bg-pine"
+            className="btn-press rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors"
           >
             + Agregar día cerrado
           </button>
@@ -5879,7 +5881,7 @@ function PlanTab({
               <button
                 type="button"
                 onClick={() => onSelect(current)}
-                className="rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime hover:bg-pine"
+                className="rounded-full bg-emerald-600 hover:bg-emerald-700 px-4 py-2 font-display text-xs font-bold text-white shadow-sm transition-colors"
               >
                 Volver a suscribirme
               </button>
@@ -5930,7 +5932,7 @@ function PlanTab({
                 <div className="flex items-center gap-2">
                   <span className="font-display text-base font-extrabold text-ink">{PLAN_META[p].name}</span>
                   <span className="font-display text-sm font-bold text-fern">{PLAN_META[p].price}</span>
-                  {active && <span className="rounded-full bg-evergreen px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-lime">Activo</span>}
+                  {active && <span className="rounded-full bg-emerald-700 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-white">Activo</span>}
                 </div>
                 <p className="mt-0.5 text-xs text-inkmute">
                   {p === "semilla" ? "Gratis para siempre · 1 profesional · 25 reservas/mes" : p === "crece" ? "Reservas ilimitadas · hasta 3 profesionales · seña y cupones" : "Profesionales ilimitados · soporte prioritario"}
@@ -5942,7 +5944,7 @@ function PlanTab({
                 <button
                   type="button"
                   onClick={() => onSelect(p)}
-                  className={`rounded-full px-4 py-2 font-display text-xs font-bold transition-all hover:-translate-y-0.5 ${p === "semilla" ? "border-2 border-ink/20 text-ink hover:bg-ink/5" : "bg-evergreen text-lime hover:bg-pine shadow-sm"}`}
+                  className={`rounded-full px-4 py-2 font-display text-xs font-bold transition-all hover:-translate-y-0.5 ${p === "semilla" ? "border-2 border-ink/20 text-ink hover:bg-ink/5" : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"}`}
                 >
                   {p === "semilla" ? "Bajar a Semilla" : `Elegir ${PLAN_META[p].name} (Mercado Pago)`}
                 </button>

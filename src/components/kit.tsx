@@ -95,12 +95,12 @@ export function LegalModal({ doc, onClose }: { doc: { title: string; body: strin
         <ul className="mt-5 space-y-3">
           {doc.body.map((p, i) => (
             <li key={i} className="flex items-start gap-2.5 text-sm leading-relaxed text-ink/80">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime font-display text-[10px] font-extrabold text-ink">{i + 1}</span>
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-display text-[10px] font-extrabold text-emerald-900">{i + 1}</span>
               {p}
             </li>
           ))}
         </ul>
-        <button onClick={onClose} className="mt-6 w-full rounded-full bg-evergreen py-3.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5">Entendido</button>
+        <button onClick={onClose} className="mt-6 w-full rounded-full bg-slate-900 hover:bg-slate-800 py-3.5 font-display text-sm font-bold text-white transition-all hover:-translate-y-0.5 shadow-sm">Entendido</button>
       </div>
     </div>
   );

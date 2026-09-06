@@ -339,7 +339,7 @@ function Console() {
                 key={f.id}
                 onClick={() => setPlanFilter(f.id as typeof planFilter)}
                 className={`btn-press whitespace-nowrap rounded-full border-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
-                  planFilter === f.id ? "border-evergreen bg-evergreen text-lime" : "border-ink/12 bg-card text-inkmute hover:border-evergreen"
+                  planFilter === f.id ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-ink/12 bg-card text-inkmute hover:border-slate-400"
                 }`}
               >
                 {f.label}
@@ -370,7 +370,7 @@ function Console() {
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     {/* Info principal */}
                     <div className="flex items-start gap-4">
-                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-evergreen font-display text-base font-extrabold text-lime shadow-sm">
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-900 font-display text-base font-extrabold text-white shadow-sm">
                         {u.business.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                       </span>
                       <div>
@@ -489,7 +489,7 @@ function Console() {
                           loginAs(u.id);
                           window.location.hash = "#/app";
                         }}
-                        className="btn-press inline-flex items-center gap-1.5 rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime hover:bg-pine shadow-sm"
+                        className="btn-press inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 px-4 py-2 font-display text-xs font-bold text-white shadow-sm transition-colors"
                         title="Abrir panel del negocio para configurarlo o ayudar al dueño"
                       >
                         🚀 Entrar como dueño
@@ -741,7 +741,7 @@ function EditBusinessModal({ user, onClose }: { user: User; onClose: () => void 
 
           <div className="mt-6 flex items-center justify-end gap-2 border-t border-ink/10 pt-4">
             <button type="button" onClick={onClose} className="btn-press rounded-full border-2 border-ink/15 px-5 py-2.5 font-display text-sm font-bold text-inkmute hover:text-ink">Cancelar</button>
-            <button type="submit" className="btn-press rounded-full bg-evergreen px-6 py-2.5 font-display text-sm font-bold text-lime hover:bg-pine shadow-sm">Guardar cambios</button>
+            <button type="submit" className="btn-press rounded-full bg-emerald-600 hover:bg-emerald-700 px-6 py-2.5 font-display text-sm font-bold text-white shadow-sm transition-colors">Guardar cambios</button>
           </div>
         </form>
       </div>
@@ -967,7 +967,7 @@ ALTER TABLE cupito_data ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
                 <button
                   type="button"
                   onClick={saveKey}
-                  className="btn-press shrink-0 rounded-xl bg-evergreen px-4 font-display text-xs font-bold text-lime"
+                  className="btn-press shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 font-display text-xs font-bold text-white shadow-sm transition-colors"
                 >
                   Guardar
                 </button>
@@ -984,7 +984,7 @@ ALTER TABLE cupito_data ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
           </div>
 
           <div className="mt-6 flex justify-end border-t border-ink/10 pt-4">
-            <button onClick={onClose} className="btn-press rounded-full bg-evergreen px-6 py-2.5 font-display text-xs font-bold text-lime">Entendido</button>
+            <button onClick={onClose} className="btn-press rounded-full bg-emerald-600 hover:bg-emerald-700 px-6 py-2.5 font-display text-xs font-bold text-white shadow-sm transition-colors">Entendido</button>
           </div>
         </div>
       </div>
