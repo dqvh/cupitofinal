@@ -82,6 +82,9 @@ import {
   IconCopy,
   Badge,
 } from "./kit";
+import "../styles/dashboard.css";
+import { AgendaWeek } from "./AgendaWeek";
+import { CustomerHistoryModal, type CustomerStats } from "./CustomerCRM";
 
 type View = "hoy" | "reservas" | "clientes" | "lista" | "stats" | "servicios" | "equipo" | "tienda" | "promos" | "pagina" | "suscripcion" | "ajustes";
 
@@ -174,6 +177,8 @@ export default function Dashboard() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [agendaView, setAgendaView] = useState<"day" | "week">("day");
+  const [crmCustomer, setCrmCustomer] = useState<CustomerStats | null>(null);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -403,41 +408,70 @@ export default function Dashboard() {
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* ---------- sidebar ---------- */}
-        <aside className="sticky top-0 z-40 hidden h-screen w-64 shrink-0 flex-col bg-[#071d15] text-white border-r border-white/5 lg:flex">
-          <a href="#/" className="flex items-center gap-3 px-6 pb-6 pt-7">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-xs">
-              <LogoMark className="h-5 w-5" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-display text-xl font-extrabold tracking-tight text-white leading-none">
-                cupito<span className="text-emerald-400">.</span>
+        <aside className="sticky top-0 z-40 hidden h-screen w-64 shrink-0 flex-col bg-white text-slate-800 border-r border-slate-200/90 shadow-xs lg:flex">
+          <div className="flex flex-col gap-3 px-5 pb-5 pt-6 border-b border-slate-100">
+            <a href="#/" className="flex items-center gap-2.5">
+              <img src="/cupito-logo.png" width="34" height="34" alt="" className="rounded-xl shadow-xs" />
+              <span className="font-display text-xl font-extrabold tracking-tight text-slate-900 leading-none">
+                cupito<span className="text-emerald-600">.</span>
               </span>
-              <span className="text-[10px] font-semibold text-white/40 tracking-wider uppercase mt-1">Panel de control</span>
+            </a>
+
+            {/* Workspace selector */}
+            <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/90 bg-slate-50/80 p-2 text-left">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 font-display text-xs font-bold text-emerald-800">
+                {user.business.slice(0, 2).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <span className="block truncate font-display text-xs font-bold text-slate-900 leading-tight">
+                  {user.business}
+                </span>
+                <span className="block text-[10px] font-medium text-emerald-700">
+                  Plan {PLAN_META[user.plan].name}
+                </span>
+              </div>
             </div>
-          </a>
-          <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
+          </div>
+
+          <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
             {SECTIONS.map((sec) => (
               <div key={sec.label}>
-                <p className="px-4 pb-2 text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/30">{sec.label}</p>
+                <p className="px-3 pb-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+                  {sec.label}
+                </p>
                 <div className="space-y-0.5">
                   {sec.items.map((n) => {
                     const active = view === n.id;
+                    const todayCount = n.id === "hoy" ? data.bookings.filter((b) => b.date === today && b.status !== "cancelada").length : 0;
                     return (
-                      <button key={n.id} onClick={() => setView(n.id)}
-                        className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-all duration-150 ${
+                      <button
+                        key={n.id}
+                        onClick={() => setView(n.id)}
+                        className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold transition-all duration-150 ${
                           active
-                            ? "bg-white/12 text-white shadow-xs border border-white/10"
-                            : "text-white/60 hover:bg-white/[0.06] hover:text-white"
-                        }`}>
-                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                          active ? "bg-emerald-500 text-slate-950 font-bold shadow-xs shadow-emerald-500/30" : "bg-white/[0.06] text-white/70 group-hover:text-white"
-                        }`}>
+                            ? "bg-emerald-50/90 text-emerald-900 font-extrabold shadow-xs border border-emerald-200/70"
+                            : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                            active
+                              ? "bg-emerald-600 text-white font-bold shadow-xs shadow-emerald-600/30"
+                              : "bg-slate-100 text-slate-500 group-hover:bg-slate-200/70 group-hover:text-slate-800"
+                          }`}
+                        >
                           {n.icon({ className: "h-3.5 w-3.5" })}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{n.label}</span>
-                        {active && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+                        {todayCount > 0 && (
+                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-1.5">
+                            {todayCount}
+                          </span>
+                        )}
                         {n.id === "lista" && data.waitlist.length > 0 && (
-                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-extrabold text-white">{data.waitlist.length}</span>
+                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-extrabold text-white">
+                            {data.waitlist.length}
+                          </span>
                         )}
                       </button>
                     );
@@ -446,15 +480,21 @@ export default function Dashboard() {
               </div>
             ))}
           </nav>
-          <div className="border-t border-white/10 p-4 space-y-2.5">
-            <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 font-display text-xs font-bold text-slate-950 transition-all hover:bg-emerald-400 shadow-sm shadow-emerald-500/20">
+
+          <div className="border-t border-slate-200/80 p-3.5 space-y-2.5 bg-slate-50/40">
+            <a
+              href={`/${user.slug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2 font-display text-xs font-bold text-white transition-all hover:bg-emerald-500 shadow-sm shadow-emerald-600/20"
+            >
               <IconLink className="h-3.5 w-3.5" /> Ver mi página ↗
             </a>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={promptInstall}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 font-display text-[11px] font-medium text-white/80 transition-all hover:bg-white/[0.08] hover:text-white"
+                className="flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 font-display text-[11px] font-bold text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
                 title="Instalar como app en la pantalla del celular"
               >
                 📲 {isStandalone ? "App lista" : "Instalar"}
@@ -462,23 +502,29 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={() => setShowCalendarModal(true)}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 font-display text-[11px] font-medium text-white/80 transition-all hover:bg-white/[0.08] hover:text-white"
+                className="flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 font-display text-[11px] font-bold text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
                 title="Sincronizar turnos con el calendario del celular"
               >
-                <IconCalendar className="h-3.5 w-3.5 text-emerald-400" /> Calendario
+                <IconCalendar className="h-3 w-3 text-emerald-600" /> Calendario
               </button>
             </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 border border-emerald-500/40 font-display text-xs font-bold text-emerald-300">
+            <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 border border-emerald-200 font-display text-xs font-bold text-emerald-800">
                 {user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-display text-sm font-bold text-white">{user.business}</span>
-                <span className="flex items-center gap-1.5 text-xs text-white/50">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Plan {PLAN_META[user.plan].name}
-                </span>
-              </span>
+              <div className="min-w-0 flex-1">
+                <span className="block truncate font-display text-xs font-bold text-slate-900">{user.business}</span>
+                <span className="block truncate text-[10px] text-slate-500" title={user.email}>{user.email}</span>
+              </div>
+              <button
+                type="button"
+                onClick={store.logout}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                title="Cerrar sesión"
+                aria-label="Cerrar sesión"
+              >
+                <IconLogout className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         </aside>
@@ -486,13 +532,13 @@ export default function Dashboard() {
         {/* ---------- main ---------- */}
         <div className="min-w-0 flex-1">
           {/* topbar mobile */}
-          <header className="sticky top-0 z-40 flex h-14 sm:h-16 items-center justify-between border-b border-white/10 bg-[#061811] px-3.5 sm:px-4 text-white lg:hidden">
+          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-md px-3.5 sm:px-4 text-slate-800 lg:hidden">
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
               {/* Botón 3 líneas horizontales (Hamburguesa) */}
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
-                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white transition-transform active:scale-95 hover:bg-white/15 focus:outline-hidden"
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 transition-transform active:scale-95 hover:bg-slate-200 focus:outline-hidden"
                 aria-label="Abrir menú de navegación"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
@@ -507,11 +553,11 @@ export default function Dashboard() {
 
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <a href="#/" className="flex items-center gap-1.5 shrink-0">
-                  <LogoMark className="h-6 w-6 text-emerald-400" />
-                  <span className="font-display text-base font-bold tracking-tight text-white">cupito<span className="text-emerald-400">.</span></span>
+                  <img src="/cupito-logo.png" width="24" height="24" alt="" className="rounded-md" />
+                  <span className="font-display text-base font-bold tracking-tight text-slate-900">cupito<span className="text-emerald-600">.</span></span>
                 </a>
-                <span className="text-white/20">/</span>
-                <span className="truncate text-xs font-semibold text-emerald-300">
+                <span className="text-slate-300">/</span>
+                <span className="truncate text-xs font-bold text-emerald-800">
                   {viewTitle[0]}
                 </span>
               </div>
@@ -521,17 +567,17 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={promptInstall}
-                className="btn-press flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1.5 sm:px-3 sm:py-1.5 font-display text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+                className="btn-press flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-display text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100"
                 title="Instalar app en tu celular"
               >
                 <span>📲</span>
-                <span className="hidden xs:inline">{isStandalone ? "App lista" : "Instalar app"}</span>
+                <span className="hidden xs:inline">{isStandalone ? "App lista" : "Instalar"}</span>
               </button>
               <a
                 href={`/${user.slug}`}
                 target="_blank"
                 rel="noreferrer"
-                className="btn-press flex items-center gap-1 rounded-full bg-emerald-500 px-3 py-1.5 font-display text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-emerald-400"
+                className="btn-press flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1 font-display text-xs font-bold text-white shadow-xs transition-colors hover:bg-emerald-500"
               >
                 <span>Ver</span>
                 <span className="text-[10px]">↗</span>
@@ -548,33 +594,33 @@ export default function Dashboard() {
           >
             {/* Backdrop con blur */}
             <div
-              className="absolute inset-0 bg-slate-950/75 backdrop-blur-xs transition-opacity duration-300"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300"
               onClick={() => setMobileMenuOpen(false)}
             />
 
             {/* Panel lateral deslizante */}
             <div
-              className={`absolute inset-y-0 left-0 flex w-[84vw] max-w-xs flex-col bg-[#061811] text-white shadow-2xl border-r border-white/10 transition-transform duration-300 ease-out transform ${
+              className={`absolute inset-y-0 left-0 flex w-[84vw] max-w-xs flex-col bg-white text-slate-900 shadow-2xl border-r border-slate-200 transition-transform duration-300 ease-out transform ${
                 mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
               }`}
             >
               {/* Header de la sidebar */}
-              <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
+              <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
                 <div className="flex items-center gap-2.5">
-                  <LogoMark className="h-7 w-7 text-emerald-400" />
+                  <img src="/cupito-logo.png" width="28" height="28" alt="" className="rounded-lg" />
                   <div>
-                    <span className="block font-display text-base font-bold tracking-tight text-white leading-tight">
-                      cupito<span className="text-emerald-400">.</span>
+                    <span className="block font-display text-base font-bold tracking-tight text-slate-900 leading-tight">
+                      cupito<span className="text-emerald-600">.</span>
                     </span>
-                    <span className="block text-[10px] font-medium uppercase tracking-wider text-white/40">
-                      Panel de control
+                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      {user.business}
                     </span>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white/80 hover:bg-white/15 hover:text-white transition-colors active:scale-95"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors active:scale-95"
                   aria-label="Cerrar menú"
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
@@ -587,7 +633,7 @@ export default function Dashboard() {
               <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
                 {SECTIONS.map((sec) => (
                   <div key={sec.label}>
-                    <p className="px-3 pb-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/35">
+                    <p className="px-3 pb-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
                       {sec.label}
                     </p>
                     <div className="space-y-0.5">
@@ -600,23 +646,23 @@ export default function Dashboard() {
                               setView(n.id);
                               setMobileMenuOpen(false);
                             }}
-                            className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-all duration-150 active:scale-[0.98] ${
+                            className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-bold transition-all duration-150 ${
                               active
-                                ? "bg-white/12 text-white shadow-xs border border-white/10"
-                                : "text-white/65 hover:bg-white/[0.06] hover:text-white"
+                                ? "bg-emerald-50 text-emerald-900 font-extrabold shadow-xs border border-emerald-200"
+                                : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 active:bg-slate-100"
                             }`}
                           >
                             <span
                               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
                                 active
-                                  ? "bg-emerald-500 text-slate-950 font-bold shadow-xs shadow-emerald-500/30"
-                                  : "bg-white/[0.06] text-white/70 group-hover:text-white"
+                                  ? "bg-emerald-600 text-white font-bold shadow-xs shadow-emerald-600/30"
+                                  : "bg-slate-100 text-slate-500"
                               }`}
                             >
                               {n.icon({ className: "h-3.5 w-3.5" })}
                             </span>
                             <span className="min-w-0 flex-1 truncate">{n.label}</span>
-                            {active && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+                            {active && <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />}
                             {n.id === "lista" && data.waitlist.length > 0 && (
                               <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-extrabold text-white">
                                 {data.waitlist.length}
@@ -630,81 +676,32 @@ export default function Dashboard() {
                 ))}
               </nav>
 
-              {/* Footer con PWA, accesos directos y datos del negocio */}
-              <div className="border-t border-white/10 p-3.5 space-y-2.5 bg-[#05140e]">
-                {/* Banner PWA */}
-                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
-                  <div className="flex items-start gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-base">
-                      📲
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-display text-xs font-bold text-white">
-                        {isStandalone ? "App lista en tu celular" : "Instalar Cupito como App"}
-                      </p>
-                      <p className="mt-0.5 text-[10px] leading-relaxed text-white/60">
-                        {isStandalone
-                          ? "Ya tenés Cupito instalado en tu pantalla de inicio."
-                          : "Abrí tu panel en 1 toque directo desde tu pantalla de inicio."}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      promptInstall();
-                    }}
-                    className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-500 py-2 font-display text-xs font-bold text-slate-950 transition-all hover:bg-emerald-400 active:scale-[0.98]"
-                  >
-                    <span>📲</span>
-                    <span>{isStandalone ? "Ver cómo usarla" : "Instalar app ahora"}</span>
-                  </button>
-                </div>
-
-                {/* Accesos directos: Calendario + Ver página */}
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setShowCalendarModal(true);
-                    }}
-                    className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 font-display text-xs font-semibold text-white/80 transition-all hover:bg-white/[0.08] hover:text-white active:scale-98"
-                  >
-                    <IconCalendar className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Calendario</span>
-                  </button>
-                  <a
-                    href={`/${user.slug}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 font-display text-xs font-semibold text-white/80 transition-all hover:bg-white/[0.08] hover:text-white active:scale-98"
-                  >
-                    <IconLink className="h-3.5 w-3.5 text-emerald-400" />
-                    <span>Mi página ↗</span>
-                  </a>
-                </div>
-
-                {/* Perfil del negocio */}
-                <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 border border-emerald-500/40 font-display text-xs font-bold text-emerald-300">
-                    {user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <span className="block truncate font-display text-xs font-bold text-white">{user.business}</span>
-                    <span className="flex items-center gap-1.5 text-[10px] text-white/50">
-                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      Plan {PLAN_META[user.plan].name}
-                    </span>
-                  </div>
-                </div>
+              {/* Footer mobile drawer */}
+              <div className="border-t border-slate-200 p-3.5 space-y-2 bg-slate-50/50">
+                <a
+                  href={`/${user.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 font-display text-xs font-bold text-white shadow-xs"
+                >
+                  <IconLink className="h-3.5 w-3.5" /> Ver mi página ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    store.logout();
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  <IconLogout className="h-3.5 w-3.5 text-slate-500" /> Cerrar sesión
+                </button>
               </div>
             </div>
           </div>
 
-          <main className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
+          <main className="mx-auto max-w-5xl px-5 py-8 pb-28 sm:px-8">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-6">
               <div>
                 <div className="flex items-center gap-2">
@@ -874,67 +871,116 @@ export default function Dashboard() {
                   </div>
                   <button onClick={() => setWeekStart((w) => w + 7)} aria-label="Semana siguiente" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4" /></button>
                 </div>
-                <button onClick={() => { setWeekStart(0); setSelDate(today); }} className="mt-1.5 text-xs font-bold text-emerald-700 underline-offset-4 hover:underline">Ir a hoy</button>
 
-                <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                  <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} badge="Hoy" trend="En tu grilla" />
-                  <StatCard label="Ingresos estimados" value={fmtMoney(dayIncome)} icon={<IconWallet className="h-5 w-5" />} accent badge="Estimado" trend="Según servicios" />
-                  <StatCard label="Ocupación" value={`${occupancy}%`} icon={<IconChart className="h-5 w-5" />} badge="Capacidad" trend="Del horario de atención" />
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <button onClick={() => { setWeekStart(0); setSelDate(today); }} className="text-xs font-bold text-emerald-700 underline-offset-4 hover:underline">
+                    ← Ir a hoy
+                  </button>
+
+                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setAgendaView("day")}
+                      className={`rounded-lg px-3 py-1.5 transition-all ${
+                        agendaView === "day"
+                          ? "bg-white text-slate-900 shadow-xs font-extrabold"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Día
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAgendaView("week")}
+                      className={`rounded-lg px-3 py-1.5 transition-all ${
+                        agendaView === "week"
+                          ? "bg-white text-slate-900 shadow-xs font-extrabold"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      Semana
+                    </button>
+                  </div>
                 </div>
 
-                {data.professionals.length > 0 && (
-                  <div className="mt-6 flex flex-wrap gap-2">
-                    <button onClick={() => setProFilter("todos")} className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === "todos" ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>Todos</button>
-                    {data.professionals.map((p) => (
-                      <button key={p.id} onClick={() => setProFilter(p.id)} className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === p.id ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color || "#10b981" }} />
-                        {p.name}
-                      </button>
-                    ))}
+                {agendaView === "week" ? (
+                  <div className="mt-6">
+                    <AgendaWeek
+                      dates={week.map((d) => dateKey(d))}
+                      records={data.bookings}
+                      services={data.services}
+                      professionals={data.professionals}
+                      todayKey={today}
+                      onDay={(k) => {
+                        setSelDate(k);
+                        setAgendaView("day");
+                      }}
+                      onOpen={(b) => setRescheduling(b)}
+                    />
                   </div>
-                )}
-
-                <p className="mt-8 font-display text-lg font-bold text-ink">
-                  {fmtLong(selDate)}
-                  <span className="ml-2 text-sm font-semibold text-inkmute">{dayBookings.length === 0 ? "· sin turnos todavía" : `· ${dayBookings.length} reserva${dayBookings.length === 1 ? "" : "s"}`}</span>
-                </p>
-
-                {dayBookings.length === 0 ? (
-                  <EmptyState text="Nadie reservó este día… todavía." sub="Creá una reserva manual o compartí tu link para que lleguen solas."
-                    action={<button onClick={() => { setPrefill(null); setShowNew(true); }} className="inline-flex items-center gap-2 rounded-full bg-evergreen px-5 py-2.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5"><IconPlus className="h-4 w-4" /> Crear reserva</button>} />
                 ) : (
-                  <div className="mt-4 space-y-3">
-                    {dayBookings.map((b) => (
-                      <BookingRow key={b.id} b={b} service={serviceOf(b.serviceId)} pro={data.professionals.find((p) => p.id === b.proId)} products={data.products} businessName={user.business}
-                        onStatus={(id, s) => {
-                          setStatus(id, s);
-                          if (s === "atendida") {
-                            const r = requestReview(id);
-                            toast(r === "sent" ? "Turno atendido · link de reseña enviado por email 💌" : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp 📲", r === "sent" ? "ok" : "warn");
-                          }
-                          else if (s === "ausente") { toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn"); }
-                          else toast(s === "cancelada" ? "Turno cancelado. El hueco quedó libre." : "Turno confirmado.");
-                        }}
-                        onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
-                        onVerify={(id) => { store.markDepositPaid(id, "transferencia"); sound.playSuccess(); toast("Seña acreditada ✓"); }}
-                        onReject={(id) => { store.rejectDeposit(id); toast("Comprobante rechazado. El cliente puede reenviarlo.", "warn"); }}
-                        onReschedule={(b) => setRescheduling(b)}
-                      />
-                    ))}
-                  </div>
-                )}
+                  <>
+                    <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                      <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} badge="Hoy" trend="En tu grilla" />
+                      <StatCard label="Ingresos estimados" value={fmtMoney(dayIncome)} icon={<IconWallet className="h-5 w-5" />} accent badge="Estimado" trend="Según servicios" />
+                      <StatCard label="Ocupación" value={`${occupancy}%`} icon={<IconChart className="h-5 w-5" />} badge="Capacidad" trend="Del horario de atención" />
+                    </div>
 
-                {data.waitlist.length > 0 && (
-                  <button onClick={() => setView("lista")} className="mt-6 flex w-full items-center justify-between gap-3 rounded-xl border-2 border-coral/30 bg-coral/5 px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-coral/60">
-                    <span className="flex items-center gap-2.5">
-                      <IconUsers className="h-5 w-5 text-coral" />
-                      <span>
-                        <span className="block font-display text-sm font-bold text-ink">{data.waitlist.length} cliente{data.waitlist.length === 1 ? "" : "s"} en lista de espera</span>
-                        <span className="block text-xs text-inkmute">Tocá para ofrecerles un hueco.</span>
-                      </span>
-                    </span>
-                    <IconChevron className="h-4 w-4 text-coral" />
-                  </button>
+                    {data.professionals.length > 0 && (
+                      <div className="mt-6 flex flex-wrap gap-2">
+                        <button onClick={() => setProFilter("todos")} className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === "todos" ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>Todos</button>
+                        {data.professionals.map((p) => (
+                          <button key={p.id} onClick={() => setProFilter(p.id)} className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === p.id ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color || "#10b981" }} />
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="mt-8 font-display text-lg font-bold text-ink">
+                      {fmtLong(selDate)}
+                      <span className="ml-2 text-sm font-semibold text-inkmute">{dayBookings.length === 0 ? "· sin turnos todavía" : `· ${dayBookings.length} reserva${dayBookings.length === 1 ? "" : "s"}`}</span>
+                    </p>
+
+                    {dayBookings.length === 0 ? (
+                      <EmptyState text="Nadie reservó este día… todavía." sub="Creá una reserva manual o compartí tu link para que lleguen solas."
+                        action={<button onClick={() => { setPrefill(null); setShowNew(true); }} className="inline-flex items-center gap-2 rounded-full bg-evergreen px-5 py-2.5 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5"><IconPlus className="h-4 w-4" /> Crear reserva</button>} />
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {dayBookings.map((b) => (
+                          <BookingRow key={b.id} b={b} service={serviceOf(b.serviceId)} pro={data.professionals.find((p) => p.id === b.proId)} products={data.products} businessName={user.business}
+                            onStatus={(id, s) => {
+                              setStatus(id, s);
+                              if (s === "atendida") {
+                                const r = requestReview(id);
+                                toast(r === "sent" ? "Turno atendido · link de reseña enviado por email 💌" : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp 📲", r === "sent" ? "ok" : "warn");
+                              }
+                              else if (s === "ausente") { toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn"); }
+                              else toast(s === "cancelada" ? "Turno cancelado. El hueco quedó libre." : "Turno confirmado.");
+                            }}
+                            onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
+                            onVerify={(id) => { store.markDepositPaid(id, "transferencia"); sound.playSuccess(); toast("Seña acreditada ✓"); }}
+                            onReject={(id) => { store.rejectDeposit(id); toast("Comprobante rechazado. El cliente puede reenviarlo.", "warn"); }}
+                            onReschedule={(b) => setRescheduling(b)}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {data.waitlist.length > 0 && (
+                      <button onClick={() => setView("lista")} className="mt-6 flex w-full items-center justify-between gap-3 rounded-xl border-2 border-coral/30 bg-coral/5 px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-coral/60">
+                        <span className="flex items-center gap-2.5">
+                          <IconUsers className="h-5 w-5 text-coral" />
+                          <span>
+                            <span className="block font-display text-sm font-bold text-ink">{data.waitlist.length} cliente{data.waitlist.length === 1 ? "" : "s"} en lista de espera</span>
+                            <span className="block text-xs text-inkmute">Tocá para ofrecerles un hueco.</span>
+                          </span>
+                        </span>
+                        <IconChevron className="h-4 w-4 text-coral" />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -1179,16 +1225,38 @@ export default function Dashboard() {
 
             {/* ============ CLIENTES (CRM) ============ */}
             {view === "clientes" && (
-              <ClientsCRMView
-                bookings={data.bookings}
-                services={data.services}
-                clientNotes={data.settings.clientNotes || {}}
-                onSaveNote={(phone, note) => {
-                  saveClientNote(phone, note);
-                  toast("Nota privada guardada ✓");
-                }}
-                businessName={user.business}
-              />
+              <>
+                <ClientsCRMView
+                  bookings={data.bookings}
+                  services={data.services}
+                  clientNotes={data.settings.clientNotes || {}}
+                  onSaveNote={(phone, note) => {
+                    saveClientNote(phone, note);
+                    toast("Nota privada guardada ✓");
+                  }}
+                  businessName={user.business}
+                  onOpenCustomer={(c) => setCrmCustomer(c)}
+                />
+                {crmCustomer && (
+                  <CustomerHistoryModal
+                    customer={crmCustomer}
+                    records={data.bookings}
+                    services={data.services}
+                    professionals={data.professionals}
+                    onClose={() => setCrmCustomer(null)}
+                    onOpenBooking={(b) => {
+                      setCrmCustomer(null);
+                      setRescheduling(b);
+                    }}
+                    onNewBooking={() => {
+                      const cust = crmCustomer;
+                      setCrmCustomer(null);
+                      setPrefill({ client: cust.name, phone: cust.phone });
+                      setShowNew(true);
+                    }}
+                  />
+                )}
+              </>
             )}
 
             {/* ============ LISTA DE ESPERA ============ */}
@@ -1354,6 +1422,61 @@ export default function Dashboard() {
               <SettingsView user={user} settings={data.settings} onSaveProfile={(b, n) => { saveProfile(b, n); toast("Perfil actualizado ✓"); }} onSelectPlan={(p) => setCheckoutPlan(p)} />
             )}
           </main>
+
+          {/* Mobile Bottom Navigation Bar */}
+          <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-slate-200 bg-white/95 backdrop-blur-md px-2 shadow-lg lg:hidden" aria-label="Navegación móvil">
+            <button
+              type="button"
+              onClick={() => setView("hoy")}
+              className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${
+                view === "hoy" ? "text-emerald-700" : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <IconClock className={`h-5 w-5 ${view === "hoy" ? "text-emerald-600" : ""}`} />
+              <span>Agenda</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("reservas")}
+              className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${
+                view === "reservas" ? "text-emerald-700" : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <IconCalendar className={`h-5 w-5 ${view === "reservas" ? "text-emerald-600" : ""}`} />
+              <span>Turnos</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPrefill(null);
+                setShowNew(true);
+              }}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-600/30 active:scale-95 transition-transform -mt-3"
+              aria-label="Crear nuevo turno"
+            >
+              <IconPlus className="h-6 w-6" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("clientes")}
+              className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${
+                view === "clientes" ? "text-emerald-700" : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <IconUsers className={`h-5 w-5 ${view === "clientes" ? "text-emerald-600" : ""}`} />
+              <span>Clientes</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="flex flex-col items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-slate-900"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+              <span>Menú</span>
+            </button>
+          </nav>
         </div>
       </div>
 
@@ -3127,12 +3250,14 @@ function ClientsCRMView({
   clientNotes,
   onSaveNote,
   businessName,
+  onOpenCustomer,
 }: {
   bookings: Booking[];
   services: Service[];
   clientNotes: Record<string, string>;
   onSaveNote: (phone: string, note: string) => void;
   businessName: string;
+  onOpenCustomer?: (customer: CustomerStats) => void;
 }) {
   const [query, setQuery] = useState("");
   const [editingPhone, setEditingPhone] = useState<string | null>(null);
@@ -3313,6 +3438,21 @@ function ClientsCRMView({
                     <p className="text-[11px] text-ink/40 italic">Sin notas para este cliente.</p>
                   )}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => onOpenCustomer?.({
+                    name: c.name,
+                    phone: c.phone,
+                    count: c.totalBookings,
+                    visits: c.attended,
+                    total: c.totalSpent,
+                    lastDate: c.lastDate,
+                  })}
+                  className="btn-press flex items-center justify-center gap-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                >
+                  Ver historial completo de turnos ↗
+                </button>
               </div>
             );
           })}

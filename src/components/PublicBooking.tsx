@@ -13,6 +13,7 @@ import {
 import { normalizeArgentinaPhone, cleanPhoneDigits, createWhatsAppUrl } from "../lib/phone";
 import { sound } from "../lib/audio";
 import { sendBookingConfirmationEmail } from "../lib/email";
+import "../styles/booking.css";
 
 /* ---------- helpers .ics / Google Calendar ---------- */
 function toLocalStamp(dt: Date) {

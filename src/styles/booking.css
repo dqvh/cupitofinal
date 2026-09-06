@@ -1,0 +1,345 @@
+﻿/* Estilos modernos de Reserva Pública - Cupito */
+.booking-page {
+  min-height: 100vh;
+  background: linear-gradient(150deg, #edf8f2, #f9fbf9 60%, #eef6f1);
+  padding: 35px 20px;
+  color: #244432;
+  font-family: inherit;
+}
+
+.booking-nav {
+  max-width: 1020px;
+  margin: 0 auto 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.booking-shell {
+  max-width: 960px;
+  margin: auto;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  background: white;
+  border: 1px solid #dcebe2;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 20px 70px rgba(18, 92, 48, 0.07);
+}
+
+.business-card {
+  padding: 35px;
+  background: #f7faf8;
+  border-right: 1px solid #e4eee7;
+  display: flex;
+  flex-direction: column;
+}
+
+.business-card .large-logo {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  background: #e2f2e7;
+  color: var(--business-accent, #16845f);
+  border-radius: 20px;
+  margin-bottom: 22px;
+}
+
+.business-card .large-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 18px;
+}
+
+.business-card h1 {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+  color: #1e4530;
+  margin-bottom: 10px;
+}
+
+.business-card p {
+  font-size: 14px;
+  color: #6c8475;
+  line-height: 1.8;
+}
+
+.business-info {
+  margin-top: 28px;
+  display: grid;
+  gap: 18px;
+  font-size: 13px;
+  color: #557965;
+}
+
+.business-info > div {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+}
+
+.booking-form {
+  padding: 38px 40px;
+}
+
+.booking-form h2 {
+  font-size: 23px;
+  font-weight: 650;
+  color: #1f4732;
+  margin: 12px 0 8px;
+  letter-spacing: -0.5px;
+}
+
+.booking-form > p {
+  color: #6e8477;
+  font-size: 14px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.steps {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.steps span {
+  height: 5px;
+  flex: 1;
+  background: #e6efe8;
+  border-radius: 10px;
+  transition: background 0.3s;
+}
+
+.steps span.on {
+  background: var(--business-accent, #16845f);
+}
+
+.choice {
+  padding: 18px 20px;
+  border: 1px solid #e1eee5;
+  border-radius: 14px;
+  text-align: left;
+  background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.choice:hover {
+  border-color: #aed9be;
+  background: #f9fcf9;
+}
+
+.choice.selected {
+  border-color: var(--business-accent, #16845f);
+  background: #f3faf5;
+  box-shadow: 0 0 0 1px var(--business-accent, #16845f);
+}
+
+.choice b {
+  font-weight: 600;
+  font-size: 15px;
+  color: #244b34;
+}
+
+.choice small {
+  display: block;
+  color: #748c7c;
+  font-size: 13px;
+  margin-top: 5px;
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.slot {
+  border: 1px solid #dce8df;
+  border-radius: 10px;
+  background: white;
+  padding: 12px 8px;
+  color: #4b7058;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.slot:hover:not(:disabled) {
+  background: #edf7f1;
+  border-color: #8fcca5;
+}
+
+.slot.selected {
+  background: var(--business-accent, #16845f);
+  color: white !important;
+  border-color: var(--business-accent, #16845f);
+  box-shadow: 0 4px 12px rgba(22, 132, 95, 0.25);
+}
+
+.slot:disabled {
+  opacity: 0.35;
+  background: #f7faf8;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.booking-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.booking-products {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.booking-product {
+  border: 1px solid #e2ebe4;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fcfdfc;
+}
+
+.booking-product > img,
+.booking-product > .product-thumb {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.product-thumb {
+  display: grid;
+  place-items: center;
+  background: #eef6f0;
+  color: #558766;
+}
+
+.quantity-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.quantity-control button {
+  background: #f0f6f2;
+  border: 1px solid #d6e5dc;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: #356e48;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.quantity-control button:hover:not(:disabled) {
+  background: #e1efe5;
+}
+
+.quantity-control button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.booking-summary-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 14px;
+  padding: 8px 0;
+  color: #5b7967;
+}
+
+.booking-summary-line b {
+  color: #234832;
+}
+
+.live-availability {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: #4b7359;
+  margin: 14px 0;
+}
+
+.live-availability i {
+  width: 7px;
+  height: 7px;
+  background: #25a468;
+  border-radius: 50%;
+  animation: lp-live 2s infinite;
+}
+
+.success {
+  padding: 30px 10px;
+  text-align: center;
+}
+
+.success svg {
+  margin: 0 auto 16px;
+  color: #16845f;
+}
+
+.success h2 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1d442f;
+}
+
+.success p {
+  line-height: 1.8;
+  color: #637e6e;
+  margin: 18px 0 24px;
+  font-size: 15px;
+}
+
+@media (max-width: 800px) {
+  .booking-shell {
+    grid-template-columns: 1fr;
+    border-radius: 18px;
+  }
+  .business-card {
+    padding: 26px 22px;
+    border-right: 0;
+    border-bottom: 1px solid #e4eee7;
+  }
+  .booking-form {
+    padding: 26px 20px;
+  }
+  .slots {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .booking-page {
+    padding: 16px 10px;
+  }
+  .slots {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
