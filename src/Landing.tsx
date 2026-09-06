@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
   ArrowRight,
@@ -29,6 +29,7 @@ import {
   Pause,
 } from "lucide-react";
 import LandingTour from "./components/LandingTour";
+import { useStore } from "./lib/store";
 import {
   Accordion,
   AccordionItem,
@@ -97,6 +98,7 @@ const plans = [
 ];
 
 export default function Landing() {
+  const { user } = useStore();
   const [mobile, setMobile] = useState(false);
   const [tick, setTick] = useState(0);
   const [running, setRunning] = useState(true);
@@ -198,18 +200,46 @@ export default function Landing() {
           <a href="#precios" onClick={() => setMobile(false)}>
             Precios
           </a>
+          {user && (
+            <a
+              href="#/app"
+              onClick={(e) => {
+                e.preventDefault();
+                setMobile(false);
+                window.location.hash = "#/app";
+              }}
+              className="font-bold text-lime"
+            >
+              Mi panel →
+            </a>
+          )}
         </nav>
         <div className="lp-header-actions">
-          <a className="lp-login" href="#/login" onClick={goToLogin}>
-            Ingresar
-          </a>
-          <a
-            className="lp-button lime compact"
-            href="#/registro"
-            onClick={goToRegister()}
-          >
-            Probar gratis <ArrowUpRight size={15} />
-          </a>
+          {user ? (
+            <a
+              className="lp-button lime compact"
+              href="#/app"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.hash = "#/app";
+              }}
+            >
+              Mi panel <ArrowRight size={15} />
+            </a>
+          ) : (
+            <>
+              <a className="lp-login" href="#/login" onClick={goToLogin}>
+                Ingresar
+              </a>
+              <a
+                className="lp-button lime compact"
+                href="#/registro"
+                onClick={goToRegister()}
+              >
+                Probar gratis <ArrowUpRight size={15} />
+              </a>
+            </>
+          )}
           <button
             className="lp-menu"
             aria-controls="landing-navigation"
@@ -774,9 +804,21 @@ export default function Landing() {
             <a href="#producto">Producto</a>
             <a href="#precios">Precios</a>
             <a href="#como-funciona">Cómo funciona</a>
-            <a href="#/login" onClick={goToLogin}>
-              Ingresar
-            </a>
+            {user ? (
+              <a
+                href="#/app"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.location.hash = "#/app";
+                }}
+              >
+                Mi panel
+              </a>
+            ) : (
+              <a href="#/login" onClick={goToLogin}>
+                Ingresar
+              </a>
+            )}
             <button
               type="button"
               onClick={() => setLegalDoc(TERMS_DOC)}

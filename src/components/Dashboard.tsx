@@ -86,6 +86,7 @@ import {
 import "../styles/dashboard.css";
 import { AgendaWeek } from "./AgendaWeek";
 import { CustomerHistoryModal, type CustomerStats } from "./CustomerCRM";
+import { Sun, Download } from "lucide-react";
 
 type View = "hoy" | "reservas" | "clientes" | "lista" | "stats" | "servicios" | "equipo" | "tienda" | "promos" | "pagina" | "suscripcion" | "ajustes";
 
@@ -157,6 +158,7 @@ export default function Dashboard() {
   const [weekStart, setWeekStart] = useState(0);
   const [showNew, setShowNew] = useState(false);
   const [rescheduling, setRescheduling] = useState<Booking | null>(null);
+  const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [prefill, setPrefill] = useState<{ client: string; phone: string; serviceId?: string; waitlistId?: string; time?: string; proId?: string } | null>(null);
   const [serviceModal, setServiceModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [filter, setFilter] = useState<"todas" | BookingStatus>("todas");
@@ -411,12 +413,17 @@ export default function Dashboard() {
         {/* ---------- sidebar ---------- */}
         <aside className="sticky top-0 z-40 hidden h-screen w-64 shrink-0 flex-col bg-white text-slate-800 border-r border-slate-200/90 shadow-xs lg:flex">
           <div className="flex flex-col gap-3 px-5 pb-5 pt-6 border-b border-slate-100">
-            <a href="#/" className="flex items-center gap-2.5">
-              <img src="/cupito-logo.png" width="34" height="34" alt="" className="rounded-xl shadow-xs" />
+            <button
+              type="button"
+              onClick={() => setView("hoy")}
+              className="flex items-center gap-2.5 text-left focus:outline-hidden group"
+              title="Ir a la agenda del día"
+            >
+              <img src="/cupito-logo.png" width="34" height="34" alt="" className="rounded-xl shadow-xs transition-transform group-hover:scale-105" />
               <span className="font-display text-xl font-extrabold tracking-tight text-slate-900 leading-none">
                 cupito<span className="text-emerald-600">.</span>
               </span>
-            </a>
+            </button>
 
             {/* Workspace selector */}
             <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/90 bg-slate-50/80 p-2 text-left">
@@ -553,10 +560,15 @@ export default function Dashboard() {
               </button>
 
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                <a href="#/" className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setView("hoy")}
+                  className="flex items-center gap-1.5 shrink-0 text-left focus:outline-hidden"
+                  title="Ir a la agenda del día"
+                >
                   <img src="/cupito-logo.png" width="24" height="24" alt="" className="rounded-md" />
                   <span className="font-display text-base font-bold tracking-tight text-slate-900">cupito<span className="text-emerald-600">.</span></span>
-                </a>
+                </button>
                 <span className="text-slate-300">/</span>
                 <span className="truncate text-xs font-bold text-emerald-800">
                   {viewTitle[0]}
@@ -705,10 +717,24 @@ export default function Dashboard() {
           <main className="mx-auto max-w-5xl px-5 py-8 pb-28 sm:px-8">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-6">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                    <button
+                      type="button"
+                      onClick={() => setView("hoy")}
+                      className="hover:text-emerald-700 font-bold transition-colors cursor-pointer"
+                      title="Ir a la agenda de hoy"
+                    >
+                      Cupito
+                    </button>
+                    <span className="text-slate-300">/</span>
+                    <span className="text-slate-500">{sectionOf(view)}</span>
+                    <span className="text-slate-300">/</span>
+                    <span className="text-emerald-800 font-bold">{viewTitle[0]}</span>
+                  </div>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-xs">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Panel · {sectionOf(view)}
+                    En vivo
                   </span>
                   <CopyButton
                     text={`https://cupito.app/${user.slug}`}
@@ -840,6 +866,43 @@ export default function Dashboard() {
 
             {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} onOpenOnboarding={() => setShowOnboarding(true)} />}
 
+            {view === "hoy" && (
+              <div className="welcome mt-6 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-xs border border-emerald-100">
+                    <Sun className="h-6 w-6" />
+                  </span>
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-emerald-950">
+                      ¡Hola, {user.name.split(" ")[0]}! Tu día, bajo control.
+                    </h2>
+                    <p className="text-sm text-emerald-800/90 mt-0.5">
+                      Tenés <b>{data.bookings.filter((b) => b.date === today && b.status !== "cancelada").length} turnos</b> para hoy
+                      {data.bookings.filter((b) => b.date === today && b.status === "pendiente").length > 0
+                        ? ` y ${data.bookings.filter((b) => b.date === today && b.status === "pendiente").length} pendiente${data.bookings.filter((b) => b.date === today && b.status === "pendiente").length === 1 ? "" : "s"} de confirmar`
+                        : " · Todo listo para recibir a tus clientes"}.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setPrefill(null); setShowNew(true); }}
+                    className="btn primary flex items-center gap-1.5"
+                  >
+                    <IconPlus className="h-4 w-4" /> Nuevo turno
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setView("reservas")}
+                    className="btn flex items-center gap-1.5 bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-50"
+                  >
+                    Ver agenda completa →
+                  </button>
+                </div>
+              </div>
+            )}
+
             {pendingClaims > 0 && (
               <div className="pop-in mt-6 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 shadow-xs">
                 <IconBell className="h-5 w-5 shrink-0 text-rose-600" />
@@ -964,6 +1027,7 @@ export default function Dashboard() {
                             onVerify={(id) => { store.markDepositPaid(id, "transferencia"); sound.playSuccess(); toast("Seña acreditada ✓"); }}
                             onReject={(id) => { store.rejectDeposit(id); toast("Comprobante rechazado. El cliente puede reenviarlo.", "warn"); }}
                             onReschedule={(b) => setRescheduling(b)}
+                            onOpenDetail={(b) => setDetailBooking(b)}
                           />
                         ))}
                       </div>
@@ -1212,6 +1276,7 @@ export default function Dashboard() {
                                     toast("Comprobante rechazado.", "warn");
                                   }}
                                   onReschedule={(b) => setRescheduling(b)}
+                                  onOpenDetail={(b) => setDetailBooking(b)}
                                 />
                               ))}
                             </div>
@@ -1538,6 +1603,56 @@ export default function Dashboard() {
               toast(`Turno de ${rescheduling.client} reprogramado para el ${fmtLong(newDate)} a las ${newTime} hs 🎉`);
               setRescheduling(null);
             }
+          }}
+        />
+      )}
+      {detailBooking && (
+        <BookingDetailModal
+          b={detailBooking}
+          service={serviceOf(detailBooking.serviceId)}
+          pro={data.professionals.find((p) => p.id === detailBooking.proId)}
+          products={data.products}
+          businessName={user.business}
+          businessAddress={data.settings.address}
+          onClose={() => setDetailBooking(null)}
+          onStatus={(id, s) => {
+            setStatus(id, s);
+            if (s === "atendida") {
+              const r = requestReview(id);
+              toast(
+                r === "sent"
+                  ? "Turno atendido · link de reseña enviado por email 💌"
+                  : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp 📲",
+                r === "sent" ? "ok" : "warn"
+              );
+            } else if (s === "ausente") {
+              toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn");
+            } else if (s === "cancelada") {
+              toast("Turno cancelado. El hueco quedó libre.");
+            } else {
+              toast("Turno confirmado.");
+            }
+            setDetailBooking((prev) => (prev && prev.id === id ? { ...prev, status: s } : prev));
+          }}
+          onDelete={(id) => {
+            removeBooking(id);
+            setDetailBooking(null);
+            toast("Reserva eliminada.", "warn");
+          }}
+          onVerify={(id) => {
+            store.markDepositPaid(id, "transferencia");
+            sound.playSuccess();
+            toast("Seña acreditada ✓");
+            setDetailBooking((prev) => (prev && prev.id === id ? { ...prev, paidDeposit: true } : prev));
+          }}
+          onReject={(id) => {
+            store.rejectDeposit(id);
+            toast("Comprobante rechazado. El cliente puede reenviarlo.", "warn");
+            setDetailBooking((prev) => (prev && prev.id === id ? { ...prev, depositClaim: undefined } : prev));
+          }}
+          onReschedule={(b) => {
+            setRescheduling(b);
+            setDetailBooking(null);
           }}
         />
       )}
@@ -2036,7 +2151,74 @@ function googleCalUrl(opts: { title: string; date: string; time: string; dur: nu
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(opts.title)}&dates=${fmt(startMs)}/${fmt(endMs)}&details=${encodeURIComponent(opts.details)}`;
 }
 
-function BookingRow({ b, service, pro, products, businessName, onStatus, onDelete, onVerify, onReject, onReschedule }: {
+function downloadBookingCalendar(
+  booking: { id: string; date: string; time: string; duration?: number; service: string; name: string; professional?: string; status?: string },
+  business: { name: string; address?: string }
+) {
+  const escapeText = (t: string) => t.replace(/\\/g, "\\\\").replace(/\r\n|\r|\n/g, "\\n").replace(/;/g, "\\;").replace(/,/g, "\\,");
+  const foldLine = (line: string) => {
+    const encoder = new TextEncoder();
+    let bytes = 0, output = "";
+    for (const ch of line) {
+      const size = encoder.encode(ch).length;
+      if (bytes + size > 75) {
+        output += "\r\n ";
+        bytes = 1;
+      }
+      output += ch;
+      bytes += size;
+    }
+    return output;
+  };
+  const [y, m, d] = booking.date.split("-").map(Number);
+  const [hh, mm] = (booking.time || "10:00").split(":").map(Number);
+  const start = new Date(Date.UTC(y, m - 1, d, hh + 3, mm, 0));
+  const duration = booking.duration || 45;
+  const stamp = (date: Date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const now = new Date();
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Cupito//Agenda//ES",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${escapeText(booking.id)}@cupito.app`,
+    `DTSTAMP:${stamp(now)}`,
+    `DTSTART:${stamp(start)}`,
+    `DTEND:${stamp(new Date(start.getTime() + duration * 60000))}`,
+    `SUMMARY:${escapeText(booking.service + " · " + business.name)}`,
+    `DESCRIPTION:${escapeText("Cliente: " + booking.name + "\nProfesional: " + (booking.professional || "") + "\nTurno reservado en Cupito.")}`,
+    `LOCATION:${escapeText(business.address || "")}`,
+    `STATUS:${booking.status === "cancelada" ? "CANCELLED" : booking.status === "pendiente" ? "TENTATIVE" : "CONFIRMED"}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+  const icsContent = lines.map(foldLine).join("\r\n") + "\r\n";
+  const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `cupito-turno-${booking.date}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function BookingRow({
+  b,
+  service,
+  pro,
+  products,
+  businessName,
+  onStatus,
+  onDelete,
+  onVerify,
+  onReject,
+  onReschedule,
+  onOpenDetail,
+}: {
   b: Booking;
   service?: Service;
   pro?: { id: string; name: string; color: string };
@@ -2047,94 +2229,522 @@ function BookingRow({ b, service, pro, products, businessName, onStatus, onDelet
   onVerify: (id: string) => void;
   onReject: (id: string) => void;
   onReschedule: (b: Booking) => void;
+  onOpenDetail: (b: Booking) => void;
 }) {
-  const st = STATUS[b.status];
   const claimPending = !!b.depositClaim && !b.paidDeposit && b.status !== "cancelada";
   const cancelled = b.status === "cancelada";
+
+  const statusConfig: Record<BookingStatus, { label: string; bg: string; text: string; dot: string }> = {
+    pendiente: { label: "Por confirmar", bg: "bg-amber-50 border-amber-200", text: "text-amber-800", dot: "bg-amber-500" },
+    confirmada: { label: "Confirmada", bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-800", dot: "bg-emerald-500" },
+    atendida: { label: "Atendida", bg: "bg-slate-100 border-slate-200", text: "text-slate-700", dot: "bg-slate-500" },
+    cancelada: { label: "Cancelada", bg: "bg-rose-50 border-rose-200", text: "text-rose-700", dot: "bg-rose-500" },
+    ausente: { label: "No vino", bg: "bg-orange-50 border-orange-200", text: "text-orange-800", dot: "bg-orange-500" },
+  };
+  const sc = statusConfig[b.status] || statusConfig.pendiente;
+
   return (
-    <div className={`group flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:border-slate-300 hover:shadow-sm ${cancelled ? "opacity-60 bg-slate-50/50" : ""}`}>
-      <span className={`flex h-13 w-15 flex-col items-center justify-center rounded-xl font-display ${cancelled ? "bg-slate-100 text-slate-400" : "bg-slate-900 text-white shadow-xs"}`}>
-        <span className="text-base font-extrabold leading-none">{b.time}</span>
-        <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider opacity-70">{service?.duration ?? 30}′</span>
-      </span>
-      <span className="min-w-36 flex-1">
-        <span className={`block font-display text-base font-bold text-slate-900 ${cancelled ? "line-through text-slate-400" : ""}`}>{b.client}</span>
-        <span className="block text-xs font-medium text-slate-500">
-          {service ? `${service.name} · ${fmtMoney(service.price)}` : "Servicio eliminado"}
-          {pro ? (
-            <span className="inline-flex items-center gap-1 ml-1.5 font-semibold text-slate-700">
-              <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: pro.color || "#10b981" }} />
-              con {pro.name}
-            </span>
-          ) : ""}
-        </span>
-        <span className="block text-xs text-slate-400 mt-0.5">{b.phone || "sin contacto"}</span>
-        {claimPending && <span className="block text-xs font-bold text-rose-600 mt-0.5">Comprobante seña: {b.depositClaim!.txId}</span>}
-        {b.items && b.items.length > 0 && (
-          <span className="mt-1.5 flex flex-wrap gap-1">
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 text-[10px] font-bold text-emerald-800"><IconBag className="h-3 w-3" /> Tienda</span>
-            {b.items.map((it) => { const p = products.find((x) => x.id === it.productId); return <span key={it.productId} className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">{it.qty}× {p?.name ?? "Producto"}</span>; })}
-          </span>
-        )}
-      </span>
-      <span className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${b.source === "online" ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-slate-100 border border-slate-200 text-slate-500"}`}>{b.source === "online" ? "● Online" : "Manual"}</span>
-        {b.reviewRequested && <span className="rounded-full bg-sky-50 border border-sky-200 px-2.5 py-0.5 text-[10px] font-bold text-sky-700">💌 Reseña</span>}
-        {claimPending && <span className="rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[10px] font-bold text-rose-700 animate-pulse">💸 Seña a verificar</span>}
-        {b.paidDeposit && <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">✓ Seña cobrada</span>}
-        <span className={`rounded-full px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider ${st.cls}`}>{st.label}</span>
-      </span>
-      <span className="flex max-w-full flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => onReschedule(b)}
-          title="Reprogramar fecha u horario"
-          className="btn-press flex h-8 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:border-slate-300"
+    <div
+      onClick={() => onOpenDetail(b)}
+      className={`group relative flex flex-wrap items-center justify-between gap-3 sm:gap-4 rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs transition-all hover:border-slate-300 hover:shadow-md cursor-pointer ${
+        cancelled ? "opacity-60 bg-slate-50/60" : ""
+      }`}
+    >
+      {/* Left info */}
+      <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+        <div
+          className={`flex h-12 w-14 sm:h-13 sm:w-16 shrink-0 flex-col items-center justify-center rounded-xl font-display transition-colors ${
+            cancelled
+              ? "bg-slate-100 text-slate-400"
+              : b.status === "confirmada"
+              ? "bg-emerald-700 text-white shadow-xs"
+              : b.status === "pendiente"
+              ? "bg-slate-900 text-white shadow-xs"
+              : "bg-slate-100 text-slate-700"
+          }`}
         >
-          <IconCalendar className="h-3.5 w-3.5 text-slate-500" />
-          <span className="hidden sm:inline">Reprogramar</span>
-        </button>
+          <span className="text-sm sm:text-base font-extrabold leading-none">{b.time}</span>
+          <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider opacity-80">{service?.duration ?? 30}′</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className={`font-display text-sm sm:text-base font-bold text-slate-900 truncate ${cancelled ? "line-through text-slate-400" : ""}`}>
+              {b.client}
+            </span>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.2 text-[10px] font-bold ${sc.bg} ${sc.text}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${sc.dot}`} />
+              {sc.label}
+            </span>
+            {b.source === "online" && (
+              <span className="hidden xs:inline-flex items-center rounded-full bg-slate-100 px-2 py-0.2 text-[9px] font-semibold text-slate-600">
+                Online
+              </span>
+            )}
+            {claimPending && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-200 px-2 py-0.2 text-[10px] font-bold text-rose-700 animate-pulse">
+                Seña a verificar
+              </span>
+            )}
+            {b.paidDeposit && (
+              <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.2 text-[10px] font-bold text-emerald-700">
+                ✓ Seña cobrada
+              </span>
+            )}
+          </div>
+
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500">
+            <span className="font-semibold text-slate-700">
+              {service ? service.name : "Servicio"}
+            </span>
+            {service && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="font-bold text-emerald-800">{fmtMoney(service.price)}</span>
+              </>
+            )}
+            {pro && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: pro.color || "#10b981" }} />
+                  {pro.name}
+                </span>
+              </>
+            )}
+            {b.phone && (
+              <span className="text-slate-400 hidden sm:inline">
+                · {b.phone}
+              </span>
+            )}
+            {b.items && b.items.length > 0 && (
+              <span className="text-emerald-700 font-semibold inline-flex items-center gap-1">
+                · <IconBag className="h-3 w-3" /> +{b.items.length} producto{b.items.length > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Right actions */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        {claimPending ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onVerify(b.id)}
+              className="btn-press rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+            >
+              Acreditar
+            </button>
+            <button
+              type="button"
+              onClick={() => onReject(b.id)}
+              className="btn-press rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+            >
+              Rechazar
+            </button>
+          </>
+        ) : b.status === "pendiente" ? (
+          <button
+            type="button"
+            onClick={() => onStatus(b.id, "confirmada")}
+            className="btn-press rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800"
+          >
+            Confirmar
+          </button>
+        ) : b.status === "confirmada" ? (
+          <button
+            type="button"
+            onClick={() => onStatus(b.id, "atendida")}
+            className="btn-press rounded-full bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+          >
+            Atendida ✓
+          </button>
+        ) : null}
+
         {b.phone && (
           <a
-            href={createWhatsAppUrl(b.phone, `Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName || "nuestro negocio"} para recordarte tu turno de ${service?.name || "atención"} el ${fmtLong(b.date)} a las ${b.time} hs. ¡Te esperamos!`)}
+            href={createWhatsAppUrl(
+              b.phone,
+              `Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName || "nuestro negocio"} para recordarte tu turno de ${
+                service?.name || "atención"
+              } el ${fmtLong(b.date)} a las ${b.time} hs. ¡Te esperamos!`
+            )}
             target="_blank"
             rel="noreferrer"
             title="Enviar recordatorio por WhatsApp"
-            className="btn-press flex h-8 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-800 shadow-xs transition-all hover:bg-emerald-100"
+            className="btn-press flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-xs hover:bg-emerald-100"
           >
-            <IconWhatsApp className="h-3.5 w-3.5 text-emerald-600" />
-            <span className="hidden sm:inline">WhatsApp</span>
+            <IconWhatsApp className="h-4 w-4 text-emerald-600" />
           </a>
         )}
-        <a
-          href={googleCalUrl({
-            title: `${service?.name || "Turno"} - ${b.client}`,
-            date: b.date,
-            time: b.time,
-            dur: service?.duration ?? 45,
-            details: `Cliente: ${b.client}\nTeléfono: ${b.phone || "Sin teléfono"}\nServicio: ${service?.name || "Turno"}\nNegocio: ${businessName || "Cupito"}`,
-          })}
-          target="_blank"
-          rel="noreferrer"
-          title="Guardar este turno en Google Calendar"
-          className="btn-press flex h-8 items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 text-xs font-semibold text-sky-800 shadow-xs transition-all hover:bg-sky-100"
+
+        <button
+          type="button"
+          onClick={() => onOpenDetail(b)}
+          title="Ver detalles completos del turno"
+          className="btn-press flex h-8 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300"
         >
-          <IconCalendar className="h-3.5 w-3.5 text-sky-600" />
-          <span className="hidden sm:inline">Cal</span>
-        </a>
-        {claimPending && (
-          <>
-            <button onClick={() => onVerify(b.id)} className="btn-press rounded-full bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-700">Acreditar</button>
-            <button onClick={() => onReject(b.id)} className="btn-press rounded-full border border-rose-300 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100">Rechazar</button>
-          </>
-        )}
-        {b.status === "pendiente" && !claimPending && <button onClick={() => onStatus(b.id, "confirmada")} className="btn-press rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-slate-800">Confirmar</button>}
-        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "atendida")} className="btn-press rounded-full bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-emerald-700">Atendida ✓</button>}
-        {b.status === "confirmada" && <button onClick={() => onStatus(b.id, "ausente")} className="btn-press rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100">No vino</button>}
-        {(b.status === "atendida" || b.status === "cancelada" || b.status === "ausente") && <button onClick={() => onStatus(b.id, "pendiente")} className="btn-press rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-600 shadow-xs transition-colors hover:bg-slate-50 hover:text-slate-900">Restaurar</button>}
-        {!cancelled && b.status !== "ausente" && <button onClick={() => onStatus(b.id, "cancelada")} className="btn-press rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-xs transition-colors hover:bg-rose-50">Cancelar</button>}
-        <button onClick={() => onDelete(b.id)} aria-label="Eliminar reserva" className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"><IconTrash className="h-4 w-4" /></button>
-      </span>
+          <span>Detalles</span>
+          <span className="text-slate-400 text-[10px]">→</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BookingDetailModal({
+  b,
+  service,
+  pro,
+  products,
+  businessName,
+  businessAddress,
+  onClose,
+  onStatus,
+  onDelete,
+  onVerify,
+  onReject,
+  onReschedule,
+}: {
+  b: Booking;
+  service?: Service;
+  pro?: { id: string; name: string; color: string };
+  products: Product[];
+  businessName?: string;
+  businessAddress?: string;
+  onClose: () => void;
+  onStatus: (id: string, s: BookingStatus) => void;
+  onDelete: (id: string) => void;
+  onVerify: (id: string) => void;
+  onReject: (id: string) => void;
+  onReschedule: (b: Booking) => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const claimPending = !!b.depositClaim && !b.paidDeposit && b.status !== "cancelada";
+  const cancelled = b.status === "cancelada";
+
+  const statusConfig: Record<BookingStatus, { label: string; bg: string; text: string }> = {
+    pendiente: { label: "Por confirmar", bg: "bg-amber-50 border-amber-200", text: "text-amber-800" },
+    confirmada: { label: "Confirmada", bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-800" },
+    atendida: { label: "Atendida", bg: "bg-slate-100 border-slate-200", text: "text-slate-700" },
+    cancelada: { label: "Cancelada", bg: "bg-rose-50 border-rose-200", text: "text-rose-700" },
+    ausente: { label: "No vino / Ausente", bg: "bg-orange-50 border-orange-200", text: "text-orange-800" },
+  };
+  const sc = statusConfig[b.status] || statusConfig.pendiente;
+
+  const initials =
+    b.client
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0].toUpperCase())
+      .join("") || "CL";
+
+  return (
+    <div
+      className="fixed inset-0 z-[85] flex items-end justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-xs sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="pop-in max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-800 font-display text-base font-bold shadow-xs">
+              {initials}
+            </span>
+            <div>
+              <h3 className="font-display text-lg sm:text-xl font-extrabold text-slate-900 leading-tight">
+                {b.client}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Turno del {fmtLong(b.date)} a las <strong>{b.time} hs</strong>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Status bar */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-3 border border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">Estado:</span>
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${sc.bg} ${sc.text}`}>
+              {sc.label}
+            </span>
+          </div>
+          <span className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+            {b.source === "online" ? "🌐 Reserva Online" : "📝 Reserva Manual"}
+          </span>
+        </div>
+
+        {/* Info grid */}
+        <div className="mt-4 space-y-3 text-sm">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+              <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Servicio</span>
+              <span className="block font-bold text-slate-900 mt-0.5">{service?.name || "Servicio"}</span>
+              <span className="block text-xs font-medium text-emerald-700 mt-0.5">
+                {service ? fmtMoney(service.price) : "-"} · {service?.duration ?? 30} min
+              </span>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+              <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Profesional</span>
+              {pro ? (
+                <div className="flex items-center gap-1.5 mt-1 font-bold text-slate-900">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: pro.color || "#10b981" }} />
+                  <span>{pro.name}</span>
+                </div>
+              ) : (
+                <span className="block text-xs text-slate-500 mt-1">General</span>
+              )}
+            </div>
+          </div>
+
+          {/* Contact details */}
+          <div className="rounded-xl border border-slate-200/80 bg-white p-3 space-y-2">
+            <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Contacto del cliente</span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-slate-800">
+                {b.phone ? formatArgentinaPhone(b.phone) : "Sin teléfono registrado"}
+              </span>
+              {b.phone && (
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`tel:${cleanPhoneDigits(b.phone)}`}
+                    className="btn-press inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs"
+                  >
+                    📞 Llamar
+                  </a>
+                  <a
+                    href={createWhatsAppUrl(
+                      b.phone,
+                      `Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName || "nuestro negocio"} respecto a tu turno de ${
+                        service?.name || "atención"
+                      } el ${fmtLong(b.date)} a las ${b.time} hs.`
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn-press inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-100 shadow-xs"
+                  >
+                    <IconWhatsApp className="h-3.5 w-3.5 text-emerald-600" /> WhatsApp
+                  </a>
+                </div>
+              )}
+            </div>
+            {b.email && (
+              <p className="text-xs text-slate-500">
+                Email: <span className="font-medium text-slate-700">{b.email}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Seña info */}
+          {claimPending && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-rose-900">💸 Comprobante de seña por verificar</span>
+                <span className="text-xs font-mono font-bold text-rose-700">TX: {b.depositClaim?.txId}</span>
+              </div>
+              <p className="text-xs text-rose-800">
+                Revisá en tu banco o billetera si ingresó el pago. Si entró, hacé clic en Acreditar para confirmar la seña.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { onVerify(b.id); }}
+                  className="btn-press rounded-full bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                >
+                  ✓ Acreditar seña
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { onReject(b.id); }}
+                  className="btn-press rounded-full border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50"
+                >
+                  Rechazar comprobante
+                </button>
+              </div>
+            </div>
+          )}
+
+          {b.paidDeposit && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-900">✓ Seña cobrada y acreditada</span>
+              <span className="text-xs font-bold text-emerald-700">Pago registrado</span>
+            </div>
+          )}
+
+          {b.items && b.items.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-1.5">
+              <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Productos comprados</span>
+              <div className="space-y-1">
+                {b.items.map((it) => {
+                  const p = products.find((x) => x.id === it.productId);
+                  return (
+                    <div key={it.productId} className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-800">{it.qty}× {p?.name ?? "Producto"}</span>
+                      <span className="font-bold text-slate-600">{p ? fmtMoney(p.price * it.qty) : "-"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons: Calendar & Tools */}
+        <div className="mt-5 border-t border-slate-100 pt-4 space-y-2">
+          <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">Herramientas</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { onReschedule(b); onClose(); }}
+              className="btn-press flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 px-3 text-xs font-bold text-slate-800 shadow-xs hover:bg-slate-50 hover:border-slate-300"
+            >
+              <IconCalendar className="h-4 w-4 text-emerald-600" />
+              Reprogramar turno
+            </button>
+            <a
+              href={googleCalUrl({
+                title: `${service?.name || "Turno"} - ${b.client}`,
+                date: b.date,
+                time: b.time,
+                dur: service?.duration ?? 45,
+                details: `Cliente: ${b.client}\nTeléfono: ${b.phone || "Sin teléfono"}\nServicio: ${service?.name || "Turno"}\nNegocio: ${businessName || "Cupito"}`,
+              })}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-press inline-flex items-center justify-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 py-2 px-3 text-xs font-bold text-sky-800 hover:bg-sky-100 shadow-xs"
+            >
+              Google Cal ↗
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  downloadBookingCalendar(
+                    {
+                      id: b.id,
+                      date: b.date,
+                      time: b.time,
+                      duration: service?.duration || 45,
+                      service: service?.name || "Turno",
+                      name: b.client,
+                      professional: pro?.name,
+                      status: b.status,
+                    },
+                    { name: businessName || "Cupito", address: businessAddress }
+                  );
+                } catch (err: any) {
+                  console.error(err);
+                }
+              }}
+              className="btn-press inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-xs"
+              title="Descargar archivo .ics para Apple Calendar u Outlook"
+            >
+              <Download className="h-3.5 w-3.5 text-slate-500" />
+              .ics
+            </button>
+          </div>
+        </div>
+
+        {/* Change status actions */}
+        <div className="mt-4 border-t border-slate-100 pt-4 space-y-2">
+          <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Cambiar estado</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {b.status !== "confirmada" && !claimPending && (
+              <button
+                type="button"
+                onClick={() => { onStatus(b.id, "confirmada"); }}
+                className="btn-press rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-slate-800"
+              >
+                Confirmar turno
+              </button>
+            )}
+            {b.status !== "atendida" && b.status !== "cancelada" && (
+              <button
+                type="button"
+                onClick={() => { onStatus(b.id, "atendida"); }}
+                className="btn-press rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+              >
+                Marcar atendida ✓
+              </button>
+            )}
+            {b.status === "confirmada" && (
+              <button
+                type="button"
+                onClick={() => { onStatus(b.id, "ausente"); }}
+                className="btn-press rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                No vino (ausente)
+              </button>
+            )}
+            {(b.status === "atendida" || b.status === "cancelada" || b.status === "ausente") && (
+              <button
+                type="button"
+                onClick={() => { onStatus(b.id, "pendiente"); }}
+                className="btn-press rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Restaurar a pendiente
+              </button>
+            )}
+            {!cancelled && (
+              <button
+                type="button"
+                onClick={() => { onStatus(b.id, "cancelada"); }}
+                className="btn-press rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+              >
+                Cancelar turno
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Delete confirmation */}
+        <div className="mt-5 border-t border-slate-100 pt-3 flex items-center justify-between text-xs">
+          {confirmDelete ? (
+            <div className="flex items-center gap-2 w-full justify-between bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+              <span className="font-bold text-rose-900">¿Eliminar permanentemente?</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="rounded-lg px-2.5 py-1 text-slate-600 hover:bg-slate-200/60 font-semibold"
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { onDelete(b.id); }}
+                  className="rounded-lg bg-rose-600 px-3 py-1 font-bold text-white hover:bg-rose-700"
+                >
+                  Sí, eliminar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="text-slate-400 hover:text-rose-600 text-xs font-medium flex items-center gap-1 ml-auto"
+            >
+              <IconTrash className="h-3.5 w-3.5" /> Eliminar reserva de la agenda
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -5058,6 +5668,25 @@ function HoursCard({
     <div className="card p-6">
       <h3 className="font-display text-lg font-extrabold text-ink">Días y horarios de atención</h3>
       <p className="mt-1 text-sm text-inkmute">Los turnos disponibles se generan solos según esto. Podés agregar un corte al mediodía.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            const mon = hours[1];
+            const next = hours.map((h, idx) => {
+              if (idx >= 1 && idx <= 5) {
+                return { ...h, open: mon.open, from: mon.from, to: mon.to, from2: mon.from2, to2: mon.to2 };
+              }
+              return h;
+            });
+            onChange(next);
+            toast("Horario del lunes aplicado a días hábiles (Lun-Vie) ✓");
+          }}
+          className="btn-press inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 shadow-xs"
+        >
+          ⚡ Aplicar horario del lunes a días hábiles (Lun-Vie)
+        </button>
+      </div>
       <div className="mt-5 space-y-3">
         {order.map((i) => {
           const h = hours[i];
