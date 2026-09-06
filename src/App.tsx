@@ -2,9 +2,9 @@ import { Component, Suspense, lazy, useEffect, useState, type ErrorInfo, type Re
 import { StoreProvider, useStore } from "./lib/store";
 import { LogoMark } from "./components/kit";
 
-/* Code splitting por ruta: cada pantalla se descarga solo cuando se visita.
-   Antes todo (panel + landing + librerías pesadas) iba en un solo JS de ~800KB. */
-const Landing = lazy(() => import("./Landing"));
+/* Code splitting por ruta: la landing principal se carga directo para FCP instantáneo,
+   mientras que el panel y rutas secundarias se descargan bajo demanda. */
+import Landing from "./Landing";
 const Auth = lazy(() => import("./components/Auth"));
 const Dashboard = lazy(() => import("./components/Dashboard"));
 const PublicPage = lazy(() => import("./components/PublicPage"));
@@ -201,11 +201,7 @@ function Router() {
     );
   }
 
-  return (
-    <Suspense fallback={<RouteLoader />}>
-      <Landing />
-    </Suspense>
-  );
+  return <Landing />;
 }
 
 export default function App() {

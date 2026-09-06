@@ -1,4 +1,4 @@
-﻿import { useState, createContext, useContext, type ReactNode } from "react";
+import { useState, createContext, useContext, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
 interface AccordionContextType {
@@ -76,9 +76,11 @@ export function AccordionTrigger({
   const { value, isOpen } = useContext(ItemContext);
 
   return (
-    <div className="flex">
+    <h3 className="flex font-normal m-0 p-0">
       <button
         type="button"
+        id={`accordion-trigger-${value}`}
+        aria-controls={`accordion-panel-${value}`}
         data-slot="accordion-trigger"
         data-state={isOpen ? "open" : "closed"}
         onClick={() => toggleItem(value)}
@@ -91,9 +93,10 @@ export function AccordionTrigger({
           className={`shrink-0 transition-transform duration-200 ${
             isOpen ? "rotate-180" : ""
           }`}
+          aria-hidden="true"
         />
       </button>
-    </div>
+    </h3>
   );
 }
 
@@ -104,12 +107,15 @@ export function AccordionContent({
   className?: string;
   children: ReactNode;
 }) {
-  const { isOpen } = useContext(ItemContext);
+  const { value, isOpen } = useContext(ItemContext);
 
   if (!isOpen) return null;
 
   return (
     <div
+      id={`accordion-panel-${value}`}
+      role="region"
+      aria-labelledby={`accordion-trigger-${value}`}
       data-slot="accordion-content"
       data-state="open"
       className={`overflow-hidden text-sm pb-4 ${className}`}

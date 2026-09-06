@@ -1,0 +1,15 @@
+# Cupito
+
+> Plataforma de gestión de reservas, turnos online, cobranza de señas y recordatorios automáticos para negocios y profesionales independientes.
+
+## Información Principal
+- URL: https://cupito.app/
+- Propósito: Simplificar la gestión de agendas para profesionales y negocios de estética, salud, barberías, consultorios y servicios.
+- Funcionalidades:
+  - Página de reservas pública personalizada por negocio (ej. cupito.app/tu-negocio)
+  - Cobro automático de señas por transferencia o pasarela de pagos
+  - Recordatorios automáticos por WhatsApp
+  - Panel de control en tiempo real con estadísticas y gestión de turnos
+  - Lista de espera inteligente cuando los horarios están ocupados
+- Soporte: hola@cupito.app
+- Instagram: @cupitoapp

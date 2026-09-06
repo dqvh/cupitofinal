@@ -178,7 +178,7 @@ export default function Landing() {
       {/* HEADER */}
       <header className="lp-header">
         <a className="lp-logo" href="#/" aria-label="Cupito, inicio">
-          <img src="/cupito-logo.png" width="39" height="39" alt="Cupito Logo" />
+          <img src="/cupito-logo.png" width="39" height="39" alt="Cupito Logo" fetchPriority="high" decoding="async" />
           <span>
             cupito<span className="lp-logo-dot">.</span>
           </span>
@@ -357,9 +357,9 @@ export default function Landing() {
                   <div className="lp-demo-heading">
                     <div>
                       <span>MIÉRCOLES, 16 DE SEPTIEMBRE</span>
-                      <h3>
+                      <p className="lp-demo-heading-title font-display text-lg font-bold text-[#254c36]">
                         ¡Buen día, Sofi! <span>☀</span>
-                      </h3>
+                      </p>
                       <p>Tu agenda se ocupa. Vos, de lo tuyo.</p>
                     </div>
                     <div className="lp-demo-avatar">SF</div>
@@ -794,7 +794,7 @@ export default function Landing() {
       <footer className="lp-footer">
         <div className="lp-footer-top">
           <div>
-            <a className="lp-logo" href="#/">
+            <a className="lp-logo" href="#/" aria-label="Cupito, inicio">
               <img src="/cupito-logo.png" alt="Cupito Logo" width="36" height="36" />
               cupito<span className="lp-logo-dot">.</span>
             </a>
@@ -843,6 +843,7 @@ export default function Landing() {
               href="https://www.instagram.com/cupitoapp/"
               target="_blank"
               rel="noreferrer"
+              aria-label="Instagram de Cupito @cupitoapp"
             >
               <Instagram size={16} />
               @cupitoapp <ArrowUpRight size={13} />
