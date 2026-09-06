@@ -1,15 +1,21 @@
 # Cupito
 
-> Plataforma de gestión de reservas, turnos online, cobranza de señas y recordatorios automáticos para negocios y profesionales independientes.
+> Plataforma de gestión de turnos online, cobranza de señas y recordatorios automáticos por WhatsApp para negocios y profesionales independientes.
 
-## Información Principal
-- URL: https://cupito.app/
-- Propósito: Simplificar la gestión de agendas para profesionales y negocios de estética, salud, barberías, consultorios y servicios.
-- Funcionalidades:
-  - Página de reservas pública personalizada por negocio (ej. cupito.app/tu-negocio)
-  - Cobro automático de señas por transferencia o pasarela de pagos
-  - Recordatorios automáticos por WhatsApp
-  - Panel de control en tiempo real con estadísticas y gestión de turnos
-  - Lista de espera inteligente cuando los horarios están ocupados
-- Soporte: hola@cupito.app
-- Instagram: @cupitoapp
+## Documentación y Enlaces Principales
+- [Inicio y Presentación](https://cupito.app/): Información general sobre la plataforma Cupito y sus funcionalidades principales.
+- [Planes y Precios](https://cupito.app/#precios): Detalles de planes mensual y semestral sin comisión por turno reservado.
+- [Cómo funciona](https://cupito.app/#como-funciona): Flujo de tres pasos para que los clientes elijan turno y confirmen.
+- [Preguntas Frecuentes](https://cupito.app/#faq): Respuestas sobre transferencias, señas, recordatorios por WhatsApp y personalización.
+- [Panel de Administración](https://cupito.app/#/app): Acceso al panel de control de agenda, clientes y servicios.
+- [Acceso para Profesionales](https://cupito.app/#/login): Pantalla de ingreso para dueños de negocios registrados.
+- [Registro de Nuevos Negocios](https://cupito.app/#/registro): Creación de página propia en minutos sin costo inicial.
+
+## Negocios Compatibles
+- [Estética y Belleza](https://cupito.app/#producto): Manicuría, pestañas, cejas, depilación y peluquerías.
+- [Salud y Bienestar](https://cupito.app/#producto): Psicología, nutrición, kinesiología y consultorios.
+- [Servicios Profesionales](https://cupito.app/#producto): Asesorías, clases particulares y barberías.
+
+## Contacto y Soporte Oficial
+- [Soporte por Correo](mailto:hola@cupito.app): Atención al cliente y dudas técnicas.
+- [Instagram Oficial](https://www.instagram.com/cupitoapp/): Novedades, actualizaciones y casos reales.

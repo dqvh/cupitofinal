@@ -1228,73 +1228,93 @@ const remoteSaveQueue = new Map<string, Promise<unknown>>();
 
 // Sincronización automática inicial desde Supabase para traer negocios creados en otros dispositivos
 if (typeof window !== "undefined" && isSupabaseConfigured) {
-  fetchAllRemoteUsers().then((remoteUsers) => {
-    const deleted = getDeletedUserIds();
-    const prevUsers = users;
-    const prevSession = sessionUserId;
-    const remoteByEmail = new Map<string, User>();
-    (remoteUsers || []).forEach((u) => {
-      if (u.deleted === false) {
-        unmarkUserDeleted(u.id);
-        deleted.delete(u.id);
+  const runBackgroundSync = () => {
+    fetchAllRemoteUsers().then((remoteUsers) => {
+      const deleted = getDeletedUserIds();
+      const prevUsers = users;
+      const prevSession = sessionUserId;
+      const remoteByEmail = new Map<string, User>();
+      (remoteUsers || []).forEach((u) => {
+        if (u.deleted === false) {
+          unmarkUserDeleted(u.id);
+          deleted.delete(u.id);
+        }
+        if (!deleted.has(u.id) && !isDemoUser(u)) remoteByEmail.set(u.email, u);
+      });
+      const map = new Map<string, User>();
+      prevUsers.forEach((u) => {
+        if (!deleted.has(u.id)) map.set(u.id, u);
+      });
+      // Si el mismo email existe local (vacío, creado sin conexión) y en la nube,
+      // gana la versión de la nube y se descarta el duplicado local.
+      Array.from(map.keys()).forEach((id) => {
+        const u = map.get(id);
+        const r = u ? remoteByEmail.get(u.email) : undefined;
+        if (u && r && r.id !== id) map.delete(id);
+      });
+      (remoteUsers || []).forEach((u) => {
+        if (!deleted.has(u.id) && !isDemoUser(u)) map.set(u.id, u);
+      });
+      const combined = Array.from(map.values());
+      const remoteIds = new Set((remoteUsers || []).map((u) => u.id));
+      users = combined;
+      safeSet(USERS_KEY, JSON.stringify(combined));
+      // Si la sesión apuntaba a un duplicado descartado, moverla a la cuenta real
+      if (prevSession && !map.has(prevSession)) {
+        const old = prevUsers.find((u) => u.id === prevSession);
+        const real = old ? remoteByEmail.get(old.email) : undefined;
+        saveSession(real ? real.id : null);
       }
-      if (!deleted.has(u.id) && !isDemoUser(u)) remoteByEmail.set(u.email, u);
-    });
-    const map = new Map<string, User>();
-    prevUsers.forEach((u) => {
-      if (!deleted.has(u.id)) map.set(u.id, u);
-    });
-    // Si el mismo email existe local (vacío, creado sin conexión) y en la nube,
-    // gana la versión de la nube y se descarta el duplicado local.
-    Array.from(map.keys()).forEach((id) => {
-      const u = map.get(id);
-      const r = u ? remoteByEmail.get(u.email) : undefined;
-      if (u && r && r.id !== id) map.delete(id);
-    });
-    (remoteUsers || []).forEach((u) => {
-      if (!deleted.has(u.id) && !isDemoUser(u)) map.set(u.id, u);
-    });
-    const combined = Array.from(map.values());
-    const remoteIds = new Set((remoteUsers || []).map((u) => u.id));
-    users = combined;
-    safeSet(USERS_KEY, JSON.stringify(combined));
-    // Si la sesión apuntaba a un duplicado descartado, moverla a la cuenta real
-    if (prevSession && !map.has(prevSession)) {
-      const old = prevUsers.find((u) => u.id === prevSession);
-      const real = old ? remoteByEmail.get(old.email) : undefined;
-      saveSession(real ? real.id : null);
-    }
-    emit();
-    // Subir a la nube las cuentas creadas en este dispositivo cuando no había
-    // conexión (si no, la compu nunca aparece en el celu y viceversa).
-    // Solo filas con auth_id: con RLS+Auth el servidor rechaza las demás
-    // (se suben solas al migrar/iniciar sesión).
-    combined.forEach((u) => {
-      if (!remoteIds.has(u.id) && !deleted.has(u.id) && !isDemoUser(u) && u.auth_id) {
-        try {
-          syncUserToRemote(u, loadData(u.id)).catch(() => {});
-        } catch { /* noop */ }
-      }
-    });
-  }).catch((e) => console.warn("[Cupito] Error en sync inicial de Supabase:", e));
+      emit();
+      // Subir a la nube las cuentas creadas en este dispositivo cuando no había
+      // conexión (si no, la compu nunca aparece en el celu y viceversa).
+      // Solo filas con auth_id: con RLS+Auth el servidor rechaza las demás
+      // (se suben solas al migrar/iniciar sesión).
+      combined.forEach((u) => {
+        if (!remoteIds.has(u.id) && !deleted.has(u.id) && !isDemoUser(u) && u.auth_id) {
+          try {
+            syncUserToRemote(u, loadData(u.id)).catch(() => {});
+          } catch { /* noop */ }
+        }
+      });
+    }).catch((e) => console.warn("[Cupito] Error en sync inicial de Supabase:", e));
 
-  // Restaurar sesión de Supabase Auth: si hay JWT válido pero la sesión local
-  // apunta a otro lado (u otro dispositivo), adoptar la cuenta del dueño.
-  sbValidateSession().then((sess) => {
-    if (!sess) return;
-    const deleted = getDeletedUserIds();
-    const hit = users.find((u) => u.auth_id === sess.authId && !deleted.has(u.id));
-    if (hit) {
-      if (sessionUserId !== hit.id) {
-        saveSession(hit.id);
-        emit();
+    // Restaurar sesión de Supabase Auth: si hay JWT válido pero la sesión local
+    // apunta a otro lado (u otro dispositivo), adoptar la cuenta del dueño.
+    sbValidateSession().then((sess) => {
+      if (!sess) return;
+      const deleted = getDeletedUserIds();
+      const hit = users.find((u) => u.auth_id === sess.authId && !deleted.has(u.id));
+      if (hit) {
+        if (sessionUserId !== hit.id) {
+          saveSession(hit.id);
+          emit();
+        }
+        return;
       }
-      return;
-    }
-    fetchRemoteUserByAuthId(sess.authId).then((remote) => {
-      if (remote && !deleted.has(remote.user.id)) importRemoteAccount(remote);
+      fetchRemoteUserByAuthId(sess.authId).then((remote) => {
+        if (remote && !deleted.has(remote.user.id)) importRemoteAccount(remote);
+      }).catch(() => {});
     }).catch(() => {});
-  }).catch(() => {});
+  };
+
+  const isAppOrAuth = window.location.hash.startsWith("#/app") ||
+                      window.location.hash.startsWith("#/auth") ||
+                      window.location.pathname.startsWith("/app") ||
+                      window.location.pathname.startsWith("/auth");
+
+  if (isAppOrAuth || sessionUserId) {
+    runBackgroundSync();
+  } else {
+    // En la landing page pública, diferir para no competir con el render inicial (FCP/LCP)
+    setTimeout(() => {
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(runBackgroundSync);
+      } else {
+        runBackgroundSync();
+      }
+    }, 4000);
+  }
 }
 
 /* ================= store ================= */

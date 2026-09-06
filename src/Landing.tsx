@@ -178,7 +178,10 @@ export default function Landing() {
       {/* HEADER */}
       <header className="lp-header">
         <a className="lp-logo" href="#/" aria-label="Cupito, inicio">
-          <img src="/cupito-logo.png" width="39" height="39" alt="Cupito Logo" fetchPriority="high" decoding="async" />
+          <picture>
+            <source srcSet="/cupito-logo.webp" type="image/webp" />
+            <img src="/cupito-logo.png" width="39" height="39" alt="Cupito Logo" fetchPriority="high" decoding="async" />
+          </picture>
           <span>
             cupito<span className="lp-logo-dot">.</span>
           </span>
@@ -327,7 +330,7 @@ export default function Landing() {
               <div className="lp-demo-body">
                 <aside className="lp-demo-sidebar">
                   <div className="lp-demo-brand">
-                    <img src="/cupito-logo.png" alt="" />
+                    <img src="/cupito-logo.webp" alt="" width="20" height="20" loading="lazy" decoding="async" />
                     cupito.
                   </div>
                   <div className="lp-demo-store">
@@ -795,7 +798,10 @@ export default function Landing() {
         <div className="lp-footer-top">
           <div>
             <a className="lp-logo" href="#/" aria-label="Cupito, inicio">
-              <img src="/cupito-logo.png" alt="Cupito Logo" width="36" height="36" />
+              <picture>
+                <source srcSet="/cupito-logo.webp" type="image/webp" />
+                <img src="/cupito-logo.png" alt="Cupito Logo" width="36" height="36" loading="lazy" decoding="async" />
+              </picture>
               cupito<span className="lp-logo-dot">.</span>
             </a>
             <p>Más tiempo para lo que hacés bien.</p>
