@@ -43,6 +43,7 @@ import { sound } from "../lib/audio";
 import { sendSubscriptionWelcomeEmail } from "../lib/email";
 import PublicBooking from "./PublicBooking";
 import { PlanCheckout } from "./PlanCheckout";
+import CustomSelect from "./ui/CustomSelect";
 import {
   clearPendingCheckout,
   confirmMercadoPago,
@@ -1899,18 +1900,19 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
               </div>
               <div className="rounded-2xl border-2 border-ink/10 bg-white/60 p-4">
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Duración</label>
-                <select
-                  className="field cursor-pointer font-semibold"
+                <CustomSelect
                   value={serviceDuration}
-                  onChange={(e) => setServiceDuration(e.target.value)}
-                >
-                  <option value="15">15 minutos</option>
-                  <option value="30">30 minutos</option>
-                  <option value="45">45 minutos</option>
-                  <option value="60">60 minutos (1 h)</option>
-                  <option value="90">90 minutos (1.5 h)</option>
-                  <option value="120">120 minutos (2 h)</option>
-                </select>
+                  onChange={(val) => setServiceDuration(val)}
+                  options={[
+                    { value: "15", label: "15 minutos" },
+                    { value: "30", label: "30 minutos" },
+                    { value: "45", label: "45 minutos" },
+                    { value: "60", label: "60 minutos (1 h)" },
+                    { value: "90", label: "90 minutos (1.5 h)" },
+                    { value: "120", label: "120 minutos (2 h)" },
+                  ]}
+                  placeholder="Seleccionar duración"
+                />
               </div>
             </div>
 
@@ -2469,9 +2471,16 @@ function BookingModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Servicio</label>
-            <select className="field" value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-              {data.services.map((s) => <option key={s.id} value={s.id}>{s.name} · {fmtMoney(s.price)}</option>)}
-            </select>
+            <CustomSelect
+              value={serviceId}
+              onChange={(val) => setServiceId(val)}
+              options={data.services.map((s) => ({
+                value: s.id,
+                label: s.name,
+                sublabel: fmtMoney(s.price),
+              }))}
+              placeholder="Elegir servicio"
+            />
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Fecha</label>
@@ -2481,9 +2490,16 @@ function BookingModal({
         {data.professionals.length > 0 && (
           <div>
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Profesional</label>
-            <select className="field" value={proId} onChange={(e) => setProId(e.target.value)}>
-              {data.professionals.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.role}</option>)}
-            </select>
+            <CustomSelect
+              value={proId}
+              onChange={(val) => setProId(val)}
+              options={data.professionals.map((p) => ({
+                value: p.id,
+                label: p.name,
+                sublabel: p.role,
+              }))}
+              placeholder="Elegir profesional"
+            />
           </div>
         )}
         <div>
@@ -2639,16 +2655,19 @@ function RescheduleModal({
         {professionals.length > 0 && (
           <div>
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Profesional a cargo</label>
-            <select
-              className="field !py-2.5"
+            <CustomSelect
               value={proId}
-              onChange={(e) => setProId(e.target.value)}
-            >
-              <option value="">Cualquiera / Rotativo</option>
-              {professionals.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.role})</option>
-              ))}
-            </select>
+              onChange={(val) => setProId(val)}
+              options={[
+                { value: "", label: "Cualquiera / Rotativo" },
+                ...professionals.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                  sublabel: p.role,
+                })),
+              ]}
+              placeholder="Elegir profesional"
+            />
           </div>
         )}
 
@@ -2788,12 +2807,19 @@ function BlockModal({
         {pros.length > 0 && (
           <div>
             <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Profesional afectado</label>
-            <select className="field" value={bProId} onChange={(e) => setBProId(e.target.value)}>
-              <option value="">Todo el negocio / Todos</option>
-              {pros.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <CustomSelect
+              value={bProId}
+              onChange={(val) => setBProId(val)}
+              options={[
+                { value: "", label: "Todo el negocio / Todos" },
+                ...pros.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                  sublabel: p.role,
+                })),
+              ]}
+              placeholder="Elegir profesional"
+            />
           </div>
         )}
 

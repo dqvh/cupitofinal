@@ -277,6 +277,7 @@ export interface User {
   email: string;
   password: string; // legacy (cuentas viejas sin migrar). Las nuevas guardan "".
   auth_id?: string; // vínculo con Supabase Auth: solo el dueño escribe sus filas
+  recovery?: string; // clave única de 64 caracteres para recuperar contraseña
   slug: string;
   plan: Plan;
   createdAt: number;
@@ -1305,7 +1306,8 @@ interface StoreApi {
   register(input: { name: string; business: string; email: string; password: string }): string | null;
   login(email: string, password: string): string | null;
   loginAsync(email: string, password: string): Promise<string | null>;
-  registerAsync(input: { name: string; business: string; email: string; password: string }): Promise<string | null>;
+  registerAsync(input: { name: string; business: string; email: string; password: string }): Promise<{ error: string | null; recovery?: string }>;
+  recoverPasswordAsync(input: { email: string; recovery: string; newPassword: string }): Promise<string | null>;
   completeBizSetup(input: { name: string; business: string }): Promise<string | null>;
   loginDemo(): void;
   logout(): void;
@@ -1499,12 +1501,14 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const base = slug;
     let i = 1;
     while (users.some((u) => u.slug === slug)) slug = `${base}-${i++}`;
+    const recovery = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
     const user: User = {
       id: uid(),
       name: name.trim(),
       business: business.trim(),
       email: em,
       password,
+      recovery,
       slug,
       plan: "semilla",
       createdAt: Date.now(),
@@ -1562,14 +1566,16 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   async registerAsync({ name, business, email, password }) {
     const em = email.trim().toLowerCase();
-    if (users.some((u) => u.email === em)) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+    if (users.some((u) => u.email === em)) return { error: "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?" };
     // Sin nube: cuenta local legacy
     if (!isSupabaseConfigured) {
-      return api.register({ name, business, email, password });
+      const err = api.register({ name, business, email, password });
+      const created = users.find((u) => u.email === em);
+      return { error: err, recovery: created?.recovery };
     }
     // No crear duplicados: si el email ya existe en la nube, ir a login
     const remote = await fetchRemoteUserByEmail(em).catch(() => null);
-    if (remote) return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+    if (remote) return { error: "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?" };
 
     // 1) Registro en el servidor mediante /api/account (Service Role):
     // Crea el Auth user con email pre-confirmado, genera el slug único y
@@ -1588,6 +1594,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       });
       const r = await res.json().catch(() => ({}));
       if (res.ok && r.ok && r.user) {
+        const recovery = r.recovery || Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
         const user: User = {
           id: r.user.id,
           auth_id: r.user.auth_id || r.user.id,
@@ -1595,6 +1602,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
           business: r.user.business,
           email: r.user.email,
           password: "",
+          recovery,
           slug: r.user.slug,
           plan: r.user.plan || "semilla",
           createdAt: Number(r.user.created_at || Date.now()),
@@ -1618,13 +1626,13 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         setFreshSignup();
 
         emit();
-        return null;
+        return { error: null, recovery };
       }
       if (res.status === 409 || r.error?.includes("Ya existe")) {
-        return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+        return { error: "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?" };
       }
       if (r.error && !r.error.includes("Falta configuración")) {
-        return r.error;
+        return { error: r.error };
       }
     } catch {
       // Fallback a cliente
@@ -1633,15 +1641,16 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     // 2) Fallback directo en cliente con Supabase Auth
     const s = await sbSignUp(em, password);
     if (!s.ok) {
-      if (s.reason === "exists") return "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?";
+      if (s.reason === "exists") return { error: "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?" };
       if (s.reason === "confirm") {
         if (s.authId) savePendingBiz({ authId: s.authId, name: name.trim(), business: business.trim(), email: em });
         setFreshSignup();
-        return "Te enviamos un email de confirmación. Abrilo para activar tu cuenta y después entrá.";
+        return { error: "Te enviamos un email de confirmación. Abrilo para activar tu cuenta y después entrá." };
       }
-      return s.error;
+      return { error: s.error };
     }
     const slug = await ensureUniqueSlug(slugify(business));
+    const recovery = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
     const user: User = {
       id: s.authId,
       auth_id: s.authId,
@@ -1649,6 +1658,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       business: business.trim(),
       email: em,
       password: "",
+      recovery,
       slug,
       plan: "semilla",
       createdAt: Date.now(),
@@ -1663,6 +1673,55 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveData(user.id, fresh);
     setFreshSignup();
     await syncUserToRemote(user, fresh).catch(() => {});
+    emit();
+    return { error: null, recovery };
+  },
+  async recoverPasswordAsync({ email, recovery, newPassword }) {
+    const em = email.trim().toLowerCase();
+    const rec = recovery.trim();
+    if (!em || !rec || !newPassword) return "Completá todos los campos.";
+    if (newPassword.length < 6) return "La contraseña necesita 6+ caracteres.";
+
+    // 1) Si Supabase está configurado, llamar a /api/account
+    if (isSupabaseConfigured) {
+      try {
+        const res = await fetch("/api/account", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "recover",
+            email: em,
+            recovery: rec,
+            password: newPassword,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          return data.error || "No pudimos restablecer la contraseña. Verificá la clave.";
+        }
+        // Iniciar sesión con la nueva contraseña
+        const sign = await sbSignIn(em, newPassword);
+        if (sign.ok) {
+          await adoptAuthAccount(sign.authId);
+          emit();
+          return null;
+        }
+      } catch (err: any) {
+        return err.message || "Error al conectar con el servidor.";
+      }
+    }
+
+    // 2) Fallback local
+    const u = users.find((x) => x.email === em);
+    if (!u) return "No encontramos ninguna cuenta con ese email.";
+    if (!u.recovery || u.recovery.trim().toLowerCase() !== rec.toLowerCase()) {
+      return "La clave de recuperación no es válida para esta cuenta.";
+    }
+    const nextRec = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
+    u.password = newPassword;
+    u.recovery = nextRec;
+    saveUsers([...users]);
+    saveSession(u.id);
     emit();
     return null;
   },

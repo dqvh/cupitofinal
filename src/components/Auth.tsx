@@ -1,10 +1,25 @@
-import { useState, type FormEvent } from "react";
-import { PLAN_META, type Plan, useStore, getSessionUser } from "../lib/store";
-import { sbResendConfirmation } from "../lib/supabase";
-import { LogoMark, IconCheck, IconArrow, LegalModal, TERMS_DOC, PRIVACY_DOC } from "./kit";
+import { useState, useRef, type FormEvent } from "react";
+import {
+  CalendarDays,
+  Users,
+  Link as LinkIcon,
+  LockKeyhole,
+  Copy,
+  Download,
+  ArrowRight,
+  ArrowLeft,
+  Check,
+  Eye,
+  EyeOff,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
+import { useStore, getSessionUser, type Plan } from "../lib/store";
+import { LogoMark, LegalModal, TERMS_DOC, PRIVACY_DOC } from "./kit";
 import { sendWelcomeAccountEmail } from "../lib/email";
+import "../styles/auth.css";
 
-type Mode = "registro" | "login";
+type Mode = "login" | "registro" | "recuperar";
 
 function hashQuery(): URLSearchParams {
   const h = window.location.hash || "";
@@ -12,49 +27,54 @@ function hashQuery(): URLSearchParams {
   return new URLSearchParams(q);
 }
 
-const PLAN_BLURBS: Record<Plan, string> = {
-  semilla: "Gratis para siempre. Ideal para probar tu link.",
-  crece: "El más elegido. Seña, tienda y 3 profesionales.",
-  escala: "Equipo ilimitado y soporte prioritario.",
-};
+export default function Auth({ initialMode = "registro" }: { initialMode?: "registro" | "login" }) {
+  const { registerAsync, loginAsync, recoverPasswordAsync, toast } = useStore();
 
-export default function Auth({ initialMode = "registro" }: { initialMode?: Mode }) {
-  const { registerAsync, loginAsync, completeBizSetup, toast } = useStore();
   const presetPlan = ((): Plan | null => {
     const p = hashQuery().get("plan");
     if (p === "semilla" || p === "crece" || p === "escala") return p;
     return null;
   })();
+
   const [mode, setMode] = useState<Mode>(initialMode);
   const [name, setName] = useState("");
   const [business, setBusiness] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [password2, setPassword2] = useState("");
+  const [recoveryInput, setRecoveryInput] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [shakeKey, setShakeKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [pickPlan, setPickPlan] = useState(false);
-  const [needsSetup, setNeedsSetup] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [showResend, setShowResend] = useState(false);
+  const [caps, setCaps] = useState(false);
   const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
-  const [chosen, setChosen] = useState<Plan>(presetPlan ?? "crece");
 
-  const switchMode = (m: Mode) => { setMode(m); setError(null); setNotice(null); setPickPlan(false); setNeedsSetup(false); setShowResend(false); };  const fail = (msg: string) => { setError(msg); setNotice(null); setShakeKey((k) => k + 1); setLoading(false); };
-  const info = (msg: string) => { setNotice(msg); setError(null); setShakeKey((k) => k + 1); setLoading(false); };
+  // Pantalla de clave de recuperación post-registro
+  const [generatedRecovery, setGeneratedRecovery] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const goApp = (plan: Plan) => {
-    // En login los campos pueden estar vacíos: usar la sesión como respaldo
+  const inFlight = useRef(false);
+
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError(null);
+    setNotice(null);
+    setGeneratedRecovery(null);
+    setPassword("");
+  };
+
+  const goDashboard = () => {
+    const plan = presetPlan ?? "semilla";
     const su = getSessionUser();
     const oName = name.trim() || su?.name || "";
     const oBiz = business.trim() || su?.business || "";
     const oEmail = email.trim() || su?.email || "";
-    toast("¡Cuenta creada! Tu agenda ya está lista 🎉");
+    toast("¡Bienvenido a Cupito! 🎉");
     if (oEmail) {
-      const slug = oBiz.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || su?.slug || "mi-negocio";
+      const slug =
+        oBiz.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
+        su?.slug ||
+        "mi-negocio";
       sendWelcomeAccountEmail({
         toEmail: oEmail,
         ownerName: oName,
@@ -62,304 +82,519 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: Mode 
         slug,
       }).catch(() => {});
     }
-    window.location.hash = plan === "semilla" ? "#/app?onboarding=1" : `#/app?checkout=${plan}&onboarding=1`;
+    window.location.hash =
+      plan === "semilla" ? "#/app?onboarding=1" : `#/app?checkout=${plan}&onboarding=1`;
   };
 
-  const submitSetup = (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setNotice(null);
-    if (name.trim().length < 2) return fail("Contanos tu nombre.");
-    if (business.trim().length < 2) return fail("¿Cómo se llama tu negocio?");
-    setLoading(true);
-    setTimeout(async () => {
-      try {
-        const err = await completeBizSetup({ name, business });
-        setLoading(false);
-        if (err) return fail(err);
-      } catch {
-        setLoading(false);
-        return fail("No pudimos conectar con la nube. Revisá tu internet e intentá de nuevo.");
-      }
-      setNeedsSetup(false);
-      if (presetPlan) {
-        goApp(presetPlan);
-        return;
-      }
-      setPickPlan(true);
-    }, 400);
+  const downloadRecoveryFile = () => {
+    if (!generatedRecovery) return;
+    const content = `=========================================
+CUPITO · CLAVE DE RECUPERACIÓN DE CUENTA
+=========================================
+
+Tu clave de recuperación es:
+${generatedRecovery}
+
+Email asociado: ${email || "tu-email@ejemplo.com"}
+Fecha de generación: ${new Date().toLocaleDateString("es-AR")}
+
+INSTRUCCIONES IMPORTANTES:
+- Guardá este archivo en una ubicación segura o en tu gestor de contraseñas.
+- Si alguna vez olvidás tu contraseña, ingresá a https://cupito.app/#/auth?modo=login, seleccioná "Olvidé mi contraseña" y pegá esta clave.
+- Esta clave puede usarse una sola vez. Cada vez que recuperes tu acceso se generará una nueva clave.
+=========================================`;
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cupito-clave-recuperacion-${email.split("@")[0] || "cuenta"}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const resendEmail = () => {
-    if (!email.trim() || resending) return;
-    setResending(true);
-    setTimeout(async () => {
-      const ok = await sbResendConfirmation(email);
-      setResending(false);
-      if (ok) info("Te reenviamos el email de confirmación 📩 Revisá bandeja y spam.");
-      else fail("No pudimos reenviarlo. Revisá tu conexión e intentá de nuevo.");
-    }, 300);
-  };
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setNotice(null);
-    setShowResend(false);
-    if (mode === "registro") {
-      if (name.trim().length < 2) return fail("Contanos tu nombre.");
-      if (business.trim().length < 2) return fail("¿Cómo se llama tu negocio?");
-      if (!/^\S+@\S+\.\S+$/.test(email.trim())) return fail("Ese email no parece válido.");
-      if (password.length < 8) return fail("La contraseña necesita al menos 8 caracteres.");
-      if (password !== password2) return fail("Las contraseñas no coinciden. Revisalas.");
-    } else {
-      if (!/^\S+@\S+\.\S+$/.test(email.trim())) return fail("Ese email no parece válido.");
-      if (password.length === 0) return fail("Falta la contraseña.");
+  const copyRecovery = async () => {
+    if (!generatedRecovery) return;
+    try {
+      await navigator.clipboard.writeText(generatedRecovery);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      setError("No se pudo copiar automáticamente. Seleccioná el texto y copialo manualmente.");
     }
-    setLoading(true);
-    setTimeout(async () => {
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (inFlight.current) return;
+    setError(null);
+    setNotice(null);
+
+    const em = email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(em)) {
+      setError("Ingresá un email válido.");
+      return;
+    }
+
+    if (mode === "registro") {
+      if (name.trim().length < 2) {
+        setError("Contanos tu nombre.");
+        return;
+      }
+      if (business.trim().length < 2) {
+        setError("¿Cómo se llama tu negocio?");
+        return;
+      }
+      if (password.length < 6) {
+        setError("La contraseña necesita al menos 6 caracteres.");
+        return;
+      }
+
+      inFlight.current = true;
+      setLoading(true);
+
       try {
-        const err = mode === "registro"
-          ? await registerAsync({ name, business, email, password })
-          : await loginAsync(email, password);
+        const res = await registerAsync({
+          name: name.trim(),
+          business: business.trim(),
+          email: em,
+          password,
+        });
+
+        if (res.error) {
+          setError(res.error);
+        } else if (res.recovery) {
+          setGeneratedRecovery(res.recovery);
+        } else {
+          goDashboard();
+        }
+      } catch (err: any) {
+        setError(err?.message || "No pudimos completar el registro. Intentá de nuevo.");
+      } finally {
+        inFlight.current = false;
         setLoading(false);
+      }
+      return;
+    }
+
+    if (mode === "login") {
+      if (!password) {
+        setError("Ingresá tu contraseña.");
+        return;
+      }
+
+      inFlight.current = true;
+      setLoading(true);
+
+      try {
+        const err = await loginAsync(em, password);
         if (err) {
-          // Cuenta recién creada entrando por primera vez: mostrar elegir plan
-          if (err === "FRESH_PICK_PLAN") {
-            if (presetPlan) {
-              goApp(presetPlan);
-              return;
-            }
-            setPickPlan(true);
-            return;
-          }
-          // Login válido pero sin negocio (confirmó el email en otro lado):
-          // pedir los datos para crearlo en vez de trabarse.
-          if (err === "NEEDS_SETUP") {
-            setNeedsSetup(true);
-            setMode("login");
-            return info("Tu email ya está confirmado ✓ Contanos tu nombre y tu negocio para terminar.");
-          }
-          // Email sin confirmar: avisar + ofrecer reenvío (solo si aún no confirmó;
-          // el "ya está confirmado" de NEEDS_SETUP no entra acá a propósito)
-          if (/todavía no está confirmado|para activar tu cuenta/i.test(err)) {
-            setShowResend(true);
-            return info(err);
-          }
-          // Otros avisos informativos van en verde, no en rojo
-          if (/revisá tu email|entrá de nuevo|migrada/i.test(err)) return info(err);
-          return fail(err);
+          setError(err);
+        } else {
+          toast("¡Hola de nuevo! Agenda al día ✓");
+          window.location.hash = "#/app";
         }
-      } catch {
+      } catch (err: any) {
+        setError(err?.message || "No pudimos verificar tu cuenta.");
+      } finally {
+        inFlight.current = false;
         setLoading(false);
-        return fail("No pudimos conectar con la nube. Revisá tu internet e intentá de nuevo.");
       }
-      if (mode === "login") {
-        toast("¡Hola de nuevo!");
-        if (presetPlan) {
-          goApp(presetPlan);
-          return;
+      return;
+    }
+
+    if (mode === "recuperar") {
+      const rec = recoveryInput.trim();
+      if (!rec) {
+        setError("Ingresá tu clave de recuperación.");
+        return;
+      }
+      if (password.length < 6) {
+        setError("La nueva contraseña necesita al menos 6 caracteres.");
+        return;
+      }
+
+      inFlight.current = true;
+      setLoading(true);
+
+      try {
+        const err = await recoverPasswordAsync({
+          email: em,
+          recovery: rec,
+          newPassword: password,
+        });
+        if (err) {
+          setError(err);
+        } else {
+          toast("¡Contraseña restablecida! Ingresando a tu panel… ✓");
+          window.location.hash = "#/app";
         }
-        window.location.hash = "#/app";
-        return;
+      } catch (err: any) {
+        setError(err?.message || "Error al recuperar la cuenta.");
+      } finally {
+        inFlight.current = false;
+        setLoading(false);
       }
-      if (presetPlan) {
-        goApp(presetPlan);
-        return;
-      }
-      setPickPlan(true);
-    }, 650);
+      return;
+    }
   };
 
   return (
-    <div className="min-h-screen bg-paper lg:grid lg:grid-cols-[1.05fr_1fr]">
-      <aside className="relative hidden overflow-hidden bg-evergreen text-paper lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="gridlines absolute inset-0" aria-hidden="true" />
-        <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full opacity-20 blur-3xl" style={{ background: "radial-gradient(circle, #cdf463 0%, transparent 65%)" }} aria-hidden="true" />
-        <a href="#/" className="relative flex items-center gap-2.5">
-          <LogoMark className="h-10 w-10 text-fern" />
-          <span className="font-display text-3xl font-bold tracking-tight">cupito<span className="text-lime">.</span></span>
-        </a>
-        <div className="relative">
-          <h1 className="max-w-md font-display text-5xl font-extrabold leading-[1.02] tracking-[-0.02em]">
-            Tu agenda,<br />en <span className="text-lime">piloto automático</span>.
-          </h1>
-          <ul className="mt-8 space-y-3.5">
-            {["Configurada en 10 minutos, sin técnicos", "Tus clientes reservan y pagan la seña solos", "Recordatorios por email y calendario que bajan ausencias"].map((t) => (
-              <li key={t} className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime text-ink"><IconCheck className="h-3 w-3" /></span>
-                <span className="text-paper/85">{t}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-10 max-w-sm rounded-2xl border-2 border-paper/15 bg-pine/70 p-5">
-            <p className="font-display text-[15px] font-semibold leading-snug">
-              “Me registré un martes a la noche. El miércoles a las 9 AM ya tenía turnos que jamás hubiera visto en WhatsApp.”
-            </p>
-            <p className="mt-3 text-sm text-paper/55">Marcos Ledesma · Barbería La 9</p>
-          </div>
-        </div>
-        <p className="relative text-sm text-paper/45">Hecho para negocios de barrio · Gratis para empezar · Sin tarjeta</p>
-      </aside>
-
-      <main className="flex min-h-screen items-center justify-center px-5 py-14 sm:px-10">
-        <div className="w-full max-w-md">
-          <a href="#/" className="mb-8 flex items-center gap-2.5 text-ink lg:hidden">
-            <LogoMark className="h-9 w-9 text-fern" />
-            <span className="font-display text-2xl font-bold tracking-tight">cupito<span className="text-coral">.</span></span>
+    <>
+      <main className="auth-shell">
+        {/* Left Column: Story & Identity */}
+        <section className="auth-story">
+          <a href="#/" className="auth-brand">
+            <LogoMark className="h-9 w-9 text-emerald-400" />
+            <span>cupito</span>.
           </a>
-          <div className="rounded-[24px] border-2 border-ink/12 bg-card p-7 shadow-block-ink sm:p-9">
-            {needsSetup ? (
-              <div className="pop-in">
-                <div className="inline-flex items-center gap-2 rounded-full bg-lime/20 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-evergreen">
-                  Último paso · Tu negocio
+
+          <div className="auth-story-body">
+            <span className="auth-kicker">TU PRÓXIMO PASO, MÁS SIMPLE</span>
+            <h1>
+              Un poco de orden.<br />
+              <em>Mucho más tiempo.</em>
+            </h1>
+            <p>
+              Hacé lugar para lo que más amás de tu negocio.
+              <br />
+              Cupito se ocupa de coordinar tus turnos, sin idas y vueltas.
+            </p>
+
+            <div className="auth-feature-list">
+              <div>
+                <span>
+                  <CalendarDays size={20} />
+                </span>
+                <div>
+                  <strong>Una agenda que se entiende</strong>
+                  <p>Todos los turnos organizados y visibles desde cualquier pantalla.</p>
                 </div>
-                <h2 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Vinculá tu negocio</h2>
-                <p className="mt-1 text-sm text-inkmute">Tu login ya funciona. Completá estos datos y entras a tu panel.</p>
-                {error && <div key={shakeKey} className="shake mt-5 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">{error}</div>}
-                {notice && <div key={shakeKey} className="mt-5 rounded-xl border-2 border-fern/40 bg-fern/10 px-4 py-3 text-sm font-semibold text-fern">{notice}</div>}
-                {showResend && (
-                  <button type="button" onClick={resendEmail} disabled={resending}
-                    className="mt-3 w-full rounded-full border-2 border-ink/15 py-3 font-display text-sm font-bold text-ink transition-all hover:border-evergreen hover:text-evergreen disabled:opacity-60">
-                    {resending ? "Reenviando…" : "📩 No me llegó: reenviar email"}
-                  </button>
-                )}
-                <form onSubmit={submitSetup} className="mt-6 space-y-4">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Tu nombre</label>
-                    <input className="field" placeholder="Caro Méndez" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Nombre del negocio</label>
-                    <input className="field" placeholder="Studio Nails" value={business} onChange={(e) => setBusiness(e.target.value)} />
-                  </div>
-                  <button type="submit" disabled={loading}
-                    className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-evergreen px-6 py-4 font-display text-lg font-bold text-lime transition-all duration-200 hover:-translate-y-0.5 hover:bg-pine disabled:cursor-wait disabled:opacity-70">
-                    {loading ? "Creando tu negocio…" : <>Crear mi negocio <IconArrow className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" /></>}
-                  </button>
-                </form>
               </div>
-            ) : pickPlan ? (
-              <div className="pop-in">
-                <div className="inline-flex items-center gap-2 rounded-full bg-lime/20 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-evergreen">
-                  Paso 2 de 2 · Elegí tu plan
+
+              <div>
+                <span>
+                  <Users size={20} />
+                </span>
+                <div>
+                  <strong>Tus clientes, a mano</strong>
+                  <p>Historial, contacto directo por WhatsApp y preferencias en un solo lugar.</p>
                 </div>
-                <h2 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">¿Con qué plan querés arrancar?</h2>
-                <p className="mt-1 text-sm text-inkmute">Podés empezar 100% gratis con Semilla o suscribirte a Crece/Escala con Mercado Pago.</p>
-                
-                <div className="mt-5 space-y-3">
-                  {(["semilla", "crece", "escala"] as Plan[]).map((p) => {
-                    const isSelected = chosen === p;
-                    const isPopular = p === "crece";
-                    return (
-                      <button key={p} type="button" onClick={() => setChosen(p)}
-                        className={`relative flex w-full flex-col gap-1 rounded-2xl border-2 p-4 text-left transition-all ${isSelected ? "border-evergreen bg-lime/20 shadow-[3px_3px_0_rgba(8,43,34,0.15)]" : "border-ink/12 bg-white/50 hover:border-evergreen/40 hover:bg-white"}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-display text-lg font-extrabold text-ink">{PLAN_META[p].name}</span>
-                            {isPopular && <span className="rounded-full bg-coral px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-white">Recomendado</span>}
-                            {p === "semilla" && <span className="rounded-full bg-fern/15 px-2 py-0.5 text-[10px] font-bold text-fern">Gratis</span>}
-                          </div>
-                          <span className="font-display text-base font-extrabold text-fern">{PLAN_META[p].price}</span>
-                        </div>
-                        <p className="text-xs text-inkmute leading-snug">{PLAN_BLURBS[p]}</p>
-                      </button>
-                    );
-                  })}
+              </div>
+
+              <div>
+                <span>
+                  <LinkIcon size={20} />
+                </span>
+                <div>
+                  <strong>Tu propio enlace de reservas</strong>
+                  <p>Lo compartís en tu Instagram o WhatsApp y tus clientes eligen su horario.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <small>
+            <Check size={14} className="text-emerald-400" /> Gratis para empezar · Sin tarjeta de crédito
+          </small>
+        </section>
+
+        {/* Right Column: Form / Recovery Screen */}
+        <section className="auth-main">
+          <a className="auth-back" href="#/">
+            <ArrowLeft size={16} /> Volver a Cupito
+          </a>
+
+          <div className="auth-mobile-brand">
+            <LogoMark className="h-7 w-7 text-emerald-600" />
+            <span>cupito</span>.
+          </div>
+
+          <div className="auth-card">
+            {generatedRecovery ? (
+              /* PANTALLA DE CLAVE DE RECUPERACIÓN ÚNICA */
+              <div>
+                <span className="auth-symbol">
+                  <LockKeyhole size={24} />
+                </span>
+                <h2>Tu cuenta, protegida.</h2>
+                <p>
+                  Guardá esta clave única para recuperar tu acceso si alguna vez olvidás la
+                  contraseña. <strong>Se muestra una sola vez.</strong>
+                </p>
+
+                <code className="recovery-code">{generatedRecovery}</code>
+
+                <div className="auth-recovery-actions">
+                  <button type="button" className="auth-secondary" onClick={copyRecovery}>
+                    <Copy size={16} />
+                    {copied ? "¡Copiada!" : "Copiar clave"}
+                  </button>
+                  <button type="button" className="auth-secondary" onClick={downloadRecoveryFile}>
+                    <Download size={16} />
+                    Descargar (.txt)
+                  </button>
                 </div>
 
-                <button type="button" onClick={() => goApp(chosen)}
-                  className="group mt-6 flex w-full items-center justify-center gap-2.5 rounded-full bg-evergreen px-6 py-4 font-display text-base font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine shadow-block-ink">
-                  {chosen === "semilla" ? "Empezar gratis en Semilla" : `Continuar y Pagar ${PLAN_META[chosen].name}`}
-                  <IconArrow className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                <button type="button" className="auth-submit" onClick={goDashboard}>
+                  Ya la guardé. Ir a mi panel <ArrowRight size={18} />
                 </button>
-                <p className="mt-3 text-center text-[11px] text-inkmute">
-                  {chosen === "semilla" ? "Configurás tus horarios y servicios de inmediato. Podés subir de plan cuando quieras." : "Te abriremos el checkout de Mercado Pago para confirmar la suscripción."}
+
+                <p className="auth-recovery-note">
+                  Esta clave es confidencial. Guardala en un lugar seguro.
                 </p>
               </div>
             ) : (
-              <>
-                <h2 className="font-display text-3xl font-extrabold tracking-tight text-ink">{mode === "registro" ? "Creá tu cuenta" : "Iniciá sesión"}</h2>
-                <p className="mt-2 text-sm text-inkmute">
-                  {mode === "registro" ? "Después te preguntamos el plan. Semilla es gratis y no pide tarjeta." : "Tus turnos te están esperando."}
+              /* FORMULARIOS DE LOGIN / REGISTRO / RECUPERACIÓN */
+              <div>
+                <span className="auth-kicker">
+                  {mode === "registro"
+                    ? "CREAR TU ESPACIO"
+                    : mode === "recuperar"
+                    ? "RECUPERAR ACCESO"
+                    : "TU ESPACIO EN CUPITO"}
+                </span>
+
+                <h2>
+                  {mode === "registro"
+                    ? "Todo empieza acá."
+                    : mode === "recuperar"
+                    ? "Volvé a tu negocio."
+                    : "Hola, de nuevo."}
+                </h2>
+
+                <p>
+                  {mode === "registro"
+                    ? "Creá tu cuenta gratis y empezá a recibir reservas en menos de dos minutos."
+                    : mode === "recuperar"
+                    ? "Ingresá tu email y la clave de recuperación que guardaste al registrarte."
+                    : "Ingresá tus datos para abrir tu panel y ver tus turnos de hoy."}
                 </p>
-                <div className="relative mt-6 rounded-full border-2 border-ink/12 bg-paper p-1">
-                  <span className={`absolute bottom-1 top-1 w-[calc(50%-4px)] rounded-full bg-evergreen transition-transform duration-300 ease-out ${mode === "registro" ? "translate-x-0" : "translate-x-full"}`} style={{ left: 4 }} aria-hidden="true" />
-                  <div className="relative z-10 grid grid-cols-2">
-                    {(["registro", "login"] as const).map((m) => (
-                      <button key={m} type="button" onClick={() => switchMode(m)}
-                        className={`rounded-full py-2 font-display text-sm font-bold uppercase tracking-wider transition-colors duration-300 ${mode === m ? "text-lime" : "text-ink/45 hover:text-ink"}`}>
-                        {m === "registro" ? "Crear cuenta" : "Entrar"}
+
+                <form onSubmit={handleSubmit}>
+                  <fieldset disabled={loading} className="auth-fields">
+                    {mode === "registro" && (
+                      <>
+                        <label>
+                          Tu nombre
+                          <input
+                            name="name"
+                            autoComplete="name"
+                            required
+                            maxLength={70}
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Nombre y apellido"
+                            autoFocus
+                          />
+                        </label>
+                        <label>
+                          Nombre de tu negocio o local
+                          <input
+                            name="business"
+                            required
+                            maxLength={80}
+                            value={business}
+                            onChange={(e) => setBusiness(e.target.value)}
+                            placeholder="Ej. Barbería Central, Nails by Juli…"
+                          />
+                        </label>
+                      </>
+                    )}
+
+                    <label>
+                      Email
+                      <input
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        required
+                        maxLength={254}
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="vos@tunegocio.com"
+                        autoFocus={mode !== "registro"}
+                      />
+                    </label>
+
+                    {mode === "recuperar" && (
+                      <label>
+                        Clave de recuperación
+                        <input
+                          name="recovery"
+                          required
+                          autoComplete="off"
+                          spellCheck={false}
+                          value={recoveryInput}
+                          onChange={(e) => setRecoveryInput(e.target.value)}
+                          placeholder="Pegá acá tu clave de 64 caracteres"
+                          className="font-mono text-xs"
+                        />
+                      </label>
+                    )}
+
+                    <label>
+                      {mode === "recuperar" ? "Nueva contraseña" : "Contraseña"}
+                      <span className="auth-password">
+                        <input
+                          name="password"
+                          type={showPass ? "text" : "password"}
+                          autoComplete={mode === "login" ? "current-password" : "new-password"}
+                          required
+                          minLength={6}
+                          maxLength={128}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          onKeyUp={(e) => setCaps(e.getModifierState("CapsLock"))}
+                          placeholder={mode === "login" ? "Tu contraseña" : "Mínimo 6 caracteres"}
+                        />
+                        <button
+                          type="button"
+                          aria-label={showPass ? "Ocultar contraseña" : "Ver contraseña"}
+                          onClick={() => setShowPass(!showPass)}
+                        >
+                          {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </span>
+                    </label>
+
+                    {mode !== "login" && (
+                      <div
+                        className={`password-guidance ${password.length >= 6 ? "ready" : ""}`}
+                      >
+                        <span className="password-length-track">
+                          <i
+                            style={{
+                              width: `${Math.min(100, (password.length / 12) * 100)}%`,
+                            }}
+                          />
+                        </span>
+                        <span>
+                          {password.length >= 6 ? (
+                            <>
+                              <Check size={13} /> Longitud adecuada
+                            </>
+                          ) : (
+                            "Usá al menos 6 caracteres para mayor seguridad."
+                          )}
+                        </span>
+                      </div>
+                    )}
+
+                    {caps && (
+                      <p className="caps-notice">⚠️ Tenés la tecla Bloq Mayús activada.</p>
+                    )}
+
+                    {mode === "login" && (
+                      <button
+                        type="button"
+                        className="auth-forgot"
+                        onClick={() => switchMode("recuperar")}
+                      >
+                        ¿Olvidaste tu contraseña?
                       </button>
-                    ))}
-                  </div>
-                </div>
+                    )}
 
-                {error && <div key={shakeKey} className="shake mt-5 rounded-xl border-2 border-coral/40 bg-coral/10 px-4 py-3 text-sm font-semibold text-coral">{error}</div>}
-                {notice && <div key={shakeKey} className="shake mt-5 rounded-xl border-2 border-fern/40 bg-fern/10 px-4 py-3 text-sm font-semibold text-fern">{notice}</div>}
+                    {error && (
+                      <div role="alert" className="auth-error">
+                        {error}
+                      </div>
+                    )}
 
-                <form onSubmit={submit} className="mt-6 space-y-4">
-                  {mode === "registro" && (
+                    {notice && (
+                      <div role="status" className="auth-notice">
+                        {notice}
+                      </div>
+                    )}
+
+                    <button className="auth-submit" type="submit" disabled={loading}>
+                      {loading ? (
+                        <>
+                          <Loader2 size={18} className="auth-spinner" />
+                          Verificando…
+                        </>
+                      ) : (
+                        <>
+                          {mode === "registro"
+                            ? "Crear mi cuenta gratis"
+                            : mode === "recuperar"
+                            ? "Guardar nueva contraseña"
+                            : "Ingresar a mi panel"}
+                          <ArrowRight size={18} />
+                        </>
+                      )}
+                    </button>
+                  </fieldset>
+                </form>
+
+                <div className="auth-switch">
+                  {mode === "registro" ? (
                     <>
-                      <div>
-                        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Tu nombre</label>
-                        <input className="field" placeholder="Caro Méndez" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Nombre del negocio</label>
-                        <input className="field" placeholder="Studio Nails" value={business} onChange={(e) => setBusiness(e.target.value)} />
-                      </div>
+                      ¿Ya tenés una cuenta?{" "}
+                      <button type="button" onClick={() => switchMode("login")}>
+                        Ingresá acá
+                      </button>
+                    </>
+                  ) : mode === "recuperar" ? (
+                    <>
+                      ¿Te acordaste tu clave?{" "}
+                      <button type="button" onClick={() => switchMode("login")}>
+                        Volver al inicio de sesión
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      ¿Todavía no tenés cuenta?{" "}
+                      <button type="button" onClick={() => switchMode("registro")}>
+                        Empezá gratis
+                      </button>
                     </>
                   )}
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Email</label>
-                    <input className="field" type="email" placeholder="caro@studio.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Contraseña</label>
-                    <div className="relative">
-                      <input className="field pr-12" type={showPass ? "text" : "password"} placeholder={mode === "registro" ? "Mínimo 8 caracteres" : "Tu contraseña"} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "registro" ? "new-password" : "current-password"} />
-                      <button type="button" onClick={() => setShowPass((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold uppercase tracking-wider text-inkmute transition-colors hover:text-fern">
-                        {showPass ? "Ocultar" : "Ver"}
-                      </button>
-                    </div>
-                  </div>
-                  {mode === "registro" && (
-                    <div>
-                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Repetí la contraseña</label>
-                      <input className="field" type={showPass ? "text" : "password"} placeholder="Igual que arriba" value={password2} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" />
-                    </div>
-                  )}
-                  <button type="submit" disabled={loading}
-                    className="group flex w-full items-center justify-center gap-2.5 rounded-full bg-evergreen px-6 py-4 font-display text-lg font-bold text-lime transition-all duration-200 hover:-translate-y-0.5 hover:bg-pine hover:shadow-[0_14px_35px_rgba(8,43,34,0.35)] active:translate-y-0 disabled:cursor-wait disabled:opacity-70">
-                    {loading ? (
-                      <span className="flex items-center gap-2.5"><span className="blinkdot h-2.5 w-2.5 rounded-full bg-lime" /> Preparando tu agenda…</span>
-                    ) : (
-                      <>{mode === "registro" ? "Crear mi agenda" : "Entrar a mi panel"}<IconArrow className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" /></>
-                    )}
-                  </button>
-                </form>
-              </>
-            )}
+                </div>
 
-            {!pickPlan && (
-              <p className="mt-6 text-center text-xs leading-relaxed text-inkmute">
-                Al continuar aceptás nuestros <button type="button" onClick={() => setLegal("terms")} className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-2">términos</button> y{" "}
-                <button type="button" onClick={() => setLegal("privacy")} className="font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-2">política de privacidad</button>.
-              </p>
+                <div className="auth-note">
+                  <LockKeyhole size={14} />
+                  Tus datos y turnos están protegidos y encriptados.
+                </div>
+
+                {mode === "registro" && (
+                  <p className="mt-4 text-center text-[11px] text-slate-400">
+                    Al registrarte aceptás los{" "}
+                    <button
+                      type="button"
+                      onClick={() => setLegal("terms")}
+                      className="underline hover:text-emerald-600"
+                    >
+                      Términos del Servicio
+                    </button>{" "}
+                    y la{" "}
+                    <button
+                      type="button"
+                      onClick={() => setLegal("privacy")}
+                      className="underline hover:text-emerald-600"
+                    >
+                      Política de Privacidad
+                    </button>
+                    .
+                  </p>
+                )}
+              </div>
             )}
           </div>
-          {legal && <LegalModal doc={legal === "terms" ? TERMS_DOC : PRIVACY_DOC} onClose={() => setLegal(null)} />}
-          {!pickPlan && (
-            <p className="mt-6 text-center text-sm text-inkmute">
-              {mode === "registro" ? "¿Ya tenés cuenta? " : "¿Todavía no tenés cuenta? "}
-              <button onClick={() => switchMode(mode === "registro" ? "login" : "registro")} className="font-display font-bold text-fern underline decoration-limedeep decoration-2 underline-offset-4 transition-colors hover:text-evergreen">
-                {mode === "registro" ? "Iniciá sesión" : "Creala gratis"}
-              </button>
-            </p>
-          )}
-        </div>
+
+          <div className="auth-bottom">
+            ¿Dudas o consultas? Escribinos a{" "}
+            <a href="mailto:hola@cupito.app">hola@cupito.app</a>
+          </div>
+        </section>
       </main>
-    </div>
+
+      {legal === "terms" && (
+        <LegalModal doc={TERMS_DOC} onClose={() => setLegal(null)} />
+      )}
+      {legal === "privacy" && (
+        <LegalModal doc={PRIVACY_DOC} onClose={() => setLegal(null)} />
+      )}
+    </>
   );
 }

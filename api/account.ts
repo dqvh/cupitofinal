@@ -135,6 +135,8 @@ export default async function handler(req: Request): Promise<Response> {
         status: "activa",
       } : null;
 
+      const recovery = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
+
       const user = {
         id: authId,
         auth_id: authId,
@@ -142,6 +144,7 @@ export default async function handler(req: Request): Promise<Response> {
         business,
         email,
         password: null,
+        recovery,
         slug,
         plan,
         created_at: now,
@@ -209,7 +212,55 @@ export default async function handler(req: Request): Promise<Response> {
         }),
       });
 
-      return json({ ok: true, user, slug });
+      return json({ ok: true, user, slug, recovery });
+    }
+
+    /* ---------------- RECUPERAR CONTRASEÑA ---------------- */
+    if (body.action === "recover") {
+      const email = String(body.email || "").toLowerCase().trim();
+      const recovery = String(body.recovery || "").trim();
+      const password = String(body.password || "");
+      if (!email || !recovery || !password) return json({ error: "Completá todos los campos." }, 400);
+      if (password.length < 6) return json({ error: "La contraseña necesita 6+ caracteres." }, 400);
+
+      // 1. Buscar fila en cupito_users
+      const rowRes = await fetch(
+        `${url}/rest/v1/cupito_users?select=*&email=eq.${encodeURIComponent(email)}`,
+        { headers: svcHeaders(serviceKey) }
+      );
+      if (!rowRes.ok) return json({ error: "No pudimos consultar la cuenta." }, 500);
+      const rows = (await rowRes.json().catch(() => [])) as any[];
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (!row || row.deleted) {
+        return json({ error: "No encontramos ninguna cuenta con ese email." }, 404);
+      }
+
+      // 2. Verificar clave de recuperación
+      if (!row.recovery || row.recovery.trim().toLowerCase() !== recovery.toLowerCase()) {
+        return json({ error: "La clave de recuperación no es válida para esta cuenta." }, 401);
+      }
+
+      // 3. Actualizar contraseña en Supabase Auth
+      const authId = row.auth_id || row.id;
+      const updateAuthRes = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(authId)}`, {
+        method: "PUT",
+        headers: svcHeaders(serviceKey),
+        body: JSON.stringify({ password, email_confirm: true }),
+      });
+      if (!updateAuthRes.ok) {
+        const at = await updateAuthRes.text().catch(() => "");
+        return json({ error: `No se pudo actualizar la contraseña: ${at}` }, 500);
+      }
+
+      // 4. Generar nueva clave de recuperación (un solo uso)
+      const newRecovery = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
+      await fetch(`${url}/rest/v1/cupito_users?id=eq.${encodeURIComponent(authId)}`, {
+        method: "PATCH",
+        headers: svcHeaders(serviceKey),
+        body: JSON.stringify({ recovery: newRecovery }),
+      });
+
+      return json({ ok: true, message: "Contraseña actualizada exitosamente.", newRecovery });
     }
 
     /* ---------------- MIGRAR ---------------- */

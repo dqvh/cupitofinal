@@ -16,6 +16,7 @@ import {
   CopyButton,
   Badge,
 } from "./kit";
+import CustomSelect from "./ui/CustomSelect";
 
 /* Central Cupito — ruta #/admin o #/central.
    La llave maestra se guarda como hash SHA-256 y la sesión vive en sessionStorage
@@ -678,18 +679,28 @@ function EditBusinessModal({ user, onClose }: { user: User; onClose: () => void 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-[11px] font-bold text-inkmute uppercase">Plan Asignado</label>
-                <select className="field !py-2" value={plan} onChange={(e) => setPlan(e.target.value as Plan)}>
-                  <option value="semilla">Semilla (Gratis)</option>
-                  <option value="crece">Crece ($9.500/mes)</option>
-                  <option value="escala">Escala ($22.000/mes)</option>
-                </select>
+                <CustomSelect
+                  value={plan}
+                  onChange={(val) => setPlan(val as Plan)}
+                  options={[
+                    { value: "semilla", label: "Semilla", sublabel: "Gratis" },
+                    { value: "crece", label: "Crece", sublabel: "$9.500/mes" },
+                    { value: "escala", label: "Escala", sublabel: "$22.000/mes" },
+                  ]}
+                  placeholder="Elegir plan"
+                />
               </div>
               <div>
                 <label className="mb-1 block text-[11px] font-bold text-inkmute uppercase">Facturación</label>
-                <select className="field !py-2" value={billing} onChange={(e) => setBilling(e.target.value as "mensual" | "anual")}>
-                  <option value="mensual">Mensual</option>
-                  <option value="anual">Anual</option>
-                </select>
+                <CustomSelect
+                  value={billing}
+                  onChange={(val) => setBilling(val as "mensual" | "anual")}
+                  options={[
+                    { value: "mensual", label: "Mensual" },
+                    { value: "anual", label: "Anual" },
+                  ]}
+                  placeholder="Elegir facturación"
+                />
               </div>
             </div>
 
@@ -712,10 +723,17 @@ function EditBusinessModal({ user, onClose }: { user: User; onClose: () => void 
                 </div>
                 <div className="flex items-center justify-between pt-2">
                   <label className="text-xs text-inkmute font-semibold">Estado de suscripción:</label>
-                  <select className="field !w-auto !py-1 !text-xs" value={status} onChange={(e) => setStatus(e.target.value as "activa" | "cancelada")}>
-                    <option value="activa">Activa</option>
-                    <option value="cancelada">Cancelada</option>
-                  </select>
+                  <div className="w-36">
+                    <CustomSelect
+                      value={status}
+                      onChange={(val) => setStatus(val as "activa" | "cancelada")}
+                      options={[
+                        { value: "activa", label: "Activa" },
+                        { value: "cancelada", label: "Cancelada" },
+                      ]}
+                      placeholder="Estado"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -809,27 +827,42 @@ function NewBusinessModal({ onClose }: { onClose: () => void }) {
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <label className="mb-1 block text-[11px] font-bold text-inkmute uppercase">Plan</label>
-                <select className="field !py-2" value={plan} onChange={(e) => setPlan(e.target.value as Plan)}>
-                  <option value="semilla">Semilla (Gratis)</option>
-                  <option value="crece">Crece</option>
-                  <option value="escala">Escala</option>
-                </select>
+                <CustomSelect
+                  value={plan}
+                  onChange={(val) => setPlan(val as Plan)}
+                  options={[
+                    { value: "semilla", label: "Semilla", sublabel: "Gratis" },
+                    { value: "crece", label: "Crece", sublabel: "$9.500" },
+                    { value: "escala", label: "Escala", sublabel: "$22.000" },
+                  ]}
+                  placeholder="Plan"
+                />
               </div>
               <div>
                 <label className="mb-1 block text-[11px] font-bold text-inkmute uppercase">Facturación</label>
-                <select className="field !py-2" value={billing} onChange={(e) => setBilling(e.target.value as "mensual" | "anual")}>
-                  <option value="mensual">Mensual</option>
-                  <option value="anual">Anual</option>
-                </select>
+                <CustomSelect
+                  value={billing}
+                  onChange={(val) => setBilling(val as "mensual" | "anual")}
+                  options={[
+                    { value: "mensual", label: "Mensual" },
+                    { value: "anual", label: "Anual" },
+                  ]}
+                  placeholder="Facturación"
+                />
               </div>
               <div>
                 <label className="mb-1 block text-[11px] font-bold text-inkmute uppercase">Días Vigencia</label>
-                <select className="field !py-2" value={durationDays} onChange={(e) => setDurationDays(Number(e.target.value))}>
-                  <option value={30}>30 días (1 mes)</option>
-                  <option value={60}>60 días (2 meses)</option>
-                  <option value={90}>90 días (3 meses)</option>
-                  <option value={365}>365 días (1 año)</option>
-                </select>
+                <CustomSelect
+                  value={String(durationDays)}
+                  onChange={(val) => setDurationDays(Number(val))}
+                  options={[
+                    { value: "30", label: "30 días", sublabel: "1 mes" },
+                    { value: "60", label: "60 días", sublabel: "2 meses" },
+                    { value: "90", label: "90 días", sublabel: "3 meses" },
+                    { value: "365", label: "365 días", sublabel: "1 año" },
+                  ]}
+                  placeholder="Vigencia"
+                />
               </div>
             </div>
           </div>

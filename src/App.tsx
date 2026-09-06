@@ -103,7 +103,14 @@ function parseRoute(): { name: "landing" | "auth" | "app" | "b" | "admin"; query
   if (path === "admin" || path === "central" || path.startsWith("admin/") || path.startsWith("central/")) {
     return { name: "admin", query };
   }
-  if (path === "auth" || path === "login" || path === "registro" || path.startsWith("auth/")) {
+  if (
+    path === "auth" ||
+    path === "login" ||
+    path === "ingresar" ||
+    path === "registro" ||
+    path === "recuperar" ||
+    path.startsWith("auth/")
+  ) {
     return { name: "auth", query };
   }
   if (path === "app" || path === "dashboard" || path.startsWith("app/")) {
@@ -152,7 +159,10 @@ function Router() {
   }, []);
 
   if (route.name === "auth") {
-    const mode = route.query.includes("modo=login") ? "login" : "registro";
+    const raw = (window.location.hash || window.location.pathname || "").toLowerCase();
+    const mode = raw.includes("modo=login") || raw.includes("ingresar") || raw.includes("login")
+      ? "login"
+      : "registro";
     return (
       <Suspense fallback={<RouteLoader />}>
         <Auth initialMode={mode} />
