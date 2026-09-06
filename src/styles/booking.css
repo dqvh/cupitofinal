@@ -1,4 +1,4 @@
-﻿/* Estilos modernos de Reserva Pública - Cupito */
+/* Estilos modernos de Reserva Pública - Cupito */
 .booking-page {
   min-height: 100vh;
   background: linear-gradient(150deg, #edf8f2, #f9fbf9 60%, #eef6f1);
@@ -342,4 +342,203 @@
   .slots {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Controles, Botones y Formularios */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border: 1px solid #dce8df;
+  background: white;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #244b34;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  font-family: inherit;
+}
+
+.btn:hover:not(:disabled) {
+  background: #f4faf6;
+  border-color: #b7ddc7;
+  transform: translateY(-1px);
+}
+
+.btn.primary {
+  background: var(--business-accent, #16845f);
+  border-color: var(--business-accent, #16845f);
+  color: white;
+  box-shadow: 0 4px 14px rgba(22, 132, 95, 0.22);
+}
+
+.btn.primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(22, 132, 95, 0.28);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.booking-controls .btn.primary {
+  flex: 1;
+}
+
+.form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #355845;
+}
+
+.form-grid input,
+.form-grid select,
+.form-grid textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #d8e5dd;
+  border-radius: 10px;
+  background: white;
+  font-size: 14px;
+  color: #1e4530;
+  outline: none;
+  transition: all 0.2s;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-grid input:focus,
+.form-grid select:focus,
+.form-grid textarea:focus {
+  border-color: var(--business-accent, #16845f);
+  box-shadow: 0 0 0 3px rgba(22, 132, 95, 0.15);
+}
+
+.notice {
+  background: #fff8eb;
+  color: #8c6721;
+  border: 1px solid #f6e2b8;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 16px 0;
+}
+
+.error-box {
+  background: #fdf2f2;
+  color: #b83246;
+  border: 1px solid #f9ced4;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 16px 0;
+}
+
+.demo-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #eaf7ef;
+  color: #1a7a50;
+  border: 1px solid #c9ebd8;
+  padding: 4px 10px;
+  border-radius: 999px;
+  width: fit-content;
+  margin-bottom: 12px;
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--business-accent, #16845f);
+  font-size: 13px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
+.small {
+  font-size: 12px;
+}
+
+.muted {
+  color: #7b9685;
+}
+
+/* Modales para Mis Turnos y Reseñas */
+.booking-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 48, 30, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  animation: fadeIn 0.2s ease;
+}
+
+.booking-modal {
+  background: white;
+  border-radius: 20px;
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.18);
+  border: 1px solid #dcebe2;
+  padding: 28px;
+  animation: modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.booking-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.booking-modal-header h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1b422e;
+  margin: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }

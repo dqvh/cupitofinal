@@ -77,6 +77,7 @@ export const RESERVED_PATHS = new Set([
   "precios",
   "problema",
   "solucion",
+  "reservar",
   "faq",
   "terms",
   "privacy",
@@ -120,6 +121,12 @@ function parseRoute(): { name: "landing" | "auth" | "app" | "b" | "admin"; query
   // Compatibilidad hacia atrás: si tiene el prefijo legacy /b/slug
   if (path.startsWith("b/")) {
     const slug = clean.slice(2).trim();
+    return { name: "b", query, slug };
+  }
+
+  // Ruta directa de reserva /reservar/slug o #/reservar/slug
+  if (path.startsWith("reservar/")) {
+    const slug = clean.slice(9).trim();
     return { name: "b", query, slug };
   }
 

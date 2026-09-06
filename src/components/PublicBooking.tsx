@@ -1,197 +1,170 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, MapPin, Sparkles,
+  ShieldCheck, Package, Plus, Minus, Calendar, Download, Search,
+  MessageCircle, ExternalLink, Star, X
+} from "lucide-react";
 import {
   useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
-  THEMES, SEMILLA_MONTHLY_LIMIT, monthBookingCount, findOverlap, isSlotBlocked,
+  findOverlap, isSlotBlocked,
   getProHours, isProAvailable, getAvailablePros, toMinutes,
-  type User, type BizData, type BizSettings, type Coupon, type ColorTheme,
-  type Booking, type Service, type Professional,
+  type User, type BizData,
 } from "../lib/store";
-import {
-  IconCheck, IconCalendar, IconChevron, IconBag, IconTicket, IconPlus, IconUsers,
-  IconWhatsApp, LogoMark, IconSun, IconMoon, CopyButton, ConfettiBurst, Badge, IconSearch,
-} from "./kit";
+import { CopyButton, ConfettiBurst } from "./kit";
 import { normalizeArgentinaPhone, cleanPhoneDigits, createWhatsAppUrl } from "../lib/phone";
 import { sound } from "../lib/audio";
 import { sendBookingConfirmationEmail } from "../lib/email";
 import "../styles/booking.css";
 
-/* ---------- helpers .ics / Google Calendar ---------- */
+/* ---------- helpers calendario ---------- */
 function toLocalStamp(dt: Date) {
   return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}${String(dt.getDate()).padStart(2, "0")}T${String(dt.getHours()).padStart(2, "0")}${String(dt.getMinutes()).padStart(2, "0")}00`;
 }
+
 function buildDates(date: string, time: string, duration: number) {
   const [y, m, d] = date.split("-").map(Number);
   const [hh, mm] = time.split(":").map(Number);
   const start = new Date(y, m - 1, d, hh, mm);
   return { start, end: new Date(start.getTime() + duration * 60000) };
 }
+
 function icsContent(o: { title: string; date: string; time: string; duration: number; desc: string }) {
   const { start, end } = buildDates(o.date, o.time, o.duration);
-  // Dos alarmas: 24 h antes y 1 h antes (Apple Calendar / Outlook las respetan solas).
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Cupito//Reservas//ES", "BEGIN:VEVENT", `UID:${Date.now()}@cupito.app`, `DTSTART:${toLocalStamp(start)}`, `DTEND:${toLocalStamp(end)}`, `SUMMARY:${o.title}`, `DESCRIPTION:${o.desc}`, "BEGIN:VALARM", "TRIGGER:-PT24H", "ACTION:DISPLAY", "DESCRIPTION:Tu turno es mañana", "END:VALARM", "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", "DESCRIPTION:Recordatorio de tu turno", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Cupito//Reservas//ES",
+    "BEGIN:VEVENT",
+    `UID:${Date.now()}@cupito.app`,
+    `DTSTART:${toLocalStamp(start)}`,
+    `DTEND:${toLocalStamp(end)}`,
+    `SUMMARY:${o.title}`,
+    `DESCRIPTION:${o.desc}`,
+    "BEGIN:VALARM",
+    "TRIGGER:-PT24H",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Tu turno es mañana",
+    "END:VALARM",
+    "BEGIN:VALARM",
+    "TRIGGER:-PT1H",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Recordatorio de tu turno",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
 }
+
 function downloadIcs(content: string) {
   const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "mi-turno-cupito.ics";
-  document.body.appendChild(a); a.click(); a.remove();
+  a.href = url;
+  a.download = "mi-turno-cupito.ics";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   URL.revokeObjectURL(url);
 }
-function gcalUrl(o: { title: string; date: string; time: string; duration: number }) {
+
+function gcalUrl(o: { title: string; date: string; time: string; duration: number; desc?: string }) {
   const { start, end } = buildDates(o.date, o.time, o.duration);
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(o.title)}&dates=${toLocalStamp(start)}/${toLocalStamp(end)}&details=${encodeURIComponent("Turno reservado con Cupito. ¡Te esperamos!")}`;
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(o.title)}&dates=${toLocalStamp(start)}/${toLocalStamp(end)}&details=${encodeURIComponent(o.desc || "Turno reservado con Cupito. ¡Te esperamos!")}`;
 }
 
-/* ---------- calendario mensual ---------- */
-function MonthPicker({ cursor, setCursor, selected, onSelect, isClosed, theme, maxAdvanceDays = 30 }: {
-  cursor: Date; setCursor: (d: Date) => void; selected: string | null; onSelect: (k: string) => void; isClosed: (k: string) => boolean; theme: ColorTheme; maxAdvanceDays?: number;
-}) {
-  const year = cursor.getFullYear(), month = cursor.getMonth();
-  const now = new Date();
-  const nowMonth = now.getFullYear() * 12 + now.getMonth();
-  const curMonth = year * 12 + month;
-  const maxMonths = maxAdvanceDays > 0 ? Math.max(1, Math.ceil(maxAdvanceDays / 30)) : 12;
-  const pad = (new Date(year, month, 1).getDay() + 6) % 7;
-  const total = new Date(year, month + 1, 0).getDate();
-  const cells: (number | null)[] = [...Array.from({ length: pad }, () => null), ...Array.from({ length: total }, (_, i) => i + 1)];
-  while (cells.length % 7 !== 0) cells.push(null);
-  const label = cursor.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <button type="button" disabled={curMonth <= nowMonth} onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label="Mes anterior"
-          className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/12 bg-white/60 text-ink transition-all enabled:hover:-translate-x-0.5 enabled:hover:border-ink enabled:hover:bg-white disabled:opacity-30">
-          <IconChevron className="h-4 w-4 rotate-180" />
-        </button>
-        <p className="font-display text-base font-extrabold capitalize text-ink">{label}</p>
-        <button type="button" disabled={curMonth >= nowMonth + maxMonths} onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Mes siguiente"
-          className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/12 bg-white/60 text-ink transition-all enabled:hover:translate-x-0.5 enabled:hover:border-ink enabled:hover:bg-white disabled:opacity-30">
-          <IconChevron className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="mt-3 grid grid-cols-7 gap-1 text-center">
-        {["L", "M", "X", "J", "V", "S", "D"].map((d) => <span key={d} className="py-1 text-[11px] font-bold uppercase tracking-wider text-ink/40">{d}</span>)}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((d, i) => {
-          if (d === null) return <span key={`x${i}`} />;
-          const key = dateKey(new Date(year, month, d));
-          const past = key < dateKey(now);
-          const maxDate = maxAdvanceDays > 0 ? dateKey(addDays(now, maxAdvanceDays)) : "9999-99-99";
-          const tooFar = key > maxDate;
-          const closed = isClosed(key);
-          const sel = key === selected;
-          const disabled = past || tooFar || closed;
-          return (
-            <button type="button" key={key} disabled={disabled} onClick={() => onSelect(key)}
-              title={tooFar ? `Solo podés reservar hasta con ${maxAdvanceDays} días de anticipación` : undefined}
-              className={`relative flex aspect-square items-center justify-center rounded-lg border-2 font-display text-sm font-bold transition-all duration-150 ${sel ? theme.activeSlot : disabled ? "cursor-not-allowed border-transparent bg-ink/[0.04] text-ink/25" : "border-ink/10 bg-white/60 text-ink hover:-translate-y-0.5 hover:border-ink/40"}`}>
-              {d}
-              {closed && !past && !tooFar && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-coral/60" />}
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-2 flex items-center gap-1.5 text-[11px] text-inkmute">
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-coral/60" /> días sin atención
-      </p>
-    </div>
-  );
-}
-
-/* ---------- widget principal ---------- */
-export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({ user: User } & Record<"data", BizData>) | null; initialLookupOpen?: boolean } = {}) {
+export default function PublicBooking({
+  owner,
+  isPreview = false,
+  initialLookupOpen = false,
+  initialReviewOpen = false,
+}: {
+  owner?: ({ user: User } & Record<"data", BizData>) | null;
+  isPreview?: boolean;
+  initialLookupOpen?: boolean;
+  initialReviewOpen?: boolean;
+} = {}) {
   const store = useStore();
   const user = owner ? owner.user : store.user;
   const biz = owner ? owner.data : store.data;
-  const { addBookingFor, addWaitlist, cancelBookingByClient, toast } = store;
+  const { addBookingFor, cancelBookingByClient, addReviewFor, sessionUserId } = store;
 
-  const [step, setStep] = useState(0); // 0 servicio · 1 profesional · 2 fecha · 3 hora+datos
+  // Estados del asistente de reserva
+  const [step, setStep] = useState(0); // 0: Servicio | 1: Horario y Profesional | 2: Contacto
   const [serviceId, setServiceId] = useState<string | null>(null);
   const [proId, setProId] = useState<string | null>(null);
-  const [cursor, setCursor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(new Date()));
   const [time, setTime] = useState<string | null>(null);
   const [client, setClient] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [items, setItems] = useState<Record<string, number>>({});
+  const [notes, setNotes] = useState("");
+  const [cart, setCart] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const [couponInput, setCouponInput] = useState("");
-  const [coupon, setCoupon] = useState<Coupon | null>(null);
-  const [couponMsg, setCouponMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [showShop, setShowShop] = useState(false);
-  const [showPay, setShowPay] = useState(false);
-  const [showCalHelp, setShowCalHelp] = useState(false);
-  const [claimed, setClaimed] = useState(false);
-  const [wlClient, setWlClient] = useState("");
-  const [wlPhone, setWlPhone] = useState("");
-  const [wlDone, setWlDone] = useState(false);
-  const [wlError, setWlError] = useState<string | null>(null);
-  const [wlBusy, setWlBusy] = useState(false);
-  const [showWlForm, setShowWlForm] = useState(false);
-  const [showAllSlots, setShowAllSlots] = useState(false);
-  const [confirmedId, setConfirmedId] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [cancelFeedback, setCancelFeedback] = useState<string | null>(null);
-  const [cancelBlocked, setCancelBlocked] = useState(false);
-  const [showLookupModal, setShowLookupModal] = useState(!!initialLookupOpen);
+
+  // Modales
+  const [showLookupModal, setShowLookupModal] = useState(initialLookupOpen);
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupFeedback, setLookupFeedback] = useState<string | null>(null);
+
+  const [showReviewsModal, setShowReviewsModal] = useState(initialReviewOpen);
+  const [newReviewAuthor, setNewReviewAuthor] = useState("");
+  const [newReviewRating, setNewReviewRating] = useState(5);
+  const [newReviewText, setNewReviewText] = useState("");
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+
+  // Filtro de servicios
   const [serviceSearch, setServiceSearch] = useState("");
 
+  const submittingRef = useRef(false);
+
+  // Validación telefónica argentina
   const phoneVal = useMemo(() => normalizeArgentinaPhone(phone), [phone]);
-  const wlPhoneVal = useMemo(() => normalizeArgentinaPhone(wlPhone), [wlPhone]);
-  const lookupVal = useMemo(() => normalizeArgentinaPhone(lookupPhone), [lookupPhone]);
 
-  const filteredServices = useMemo(() => {
-    if (!biz) return [];
-    const q = serviceSearch.trim().toLowerCase();
-    if (!q) return biz.services;
-    return biz.services.filter((s) => s.name.toLowerCase().includes(q));
-  }, [biz?.services, serviceSearch]);
+  if (!user || !biz) {
+    return (
+      <div className="panel form-panel" style={{ maxWidth: 700, margin: "auto", textAlign: "center", padding: 40 }}>
+        <p>Cargando información del local...</p>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    if (done) {
-      // Auto-scroll centrado suave para ver la confirmación sin tener que scrollear
-      setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        const el = document.getElementById("booking-confirmed-ticket");
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-      }, 50);
-    }
-  }, [done]);
-
-  if (!user || !biz) return null;
-
-  const paid = isPaid(user);
   const settings = biz.settings;
-  const activeThemeId = paid ? (settings.theme ?? "evergreen") : "evergreen";
-  const theme = THEMES[activeThemeId] ?? THEMES.evergreen;
-  const maxAdvanceDays = settings.maxAdvanceDays ?? 30;
-  const hasPros = biz.professionals.length > 0;
-  const depositOn = paid && settings.depositEnabled && settings.depositPct > 0;
+  const isDemo = user.slug === "studio-nails" || user.slug === "demo" || user.slug === "cupito-demo";
+  const paid = isPaid(user);
+
+  const accentColor = useMemo(() => {
+    switch (settings.theme) {
+      case "coral": return "#ff7a59";
+      case "midnight": return "#38bdf8";
+      case "rose": return "#f472b6";
+      case "obsidian": return "#fbbf24";
+      case "ocean": return "#34d399";
+      default: return "#16845f";
+    }
+  }, [settings.theme]);
+
   const service = biz.services.find((s) => s.id === serviceId);
   const pro = biz.professionals.find((p) => p.id === proId);
-
-  const bookedPro = useMemo(() => {
-    if (pro) return pro;
-    if (!confirmedId) return null;
-    const b = biz.bookings.find((x) => x.id === confirmedId);
-    if (!b || !b.proId) return null;
-    return biz.professionals.find((p) => p.id === b.proId) || null;
-  }, [pro, confirmedId, biz.bookings, biz.professionals]);
+  const hasPros = biz.professionals.length > 0;
+  const maxAdvanceDays = settings.maxAdvanceDays ?? 30;
 
   const now = new Date();
   const todayKey = dateKey(now);
+  const maxDateKey = maxAdvanceDays > 0 ? dateKey(addDays(now, maxAdvanceDays)) : "9999-99-99";
   const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
   const dur = service?.duration ?? 45;
 
+  // Filtro de servicios
+  const filteredServices = useMemo(() => {
+    const q = serviceSearch.trim().toLowerCase();
+    if (!q) return biz.services;
+    return biz.services.filter((s) => s.name.toLowerCase().includes(q));
+  }, [biz.services, serviceSearch]);
+
+  // Chequeo de día abierto
   const isDayOpen = (key: string) => {
     const dIdx = dayOfWeek(key);
     if ((settings.closedDates || []).includes(key)) return false;
@@ -208,8 +181,10 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
     return !!settings.hours[dIdx]?.open;
   };
 
-  const getRawSlotsFor = (key: string): string[] => {
-    const dIdx = dayOfWeek(key);
+  // Turnos brutos para el día seleccionado
+  const rawSlots = useMemo(() => {
+    if (!selectedDate) return [];
+    const dIdx = dayOfWeek(selectedDate);
     if (pro) {
       const proH = getProHours(pro, settings.hours)[dIdx];
       return proH?.open ? slotsForDay(proH) : [];
@@ -226,117 +201,114 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
     }
     const h = settings.hours[dIdx];
     return h?.open ? slotsForDay(h) : [];
-  };
+  }, [selectedDate, pro, hasPros, biz.professionals, settings.hours]);
 
-  const isClosed = (key: string) => {
-    if (!isDayOpen(key)) return true;
-    if ((settings.closedDates || []).includes(key)) return true;
-    if ((biz.blockedSlots || []).some((bs) => bs.date === key && !bs.time && (!bs.proId || !proId || bs.proId === proId))) return true;
-    if (key === todayKey) {
-      const todaySlots = getRawSlotsFor(key);
-      if (todaySlots.length > 0 && todaySlots.every((t) => t <= currentHHMM)) return true;
-    }
-    return false;
-  };
-
-  const rawSlots = selectedDate ? getRawSlotsFor(selectedDate) : [];
-
-  const isTimeAvailable = (key: string, t: string) => {
+  // Verificar si un slot específico está tomado o pasado
+  const isSlotDisabled = (t: string) => {
+    if (selectedDate === todayKey && t <= currentHHMM) return true;
     if (pro) {
-      return isProAvailable(pro, key, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services);
+      return !isProAvailable(pro, selectedDate, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services);
     }
     if (hasPros) {
-      return getAvailablePros(biz.professionals, key, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services).length > 0;
+      return getAvailablePros(biz.professionals, selectedDate, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services).length === 0;
     }
-    const h = settings.hours[dayOfWeek(key)];
-    if (!h?.open) return false;
-    const s = toMinutes(t);
-    const e = s + dur;
-    const inS1 = h.from && h.to && s >= toMinutes(h.from) && e <= toMinutes(h.to);
-    const inS2 = h.from2 && h.to2 && s >= toMinutes(h.from2) && e <= toMinutes(h.to2);
-    if (!inS1 && !inS2) return false;
-    if (isSlotBlocked(biz.blockedSlots || [], key, t)) return false;
-    return !findOverlap({ date: key, time: t, dur }, biz.bookings, biz.services);
+    if (isSlotBlocked(biz.blockedSlots || [], selectedDate, t)) return true;
+    return !!findOverlap({ date: selectedDate, time: t, dur }, biz.bookings, biz.services);
   };
 
-  const slots = (selectedDate === todayKey ? rawSlots.filter((t) => t > currentHHMM) : rawSlots)
-    .filter((t) => selectedDate && isTimeAvailable(selectedDate, t));
+  // Seña configurada
+  const depositOn = paid && settings.depositEnabled && settings.depositPct > 0;
+  const depositAmount = depositOn && service ? Math.round((service.price * settings.depositPct) / 100) : 0;
 
-  const allTaken = rawSlots.length > 0 && slots.length === 0;
-  const monthLimitReached = !paid && monthBookingCount(biz) >= SEMILLA_MONTHLY_LIMIT;
+  // Carrito de productos
+  const productsTotal = useMemo(() => {
+    return (biz.products || []).reduce((acc, p) => acc + (cart[p.id] || 0) * p.price, 0);
+  }, [biz.products, cart]);
 
-  const currentProHours = pro ? getProHours(pro, settings.hours) : settings.hours;
-  const dayHoursForSelected = selectedDate ? currentProHours[dayOfWeek(selectedDate)] : null;
-  const hasBreak = dayHoursForSelected ? !!dayHoursForSelected.from2 : false;
-  const breakInfo = dayHoursForSelected && dayHoursForSelected.from2 ? { to: dayHoursForSelected.to, from2: dayHoursForSelected.from2 } : null;
+  const cartItemsArray = useMemo(() => {
+    return Object.entries(cart)
+      .filter(([, qty]) => qty > 0)
+      .map(([id, quantity]) => ({ id, quantity }));
+  }, [cart]);
 
-  const productsTotal = Object.entries(items).reduce((acc, [pid, qty]) => acc + (biz.products.find((p) => p.id === pid)?.price ?? 0) * qty, 0);
-  const itemCount = Object.values(items).reduce((a, b) => a + b, 0);
-  const totalBase = (service?.price ?? 0) + productsTotal;
-  const discount = coupon ? Math.round((totalBase * coupon.pct) / 100) : 0;
-  const total = Math.max(0, totalBase - discount);
-  const deposit = depositOn ? Math.round((total * settings.depositPct) / 100) : 0;
+  // Reseñas y promedio
+  const avgRating = useMemo(() => {
+    if (!biz.reviews || biz.reviews.length === 0) return null;
+    return (biz.reviews.reduce((acc, r) => acc + r.rating, 0) / biz.reviews.length).toFixed(1);
+  }, [biz.reviews]);
 
-  const bookingItems = Object.entries(items).map(([productId, qty]) => ({ productId, qty }));
+  // Días de atención
+  const openDaysCount = useMemo(() => {
+    return settings.hours.filter((h) => h.open).length;
+  }, [settings.hours]);
 
-  const applyCoupon = () => {
-    const code = couponInput.trim().toUpperCase();
-    if (!code) return setCouponMsg({ ok: false, text: "Escribí un código." });
-    const found = biz.coupons.find((c) => c.code === code && c.active);
-    if (!found) { setCoupon(null); return setCouponMsg({ ok: false, text: "Ese cupón no existe o ya no está activo." }); }
-    setCoupon(found);
-    setCouponMsg({ ok: true, text: `¡Listo! ${found.pct}% de descuento aplicado.` });
-  };
+  // Turnos del cliente en modal de consulta
+  const clientBookings = useMemo(() => {
+    if (!lookupPhone.trim()) return [];
+    const digits = cleanPhoneDigits(lookupPhone);
+    if (digits.length < 6) return [];
+    return (biz.bookings || []).filter((b) => cleanPhoneDigits(b.phone).includes(digits));
+  }, [biz.bookings, lookupPhone]);
 
-  const joinWaitlist = async () => {
-    if (!selectedDate || !serviceId || wlBusy) return;
-    setWlBusy(true);
-    const err = await addWaitlist({ date: selectedDate, serviceId, client: wlClient, phone: wlPhone }, user.id);
-    setWlBusy(false);
-    if (err) return setWlError(err);
-    setWlError(null);
-    setWlDone(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    if (owner === undefined) toast(`Nueva persona en lista de espera: ${wlClient.trim()} 👀`);
-  };
+  // Confirmar reserva
+  const handleReserve = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submittingRef.current) return;
+    if (!serviceId || !selectedDate || !time) {
+      setError("Por favor seleccioná servicio, fecha y horario.");
+      return;
+    }
+    if (client.trim().length < 2) {
+      setError("Ingresá tu nombre y apellido.");
+      return;
+    }
+    if (!phoneVal.isValid) {
+      setError("Ingresá un número de celular válido de Argentina (ej. 11 1234 5678).");
+      return;
+    }
 
-  const confirm = () => {
-    if (client.trim().length < 2) return setError("Poné tu nombre para confirmar.");
-    if (!phoneVal.isValid) return setError("Ingresá un número de celular válido de Argentina (ej. 11 5555-0000).");
-    if (email.trim() !== "" && !/^\S+@\S+\.\S+$/.test(email.trim())) return setError("Ese email no parece válido (o dejalo vacío).");
-    if (!serviceId || !selectedDate || !time) return setError("Falta elegir servicio, día y hora.");
+    submittingRef.current = true;
+    setBusy(true);
     setError(null);
-    if (depositOn && deposit > 0) setShowPay(true);
-    else finish({});
-  };
 
-  const finish = async (opts: { claimTx?: string }) => {
-    if (!serviceId || !selectedDate || !time || confirming) return;
-    setConfirming(true);
+    const bookingItems = cartItemsArray.length > 0
+      ? cartItemsArray.map(({ id, quantity }) => ({ productId: id, qty: quantity }))
+      : undefined;
+
     const res = await addBookingFor(user.id, {
-      client, phone, email: email.trim() || undefined, serviceId, date: selectedDate, time, source: "online",
-      items: bookingItems.length ? bookingItems : undefined,
+      client: client.trim(),
+      phone: phone.trim(),
+      email: email.trim() || undefined,
+      serviceId,
+      date: selectedDate,
+      time,
+      source: "online",
+      items: bookingItems,
       proId: proId ?? undefined,
-      status: opts.claimTx ? "pendiente" : undefined,
-      depositClaim: opts.claimTx ? { txId: opts.claimTx, sentAt: Date.now() } : undefined,
+      status: depositOn && depositAmount > 0 ? "pendiente" : undefined,
     });
-    setConfirming(false);
-    if (!res.ok) { setShowPay(false); return setError(res.error); }
-    setShowPay(false);
-    setClaimed(!!opts.claimTx);
-    setConfirmedId(res.id);
-    setCancelFeedback(null);
-    setCancelBlocked(false);
+
+    submittingRef.current = false;
+    setBusy(false);
+
+    if (!res.ok) {
+      setError(res.error || "No se pudo realizar la reserva. Por favor elegí otro horario.");
+      return;
+    }
+
     setDone(true);
     sound.playSuccess();
 
+    // Enviar email de confirmación si el cliente puso correo
     if (email.trim()) {
       const gcal = gcalUrl({
         title: `${service?.name || "Turno"} en ${user.business}`,
         date: selectedDate,
         time,
-        duration: service?.duration ?? 30,
+        duration: dur,
+        desc: `Turno confirmado en ${user.business}. Dirección: ${settings.address || "A consultar con el local"}.`,
       });
+
       sendBookingConfirmationEmail({
         toEmail: email.trim(),
         clientName: client.trim(),
@@ -345,1074 +317,927 @@ export default function PublicBooking({ owner, initialLookupOpen }: { owner?: ({
         dateStr: fmtLong(selectedDate),
         timeStr: time,
         proName: pro?.name,
-        priceStr: fmtMoney(total),
-        depositStr: depositOn ? fmtMoney(deposit) : undefined,
+        priceStr: fmtMoney(service?.price || 0),
+        depositStr: depositAmount > 0 ? fmtMoney(depositAmount) : undefined,
         address: settings.address,
         slug: user.slug,
         gCalUrl: gcal,
       }).catch(() => {});
     }
 
-    if (owner === undefined)
-      toast(opts.claimTx ? `Nueva reserva de ${client.trim()} — seña pendiente de verificación 💸` : `¡Nueva reserva de ${client.trim()}! Ya está en tu agenda 🎉`);
-  };
-
-  const reset = () => {
-    setStep(0); setServiceId(null); setProId(null); setSelectedDate(null); setTime(null);
-    setClient(""); setPhone(""); setEmail(""); setItems({}); setError(null); setDone(false);
-    setConfirmedId(null); setCancelFeedback(null); setCancelBlocked(false);
-    setCouponInput(""); setCoupon(null); setCouponMsg(null); setShowPay(false); setClaimed(false);
-    setWlClient(""); setWlPhone(""); setWlDone(false); setWlError(null); setShowWlForm(false);
-    setShowAllSlots(false);
+    // Scroll suave arriba para ver el comprobante
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const stepNum = step === 0 ? 1 : step === 1 ? 2 : step === 2 ? (hasPros ? 3 : 2) : hasPros ? 4 : 3;
-  const totalSteps = hasPros ? 4 : 3;
+  const reset = () => {
+    setStep(0);
+    setServiceId(null);
+    setProId(null);
+    setTime(null);
+    setClient("");
+    setPhone("");
+    setEmail("");
+    setNotes("");
+    setCart({});
+    setError(null);
+    setDone(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-  return (
-    <div className="overflow-hidden rounded-[22px] border-2 border-ink/15 bg-card text-ink shadow-block-ink">
-      {/* cabecera temática */}
-      <div className={`relative ${theme.cardHeaderBg} px-5 pb-8 pt-5 ${theme.cardHeaderText} sm:px-6`}>
-        <div className="gridlines absolute inset-0 opacity-30" aria-hidden="true" />
-        <div className="relative flex items-center justify-between gap-2">
-          <span className={`inline-flex min-w-0 items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${theme.accentText}`}>
-            <LogoMark className={`h-4 w-4 shrink-0 ${theme.accentText}`} />
-            <span className="truncate">cupito.app/{user.slug}</span>
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowLookupModal(true)}
-              className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold transition-all hover:bg-white/25 active:scale-95"
-            >
-              🔍 Mis turnos
-            </button>
-            <span className="hidden items-center gap-1.5 text-[11px] font-bold opacity-80 sm:inline-flex">
-              <span className={`blinkdot h-1.5 w-1.5 rounded-full ${theme.accentBg}`} /> Abierto 24/7
+  // URLs y comprobantes
+  const shownDate = selectedDate ? fmtLong(selectedDate) : "";
+
+  const whatsAppProofUrl = useMemo(() => {
+    if (!settings.whatsapp) return null;
+    const msg = `Hola ${user.business}! Acabo de reservar mi turno para ${service?.name || "un servicio"} el ${shownDate} a las ${time} hs. Te adjunto el comprobante de la seña 🙌`;
+    return createWhatsAppUrl(settings.whatsapp, msg);
+  }, [settings.whatsapp, user.business, service?.name, shownDate, time]);
+
+  const whatsAppGeneralUrl = useMemo(() => {
+    if (!settings.whatsapp) return null;
+    const msg = `Hola ${user.business}! Vengo de su página y quería hacer una consulta sobre los turnos 🙌`;
+    return createWhatsAppUrl(settings.whatsapp, msg);
+  }, [settings.whatsapp, user.business]);
+
+  const gcalHref = useMemo(() => {
+    if (!service || !time) return "#";
+    return gcalUrl({
+      title: `${service.name} en ${user.business}`,
+      date: selectedDate,
+      time,
+      duration: dur,
+      desc: `Turno en ${user.business}. Dirección: ${settings.address || "A coordinar"}.`,
+    });
+  }, [service, user.business, selectedDate, time, dur, settings.address]);
+
+  const handleDownloadIcs = () => {
+    if (!service || !time) return;
+    const content = icsContent({
+      title: `${service.name} - ${user.business}`,
+      date: selectedDate,
+      time,
+      duration: dur,
+      desc: `Turno reservado en ${user.business}. ¡Te esperamos!`,
+    });
+    downloadIcs(content);
+  };
+
+  // Enviar reseña
+  const submitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReviewAuthor.trim() || !newReviewText.trim()) return;
+    await addReviewFor(user.id, {
+      client: newReviewAuthor.trim(),
+      rating: newReviewRating,
+      text: newReviewText.trim(),
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setReviewSuccess(true);
+    setTimeout(() => {
+      setShowReviewsModal(false);
+      setReviewSuccess(false);
+      setNewReviewAuthor("");
+      setNewReviewText("");
+    }, 1500);
+  };
+
+  const bookingCardContent = (
+    <div className="booking-shell">
+      {/* Columna Izquierda: Tarjeta del Negocio */}
+      <aside className="business-card">
+        <div className="large-logo">
+          <Sparkles size={36} />
+        </div>
+
+        {isDemo && <span className="demo-pill">Página de demostración</span>}
+
+        <h1>{user.business}</h1>
+        <p>{settings.description || "Reservá tu lugar en menos de un minuto. Rápido, fácil y sin llamadas."}</p>
+
+        {avgRating !== null && (
+          <button
+            type="button"
+            onClick={() => setShowReviewsModal(true)}
+            className="text-link"
+            style={{ marginTop: 14, fontSize: 13, gap: 5 }}
+          >
+            <Star size={15} fill="currentColor" style={{ color: "#eab308" }} />
+            <b>{avgRating}</b>
+            <span className="muted">({biz.reviews.length} reseña{biz.reviews.length === 1 ? "" : "s"})</span>
+          </button>
+        )}
+
+        <div className="business-info">
+          <div>
+            <MapPin size={17} />
+            <span>
+              {settings.address || "Consultá la dirección con el local"}
+              {settings.mapsUrl && (
+                <a
+                  href={settings.mapsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-link"
+                  style={{ display: "inline-flex", marginLeft: 8, fontSize: 12 }}
+                >
+                  Ver mapa <ExternalLink size={11} />
+                </a>
+              )}
             </span>
           </div>
-        </div>
-        <h3 className="relative mt-4 font-display text-2xl font-extrabold">{user.business}</h3>
-        <p className="relative text-sm opacity-80">Reservá tu cupito en menos de un minuto · sin llamadas</p>
-      </div>
 
-      <div className="px-4 py-5 sm:px-6">
-        {/* progreso */}
-        {!done && (
-          <div className="mb-4 flex items-center gap-1.5" aria-hidden="true">
-            {Array.from({ length: totalSteps }, (_, i) => (
-              <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink/10">
-                <div className={`h-full rounded-full ${theme.progressBar} transition-all duration-500`} style={{ width: i + 1 < stepNum ? "100%" : i + 1 === stepNum ? "45%" : "0%" }} />
-              </div>
-            ))}
+          <div>
+            <Clock size={17} />
+            <span>
+              {openDaysCount} días de atención por semana
+              <br />
+              Hora de Buenos Aires
+            </span>
           </div>
-        )}
 
-        {/* 1 · servicio */}
-        {!done && step === 0 && (
-          <div className="pop-in grid gap-2.5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold uppercase tracking-wider text-inkmute">1 · Elegí un servicio</p>
-              {biz.services.length > 0 && (
-                <span className="text-[11px] font-bold text-inkmute">
-                  {filteredServices.length} de {biz.services.length} servicio{biz.services.length === 1 ? "" : "s"}
-                </span>
-              )}
+          <div>
+            <ShieldCheck size={17} />
+            <span>Tu horario, reservado para vos.</span>
+          </div>
+
+          {settings.whatsapp && (
+            <div>
+              <MessageCircle size={17} />
+              <a href={whatsAppGeneralUrl || "#"} target="_blank" rel="noreferrer" className="text-link">
+                Escribir al WhatsApp
+              </a>
+            </div>
+          )}
+        </div>
+
+        <p className="small muted" style={{ marginTop: "auto", paddingTop: 35 }}>
+          Reservas simples, con <b>cupito.</b>
+        </p>
+      </aside>
+
+      {/* Columna Derecha: Asistente de Reserva */}
+      <section className="booking-form">
+        {done ? (
+          /* Pantalla de confirmación */
+          <div className="success">
+            <ConfettiBurst />
+            <CheckCircle2 size={58} />
+            <h2>
+              {depositOn && depositAmount > 0
+                ? "¡Turno reservado! Un paso más para confirmar"
+                : "¡Tu turno está confirmado!"}
+            </h2>
+            <p>
+              {client}, te esperamos en <b>{user.business}</b>.
+              <br />
+              <b>{service?.name}</b>
+              <br />
+              {shownDate} a las {time} hs · con {pro ? pro.name : "nuestro equipo"}
+              <br />
+              Total: {fmtMoney((service?.price || 0) + productsTotal)} ·{" "}
+              {depositOn && depositAmount > 0 ? "Seña pendiente de transferencia" : "Pago en el local"}
+            </p>
+
+            {/* Aviso de transferencia si requiere seña */}
+            {depositOn && depositAmount > 0 && (
+              <div className="notice" style={{ textAlign: "left" }}>
+                <b>Transferí la seña de {fmtMoney(depositAmount)}</b>
+                <div
+                  style={{
+                    margin: "12px 0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "white",
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #dcebe2",
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>
+                    Alias / CBU: <b>{settings.transferAlias || settings.transferCBU || "Consultá con el local"}</b>
+                  </span>
+                  {(settings.transferAlias || settings.transferCBU) && (
+                    <CopyButton
+                      text={settings.transferAlias || settings.transferCBU}
+                      label="Copiar"
+                      copiedLabel="Copiado"
+                    />
+                  )}
+                </div>
+
+                {settings.transferHolder && (
+                  <p style={{ margin: "6px 0", fontSize: 13 }}>
+                    Titular: <b>{settings.transferHolder}</b>
+                  </p>
+                )}
+
+                <p style={{ margin: "10px 0 14px", fontSize: 13 }}>
+                  Enviá el comprobante al WhatsApp del local para que confirmen tu turno en el sistema.
+                </p>
+
+                {whatsAppProofUrl && (
+                  <a
+                    href={whatsAppProofUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn primary"
+                    style={{ width: "100%" }}
+                  >
+                    <MessageCircle size={16} /> Enviar comprobante por WhatsApp
+                  </a>
+                )}
+              </div>
+            )}
+
+            {/* Acciones de calendario */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "20px 0" }}>
+              <a href={gcalHref} target="_blank" rel="noreferrer" className="btn">
+                <Calendar size={15} /> Google Calendar
+              </a>
+              <button type="button" onClick={handleDownloadIcs} className="btn">
+                <Download size={15} /> Descargar .ics
+              </button>
             </div>
 
-            {biz.services.length > 4 && (
-              <div className="relative">
-                <IconSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-inkmute" />
-                <input
-                  type="text"
-                  placeholder="Buscar servicio (ej: corte, uñas, masaje)..."
-                  className="field !py-2 !pl-8 !text-xs !rounded-xl"
-                  value={serviceSearch}
-                  onChange={(e) => setServiceSearch(e.target.value)}
-                />
-                {serviceSearch && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 24 }}>
+              <button type="button" className="btn primary" onClick={reset}>
+                Reservar otro turno
+              </button>
+              <button type="button" className="text-link" onClick={() => setShowLookupModal(true)}>
+                Ver todos mis turnos
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Formulario en 3 pasos */
+          <>
+            {/* Pasos */}
+            <div className="steps">
+              {[0, 1, 2].map((i) => (
+                <span className={i <= step ? "on" : ""} key={i} />
+              ))}
+            </div>
+
+            <span className="small muted">PASO {step + 1} DE 3</span>
+            <h2>{["Un momento para vos", "Elegí cuándo venir", "Ya casi está"][step]}</h2>
+            <p>
+              {[
+                "¿Qué te gustaría reservar?",
+                "Encontrá el horario que va con tu día.",
+                "Dejanos tus datos para guardar tu turno.",
+              ][step]}
+            </p>
+
+            {error && <div className="error-box" role="alert">{error}</div>}
+
+            {/* PASO 1: Servicios */}
+            {step === 0 && (
+              <>
+                {biz.services.length > 4 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <input
+                      type="text"
+                      placeholder="Buscar servicio..."
+                      value={serviceSearch}
+                      onChange={(e) => setServiceSearch(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: "1px solid #d8e5dd",
+                        fontSize: 13,
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  {filteredServices.map((v) => {
+                    const isSelected = serviceId === v.id;
+                    return (
+                      <button
+                        type="button"
+                        key={v.id}
+                        className={"choice " + (isSelected ? "selected" : "")}
+                        onClick={() => {
+                          setServiceId(v.id);
+                          setTime(null);
+                          setError(null);
+                        }}
+                      >
+                        <div>
+                          <b>{v.name}</b>
+                          <small>
+                            {v.duration} min · {fmtMoney(v.price)}
+                          </small>
+                        </div>
+                        {isSelected ? (
+                          <Check size={18} style={{ color: "var(--business-accent, #16845f)" }} />
+                        ) : (
+                          <span
+                            style={{
+                              width: 18,
+                              height: 18,
+                              border: "1px solid #d0ded6",
+                              borderRadius: "50%",
+                            }}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {filteredServices.length === 0 && (
+                  <p className="notice">No se encontraron servicios con ese nombre.</p>
+                )}
+
+                <div className="booking-controls">
                   <button
                     type="button"
-                    onClick={() => setServiceSearch("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-inkmute hover:text-ink"
+                    disabled={!serviceId}
+                    className="btn primary"
+                    onClick={() => setStep(1)}
                   >
-                    ✕
+                    Elegir horario <ArrowRight size={15} />
                   </button>
-                )}
-              </div>
-            )}
-
-            {biz.services.length === 0 ? (
-              <p className="rounded-xl border-2 border-dashed border-ink/15 p-4 text-sm text-inkmute">
-                Este negocio todavía no cargó sus servicios.
-              </p>
-            ) : filteredServices.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-ink/15 p-4 text-center">
-                <p className="text-xs font-bold text-ink">No se encontró "{serviceSearch}"</p>
-                <button
-                  type="button"
-                  onClick={() => setServiceSearch("")}
-                  className="mt-1 text-xs font-bold text-evergreen hover:underline"
-                >
-                  Ver todos los servicios
-                </button>
-              </div>
-            ) : (
-              filteredServices.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => {
-                    setServiceId(s.id);
-                    setStep(hasPros ? 1 : 2);
-                  }}
-                  className="group flex items-center justify-between gap-3 rounded-xl border-2 border-ink/10 bg-white/60 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/50 hover:bg-white hover:shadow-sm"
-                >
-                  <span>
-                    <span className="block font-display text-[15px] font-bold">{s.name}</span>
-                    <span className="text-xs text-inkmute">{s.duration} min</span>
-                  </span>
-                  <span className="shrink-0 font-display text-[15px] font-bold text-ink">{fmtMoney(s.price)}</span>
-                </button>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* 2 · profesional */}
-        {!done && step === 1 && hasPros && (
-          <div className="pop-in grid gap-2.5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold uppercase tracking-wider text-inkmute">2 · ¿Con quién?</p>
-              <button onClick={() => setStep(0)} className="rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-ink">← Servicio</button>
-            </div>
-
-            {/* Opción destacada: Cualquier profesional disponible */}
-            <button
-              type="button"
-              onClick={() => { setProId(null); setStep(2); }}
-              className={`group flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${
-                proId === null
-                  ? "border-evergreen bg-evergreen/10 shadow-sm"
-                  : "border-ink/10 bg-white/70 hover:border-evergreen hover:bg-white"
-              }`}
-            >
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-evergreen font-display text-sm font-extrabold text-lime shadow-sm">
-                ✨
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-display text-[15px] font-bold text-ink">Cualquier profesional</span>
-                  <span className="rounded-full bg-lime/40 px-2 py-0.5 text-[10px] font-extrabold text-evergreen">Más rápido</span>
                 </div>
-                <span className="text-xs text-inkmute">Sin preferencia · Te asignamos el primer turno libre</span>
-              </div>
-              <IconChevron className="ml-auto h-4 w-4 text-ink/30 transition-transform group-hover:translate-x-1 group-hover:text-ink" />
-            </button>
-
-            {biz.professionals.map((p) => (
-              <button key={p.id} onClick={() => { setProId(p.id); setStep(2); }}
-                className={`group flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${
-                  proId === p.id
-                    ? "border-evergreen bg-evergreen/5 shadow-sm"
-                    : "border-ink/10 bg-white/60 hover:border-ink/50 hover:bg-white"
-                }`}>
-                <span className="flex h-10 w-10 items-center justify-center rounded-full font-display text-sm font-extrabold text-ink" style={{ background: p.color }}>
-                  {p.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-display text-[15px] font-bold text-ink">{p.name}</span>
-                  <span className="text-xs text-inkmute">{p.role}</span>
-                </span>
-                <IconChevron className="ml-auto h-4 w-4 text-ink/30 transition-transform group-hover:translate-x-1 group-hover:text-ink" />
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* fecha */}
-        {!done && step === 2 && (
-          <div className="pop-in">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-inkmute">{stepNum} · Elegí el día</p>
-              <button onClick={() => setStep(hasPros ? 1 : 0)} className="rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-ink">← {hasPros ? "Profesional" : "Servicio"}</button>
-            </div>
-
-            {/* Atajos rápidos de fecha */}
-            <div className="mb-4">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-inkmute">⚡ Atajos rápidos</p>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: "Hoy", date: dateKey(new Date()) },
-                  { label: "Mañana", date: dateKey(addDays(new Date(), 1)) },
-                  { label: "Pasado mañana", date: dateKey(addDays(new Date(), 2)) },
-                ].map((s) => {
-                  const closed = isClosed(s.date);
-                  return (
-                    <button
-                      key={s.label}
-                      type="button"
-                      disabled={closed}
-                      onClick={() => {
-                        setSelectedDate(s.date);
-                        setTime(null);
-                        setWlDone(false);
-                        setShowWlForm(false);
-                        setStep(3);
-                      }}
-                      className={`btn-press flex flex-col items-center justify-center rounded-xl border-2 p-2.5 text-center transition-all ${
-                        closed
-                          ? "opacity-35 cursor-not-allowed border-ink/10 bg-ink/5 text-inkmute"
-                          : selectedDate === s.date
-                          ? theme.activeSlot
-                          : "border-ink/12 bg-white/70 hover:border-ink/50 hover:bg-white hover:shadow-sm"
-                      }`}
-                    >
-                      <span className="font-display text-xs font-bold leading-tight">{s.label}</span>
-                      <span className="mt-0.5 text-[10px] text-inkmute">{closed ? (s.date === todayKey ? "Finalizado" : "Cerrado") : s.date.slice(8) + "/" + s.date.slice(5, 7)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-dashed border-ink/10">
-              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-inkmute">📅 O elegí en el calendario</p>
-              <MonthPicker cursor={cursor} setCursor={setCursor} selected={selectedDate}
-                onSelect={(key) => { setSelectedDate(key); setTime(null); setWlDone(false); setShowWlForm(false); setStep(3); }}
-                isClosed={isClosed}
-                theme={theme}
-                maxAdvanceDays={maxAdvanceDays} />
-            </div>
-          </div>
-        )}
-
-        {/* hora + datos */}
-        {!done && step === 3 && selectedDate && (
-          <div className="pop-in">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-inkmute">
-                {stepNum} · Horario para el <span className="font-bold text-ink">{fmtLong(selectedDate)}</span>
-              </p>
-              <button onClick={() => setStep(2)} className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-inkmute transition-colors hover:text-ink">← Día</button>
-            </div>
-
-            {slots.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-coral/30 bg-coral/5 p-4 text-center">
-                <p className="font-display text-sm font-bold text-ink">
-                  {selectedDate === todayKey
-                    ? "Por hoy ya no quedan turnos disponibles (finalizó el horario de atención o ya pasaron las horas)."
-                    : `Ese día ${user.business} no atiende.`}
-                </p>
-                <p className="mt-1 text-xs text-inkmute">
-                  Elegí mañana u otra fecha en el calendario para reservar con tranquilidad.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="mt-3 btn-press inline-flex items-center gap-1.5 rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime hover:bg-pine"
-                >
-                  ← Elegir otro día en el calendario
-                </button>
-              </div>
-            ) : time && !showAllSlots ? (
-              <div className="flex items-center justify-between rounded-2xl border-2 border-fern/30 bg-fern/10 p-3.5 text-ink shadow-sm">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-14 flex-col items-center justify-center rounded-xl bg-evergreen text-lime font-display font-extrabold text-sm leading-none shadow-sm">
-                    {time}
-                    <span className="mt-0.5 text-[9px] uppercase tracking-wider text-lime/70 font-semibold">{service?.duration ?? 30}m</span>
-                  </span>
-                  <div>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider text-fern">
-                      <IconCheck className="h-3.5 w-3.5" /> Horario elegido
-                    </span>
-                    <p className="font-display text-sm font-bold text-ink">{fmtLong(selectedDate)} a las {time} hs</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAllSlots(true)}
-                  className="btn-press rounded-full border border-ink/20 bg-white px-3 py-1.5 font-display text-xs font-bold text-ink hover:border-ink hover:bg-ink/5 shadow-sm"
-                >
-                  Cambiar horario
-                </button>
-              </div>
-            ) : (
-              <>
-                {time && showAllSlots && (
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-bold text-inkmute">Elegí otro horario:</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowAllSlots(false)}
-                      className="text-xs font-bold text-fern hover:underline"
-                    >
-                      Mantener {time} hs ✕
-                    </button>
-                  </div>
-                )}
-                {hasBreak && breakInfo ? (
-                  <div className="space-y-3">
-                    <div>
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-inkmute">
-                          <IconSun className="h-3.5 w-3.5 text-amber-500" /> Mañana · hasta el corte
-                        </span>
-                        <span className="text-[10px] font-bold text-inkmute">
-                          {slots.filter((t) => t < (breakInfo.to ?? "99:99")).length} disponibles
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-                        {slots.filter((t) => t < (breakInfo.to ?? "99:99")).map((t) => slotBtn(t))}
-                      </div>
-                    </div>
-                    <p className="flex items-center gap-3 text-center text-[11px] font-extrabold uppercase tracking-widest text-coral">
-                      <span className="h-px flex-1 bg-coral/40" />
-                      ✂ Corte · {breakInfo.to} a {breakInfo.from2}
-                      <span className="h-px flex-1 bg-coral/40" />
-                    </p>
-                    <div>
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-inkmute">
-                          <IconMoon className="h-3.5 w-3.5 text-indigo-500" /> Tarde · después del corte
-                        </span>
-                        <span className="text-[10px] font-bold text-inkmute">
-                          {slots.filter((t) => t >= (breakInfo.to ?? "99:99")).length} disponibles
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-                        {slots.filter((t) => t >= (breakInfo.to ?? "99:99")).map((t) => slotBtn(t))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold uppercase tracking-widest text-inkmute">Horarios disponibles</span>
-                      <span className="text-[10px] font-bold text-inkmute">
-                        {slots.length} libres
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">{slots.map((t) => slotBtn(t))}</div>
-                  </div>
-                )}
               </>
             )}
 
-            {/* lista de espera */}
-            {!allTaken && !showWlForm && !wlDone && slots.length > 0 && (
-              <button onClick={() => setShowWlForm(true)}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-ink/20 py-2.5 text-sm font-bold text-inkmute transition-all duration-200 hover:border-coral hover:text-coral">
-                <IconUsers className="h-4 w-4" /> ¿Ningún horario te sirve? Anotate en la lista de espera
-              </button>
-            )}
-            {(allTaken || showWlForm) && !wlDone && (
-              <div className="pop-in mt-4 rounded-xl border-2 border-coral/40 bg-coral/5 p-4">
-                <p className="flex items-center gap-2 font-display text-[15px] font-extrabold text-ink">
-                  <IconUsers className="h-4 w-4 text-coral" /> {allTaken ? "Ese día está completo 😅" : "Lista de espera"}
-                </p>
-                <p className="mt-1 text-sm text-inkmute">
-                  {allTaken ? "Dejanos tus datos y te avisamos apenas se libere un cupito." : `Dejanos tus datos para el ${fmtLong(selectedDate)} y te avisamos apenas se libere un cupito.`}
-                </p>
-                <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                  <input className="field" placeholder="Tu nombre *" value={wlClient} onChange={(e) => setWlClient(e.target.value)} />
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-extrabold text-ink/40">
-                      🇦🇷 +54 9
-                    </span>
-                    <input
-                      className="field !pl-16 font-mono text-sm font-semibold"
-                      type="tel"
-                      inputMode="numeric"
-                      placeholder="11 5555-0000 (sin 0 ni 15) *"
-                      value={wlPhoneVal.formatted || wlPhone}
-                      onChange={(e) => setWlPhone(cleanPhoneDigits(e.target.value))}
-                    />
-                  </div>
-                </div>
-                {wlError && <p className="mt-2 text-xs font-semibold text-coral">{wlError}</p>}
-                <button onClick={joinWaitlist} disabled={wlBusy} className="mt-3 w-full rounded-xl bg-coral py-3 font-display text-sm font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)] disabled:opacity-60">
-                  {wlBusy ? "Anotándote…" : "Anotarme en la lista de espera"}
-                </button>
-              </div>
-            )}
-            {(allTaken || showWlForm) && wlDone && (
-              <div className="pop-in mt-4 rounded-xl border-2 border-limedeep/60 bg-lime/15 p-4 text-center">
-                <p className="font-display text-[15px] font-extrabold text-ink">¡Listo! Estás en la lista 🎉</p>
-                <p className="mt-1 text-sm text-inkmute">Te avisamos al <strong className="text-ink font-bold">{wlPhoneVal.formatted || wlPhone}</strong> si se libera un lugar el {fmtLong(selectedDate)}.</p>
-              </div>
-            )}
-
-            {time && monthLimitReached && (
-              <div className="pop-in mt-4 rounded-2xl border-2 border-amber-500/40 bg-amber-50 p-5 text-center">
-                <p className="font-display text-base font-extrabold text-ink">Este mes el local completó sus reservas online</p>
-                <p className="mt-1 text-sm text-inkmute">Anotate en la lista de espera y te avisamos si se libera un lugar.</p>
-                <button
-                  type="button"
-                  onClick={() => { setShowWlForm(true); setWlClient(client); setWlPhone(phone); }}
-                  className="mt-3 w-full rounded-xl bg-evergreen py-3 font-display text-sm font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine"
-                >
-                  Anotarme en la lista de espera
-                </button>
-              </div>
-            )}
-
-            {time && !monthLimitReached && (
-              <div id="booking-client-form" className="pop-in mt-4 space-y-3.5">
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Tu nombre *</label>
-                  <input className="field" placeholder="Ana Torres" value={client} onChange={(e) => setClient(e.target.value)} />
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-inkmute">
-                      Teléfono celular <span className="normal-case font-semibold text-ink/60">(sin 0 ni 15)</span> *
+            {/* PASO 2: Horarios, Profesional y Productos opcionales */}
+            {step === 1 && (
+              <>
+                <div className="form-grid">
+                  {hasPros && (
+                    <label>
+                      Profesional
+                      <select
+                        value={proId || ""}
+                        onChange={(e) => {
+                          setProId(e.target.value || null);
+                          setTime(null);
+                          setError(null);
+                        }}
+                      >
+                        <option value="">Cualquier profesional (Sin preferencia · Más rápido)</option>
+                        {biz.professionals.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.role})
+                          </option>
+                        ))}
+                      </select>
                     </label>
-                    {phoneVal.badgeType === "valid" ? (
-                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                        WhatsApp listo ✓
-                      </span>
-                    ) : phoneVal.badgeType === "warning" ? (
-                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-900">
-                        {phoneVal.hint}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-ink/40">
-                      🇦🇷 +54 9
-                    </span>
+                  )}
+
+                  <label>
+                    Día
                     <input
-                      className="field !pl-20 font-mono text-sm font-semibold tracking-wide"
-                      type="tel"
-                      inputMode="numeric"
-                      placeholder="11 5555-0000"
-                      value={phoneVal.formatted || phone}
+                      type="date"
+                      min={todayKey}
+                      max={maxDateKey}
+                      value={selectedDate}
                       onChange={(e) => {
-                        const clean = cleanPhoneDigits(e.target.value);
-                        setPhone(clean);
+                        setSelectedDate(e.target.value);
+                        setTime(null);
+                        setError(null);
                       }}
                     />
-                  </div>
-                  <p className="mt-1 text-[11px] text-inkmute">
-                    {phoneVal.badgeType === "empty" ? "Ingresá tu código de área sin 0 (ej. 11 para Bs As, 351 para Córdoba) y celular sin 15." : phoneVal.hint}
-                  </p>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">Email <span className="normal-case text-ink/40">(te confirma + te recuerda 24 h antes)</span></label>
-                  <input className="field" type="email" placeholder="ana@gmail.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  </label>
                 </div>
 
-                {/* tienda */}
-                {paid && biz.products.length > 0 && (
-                  <button type="button" onClick={() => setShowShop(true)}
-                    className="group flex w-full items-center justify-between gap-3 rounded-xl border-2 border-ink/15 bg-white px-4 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/40 hover:shadow-sm">
-                    <span className="flex items-center gap-2.5">
-                      <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${theme.badgeBg} ${theme.badgeText}`}><IconBag className="h-4 w-4" /></span>
-                      <span>
-                        <span className="block font-display text-[15px] font-extrabold text-ink">¿Querés agregar algo a tu turno?</span>
-                        <span className="block text-xs text-inkmute">
-                          {itemCount > 0 ? `${itemCount} producto${itemCount === 1 ? "" : "s"} · ${fmtMoney(productsTotal)}` : `${biz.products.length} productos disponibles · tocá para ver la tienda`}
-                        </span>
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-2 font-display text-sm font-bold text-ink">
-                      {itemCount > 0 && <span className={`flex h-6 min-w-6 items-center justify-center rounded-full ${theme.badgeBg} ${theme.badgeText} px-1.5 text-xs font-bold`}>{itemCount}</span>}
-                      Ver tienda <IconChevron className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                    </span>
-                  </button>
-                )}
-
-                {/* cupón */}
-                {paid && biz.coupons.some((c) => c.active) && (
-                  <div className="rounded-xl border-2 border-ink/10 bg-white/60 p-4">
-                    <label className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-inkmute">
-                      <IconTicket className="h-4 w-4 text-coral" /> ¿Tenés un cupón? <span className="normal-case text-ink/40">(opcional)</span>
-                    </label>
-                    <div className="flex gap-2">
-                      <input className="field flex-1 uppercase placeholder:normal-case" placeholder="MARTES20" value={couponInput} onChange={(e) => setCouponInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyCoupon(); } }} />
-                      <button type="button" onClick={applyCoupon} className={`shrink-0 rounded-xl ${theme.primaryBtn} px-4 font-display text-sm font-bold transition-all hover:-translate-y-0.5 shadow-sm`}>Aplicar</button>
-                    </div>
-                    {couponMsg && <p className={`mt-1.5 text-xs font-semibold ${couponMsg.ok ? "text-fern" : "text-coral"}`}>{couponMsg.text}</p>}
-                  </div>
-                )}
-
-                {/* resumen */}
-                <div className="space-y-1.5 rounded-xl border-2 border-dashed border-ink/20 bg-ink/[0.03] px-4 py-3 text-sm">
-                  <div className="flex justify-between gap-3">
-                    <span className="text-inkmute">{service?.name}{pro ? ` · con ${pro.name.split(" ")[0]}` : ""}</span>
-                    <span className="font-display font-bold">{service ? fmtMoney(service.price) : ""}</span>
-                  </div>
-                  {productsTotal > 0 && (
-                    <div className="flex justify-between gap-3">
-                      <span className="text-inkmute">Productos ({itemCount})</span>
-                      <span className="font-display font-bold">{fmtMoney(productsTotal)}</span>
-                    </div>
-                  )}
-                  {discount > 0 && coupon && (
-                    <div className="flex justify-between gap-3 text-fern">
-                      <span className="flex items-center gap-1.5"><IconTicket className="h-3.5 w-3.5" /> Cupón {coupon.code} (−{coupon.pct}%)</span>
-                      <span className="font-display font-bold">−{fmtMoney(discount)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between gap-3 border-t border-ink/10 pt-1.5">
-                    <span className="font-bold text-ink">{fmtLong(selectedDate)} · {time}</span>
-                    <span className="font-display font-extrabold">{fmtMoney(total)}</span>
-                  </div>
-                  {depositOn ? (
-                    <p className="pt-1 text-xs text-ink/70">
-                      Pagás ahora una <strong className="text-ink font-bold">seña del {settings.depositPct}% ({fmtMoney(deposit)})</strong> por transferencia y el resto en el local. Si cancelás con 24 h de anticipación, se devuelve.
-                    </p>
-                  ) : (
-                    <p className="pt-1 text-xs text-ink/70">Pagás en el local. Sin seña, sin sorpresas.</p>
-                  )}
-                </div>
-
-                {error && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{error}</p>}
-                <button onClick={confirm} disabled={confirming} className={`w-full rounded-xl ${theme.primaryBtn} py-3.5 font-display text-base font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-md active:translate-y-0 disabled:opacity-70`}>
-                  {confirming ? "Confirmando…" : depositOn ? `Confirmar y pagar seña (${fmtMoney(deposit)}) →` : "Confirmar turno →"}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* éxito */}
-        {done && selectedDate && time && service && (
-          <div id="booking-confirmed-ticket" className="pop-in relative py-3 text-center">
-            <ConfettiBurst />
-
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 shadow-sm">
-              <IconCheck className="h-8 w-8 stroke-[3]" />
-            </div>
-
-            <h4 className="font-display text-2xl font-extrabold text-ink">
-              {claimed ? "¡Turno reservado!" : "¡Tu turno está confirmado!"}
-            </h4>
-            <p className="mt-1 text-xs text-inkmute">
-              Te esperamos en <strong className="text-ink font-bold">{user.business}</strong>
-            </p>
-            {email.trim() !== "" && (
-              <p className="mx-auto mt-2 max-w-sm rounded-full bg-fern/10 px-3 py-1.5 text-[11px] font-semibold text-fern">
-                📩 Confirmación enviada a {email.trim()} + recordatorio 24 h antes
-              </p>
-            )}
-
-            {/* Tarjeta de comprobante limpio */}
-            <div className="mx-auto mt-4 max-w-sm rounded-2xl border-2 border-dashed border-ink/15 bg-white p-4 text-left shadow-sm">
-              <div className="flex items-center justify-between gap-2 border-b border-ink/10 pb-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 font-display text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">
-                  <IconCheck className="h-3 w-3 stroke-[3]" /> Turno agendado
-                </span>
-                <CopyButton
-                  text={`Turno en ${user.business}: ${service.name} para ${client} el ${fmtLong(selectedDate)} a las ${time} hs.`}
-                  label="Copiar datos"
-                  copiedLabel="Copiado ✓"
-                />
-              </div>
-
-              <div className="mt-3 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-inkmute">Servicio</span>
-                  <span className="font-bold text-ink">{service.name}</span>
-                </div>
-                {pro ? (
-                  <div className="flex items-center justify-between">
-                    <span className="text-inkmute">Profesional</span>
-                    <span className="font-bold text-ink">{pro.name}</span>
-                  </div>
-                ) : (
-                  bookedPro && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-inkmute">Profesional</span>
-                      <span className="font-bold text-ink">
-                        {bookedPro.name}{" "}
-                        <span className="text-[10px] font-bold text-evergreen bg-evergreen/10 px-1.5 py-0.5 rounded">Asignado</span>
-                      </span>
-                    </div>
-                  )
-                )}
-                <div className="flex items-center justify-between">
-                  <span className="text-inkmute">Día y horario</span>
-                  <span className="font-bold text-ink">{fmtLong(selectedDate)} · {time} hs</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-inkmute">Cliente</span>
-                  <span className="font-bold text-ink">{client}</span>
-                </div>
-                <div className="flex items-center justify-between border-t border-ink/10 pt-2 font-display text-sm font-extrabold">
-                  <span>Total</span>
-                  <span className="text-emerald-700">{fmtMoney(total)}</span>
-                </div>
-              </div>
-            </div>
-
-            {claimed && (
-              <p className="mx-auto mt-3 max-w-sm rounded-xl border border-amber-500/30 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-                Tu comprobante de seña está en revisión por {user.business}. Apenas se acredite, te avisamos por WhatsApp.
-              </p>
-            )}
-
-            {/* Acciones principales limpias */}
-            <div className="mx-auto mt-5 max-w-sm space-y-2.5">
-              {settings.whatsapp && (
-                <a
-                  href={createWhatsAppUrl(settings.whatsapp, `Hola! Soy ${client}. Acabo de reservar ${service.name} para el ${fmtLong(selectedDate)} a las ${time} hs 🙌`)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 font-display text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition-colors"
-                >
-                  <IconWhatsApp className="h-4 w-4" /> Abrir WhatsApp con el local
-                </a>
-              )}
-
-              {/* Botones de Calendario: Google + Apple */}
-              <div className="grid grid-cols-2 gap-2">
-                <a
-                  href={gcalUrl({
-                    title: `${service.name} — ${user.business}`,
-                    date: selectedDate,
-                    time,
-                    duration: service.duration,
+                {/* Atajos rápidos de días */}
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  {[
+                    { label: "Hoy", date: todayKey },
+                    { label: "Mañana", date: dateKey(addDays(now, 1)) },
+                    { label: "Pasado mañana", date: dateKey(addDays(now, 2)) },
+                  ].map((d) => {
+                    const active = selectedDate === d.date;
+                    const open = isDayOpen(d.date);
+                    return (
+                      <button
+                        key={d.label}
+                        type="button"
+                        disabled={!open}
+                        onClick={() => {
+                          setSelectedDate(d.date);
+                          setTime(null);
+                          setError(null);
+                        }}
+                        className={"btn small " + (active ? "primary" : "")}
+                        style={{
+                          fontSize: 12,
+                          padding: "6px 12px",
+                          borderRadius: 8,
+                          opacity: !open ? 0.4 : 1,
+                        }}
+                      >
+                        {d.label}
+                      </button>
+                    );
                   })}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-press flex items-center justify-center gap-1.5 rounded-xl border-2 border-ink/15 bg-white py-2.5 font-display text-xs font-bold text-ink shadow-sm hover:border-ink/40 transition-colors"
-                >
-                  <IconCalendar className="h-4 w-4 text-blue-600" /> Google Calendar
-                </a>
-                <button
-                  type="button"
-                  onClick={() => {
-                    downloadIcs(icsContent({ title: `${service.name} — ${user.business}`, date: selectedDate, time, duration: service.duration, desc: `Turno en ${user.business}, reservado con Cupito.` }));
-                    toast("Turno descargado para tu calendario 📅");
-                  }}
-                  className="btn-press flex items-center justify-center gap-1.5 rounded-xl border-2 border-ink/15 bg-white py-2.5 font-display text-xs font-bold text-ink shadow-sm hover:border-ink/40 transition-colors"
-                >
-                  <IconCalendar className="h-4 w-4 text-emerald-600" /> Apple (.ics)
-                </button>
-              </div>
-
-              {/* Auto-cancelación por el cliente */}
-              {!cancelFeedback ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (window.confirm("¿Seguro que deseás cancelar este turno? Liberaremos el horario para otra persona.")) {
-                      if (confirmedId) {
-                        const r = await cancelBookingByClient(user.id, confirmedId, "Cancelado por el cliente desde el comprobante", phone);
-                        if (r.ok) {
-                          setCancelFeedback("Tu turno ha sido cancelado con éxito. ¡Gracias por avisar con tiempo!");
-                          toast("Turno cancelado ✓");
-                        } else if (r.error === "FALTA_MENOS_24H") {
-                          setCancelBlocked(true);
-                        } else {
-                          setError(r.error || "No se pudo cancelar. Probá de nuevo.");
-                        }
-                      }
-                    }
-                  }}
-                  className="block w-full pt-1 text-center text-xs font-bold text-coral/80 hover:text-coral underline underline-offset-4 transition-colors"
-                >
-                  ¿No vas a poder asistir? Cancelá tu turno acá <span className="no-underline text-ink/40">(gratis hasta 24 h antes)</span>
-                </button>
-              ) : (
-                <div className="rounded-xl border border-coral/30 bg-coral/10 p-3 text-xs font-bold text-coral text-center">
-                  {cancelFeedback}
                 </div>
-              )}
-              {cancelBlocked && !cancelFeedback && (
-                <div className="rounded-xl border-2 border-amber-500/40 bg-amber-50 p-3 text-center">
-                  <p className="text-xs font-bold text-amber-900">Faltan menos de 24 h: ya no se puede cancelar online y la seña no se devuelve.</p>
-                  {settings.whatsapp ? (
-                    <a href={createWhatsAppUrl(settings.whatsapp, `Hola! Soy ${client} y tengo turno el ${fmtLong(selectedDate || "")} a las ${time} hs. Necesito cambiarlo o cancelarlo 🙏`)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 font-display text-xs font-bold text-white">
-                      <IconWhatsApp className="h-3.5 w-3.5" /> Hablar con el local
-                    </a>
-                  ) : (
-                    <p className="mt-1 text-[11px] text-amber-800">Comunicate directamente con {user.business}.</p>
+
+                {/* Disponibilidad en vivo */}
+                <div className="live-availability">
+                  <i />
+                  <span>Disponibilidad en vivo · se actualiza automáticamente</span>
+                </div>
+
+                {/* Grilla de turnos */}
+                <div className="slots">
+                  {rawSlots.map((t) => {
+                    const disabled = isSlotDisabled(t);
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        disabled={disabled}
+                        className={"slot " + (t === time ? "selected" : "")}
+                        onClick={() => {
+                          setTime(t);
+                          setError(null);
+                        }}
+                      >
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {rawSlots.length === 0 && (
+                  <p className="notice">
+                    El local no atiende en este día o no quedan horarios con la duración necesaria ({dur} min). Elegí otra fecha.
+                  </p>
+                )}
+
+                {/* Productos opcionales de tienda */}
+                {biz.products && biz.products.length > 0 && (
+                  <>
+                    <h3 style={{ marginTop: 28, fontSize: 16, fontWeight: 700, color: "#1f4732" }}>
+                      ¿Te llevás algo más?
+                    </h3>
+                    <p className="small muted" style={{ marginTop: 4 }}>
+                      Opcional. Lo retirás cuando vengas al local.
+                    </p>
+
+                    <div className="booking-products">
+                      {biz.products.map((p) => {
+                        const count = cart[p.id] || 0;
+                        return (
+                          <article key={p.id} className="booking-product">
+                            <span className="product-thumb">
+                              <Package size={22} />
+                            </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <h3 style={{ fontSize: 14, fontWeight: 600, color: "#224732" }}>{p.name}</h3>
+                              <p style={{ fontSize: 12, color: "#6e8979", marginTop: 2 }}>
+                                {fmtMoney(p.price)}
+                              </p>
+                            </div>
+                            <div className="quantity-control">
+                              <button
+                                type="button"
+                                aria-label={"Quitar " + p.name}
+                                disabled={count === 0}
+                                onClick={() => setCart({ ...cart, [p.id]: Math.max(0, count - 1) })}
+                              >
+                                <Minus size={12} />
+                              </button>
+                              <span style={{ fontSize: 13, fontWeight: 700, minWidth: 16, textAlign: "center" }}>
+                                {count}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={"Agregar " + p.name}
+                                disabled={count >= 5}
+                                onClick={() => setCart({ ...cart, [p.id]: count + 1 })}
+                              >
+                                <Plus size={12} />
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                <div className="booking-controls">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setStep(0)}
+                    aria-label="Volver a servicios"
+                  >
+                    <ArrowLeft size={15} /> Volver
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!time || !selectedDate}
+                    className="btn primary"
+                    onClick={() => setStep(2)}
+                  >
+                    Continuar <ArrowRight size={15} />
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* PASO 3: Datos de Contacto y Confirmación */}
+            {step === 2 && (
+              <form className="form-grid" onSubmit={handleReserve}>
+                {/* Resumen del turno */}
+                <div className="choice selected">
+                  <div>
+                    <b>{service?.name}</b>
+                    <small>
+                      {shownDate} · {time} hs
+                      <br />
+                      con {pro ? pro.name : "el primer profesional libre"}
+                    </small>
+                  </div>
+                  <b>{fmtMoney(service?.price || 0)}</b>
+                </div>
+
+                {productsTotal > 0 && (
+                  <div style={{ background: "#f8fbf9", padding: "10px 14px", borderRadius: 10, border: "1px solid #dcebe2" }}>
+                    <div className="booking-summary-line">
+                      <span>Productos adicionales</span>
+                      <b>{fmtMoney(productsTotal)}</b>
+                    </div>
+                    <div className="booking-summary-line" style={{ borderTop: "1px dashed #dcebe2", paddingTop: 8, marginTop: 6 }}>
+                      <span>Total estimado</span>
+                      <b>{fmtMoney((service?.price || 0) + productsTotal)}</b>
+                    </div>
+                  </div>
+                )}
+
+                {/* Aviso de seña */}
+                {depositOn && depositAmount > 0 && (
+                  <div className="notice">
+                    <b>Seña requerida por transferencia: {fmtMoney(depositAmount)}</b>
+                    <p style={{ marginTop: 6, fontSize: 13 }}>
+                      Al confirmar verás el Alias / CBU. El turno queda guardado y se confirma definitivamente al enviar el comprobante.
+                    </p>
+                  </div>
+                )}
+
+                <label>
+                  Nombre y apellido *
+                  <input
+                    required
+                    maxLength={100}
+                    value={client}
+                    autoComplete="name"
+                    onChange={(e) => setClient(e.target.value)}
+                    placeholder="Ej. Valentina Gómez"
+                  />
+                </label>
+
+                <label>
+                  Teléfono celular (WhatsApp) *
+                  <input
+                    required
+                    type="tel"
+                    minLength={7}
+                    maxLength={40}
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Ej. 11 1234 5678"
+                  />
+                  {phone.trim() && !phoneVal.isValid && (
+                    <span className="small" style={{ color: "#c45465" }}>
+                      Ingresá un celular válido con código de área (ej. 11 1234 5678)
+                    </span>
                   )}
+                </label>
+
+                <label>
+                  Email (opcional)
+                  <input
+                    type="email"
+                    maxLength={150}
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="vos@ejemplo.com (para recibir confirmación y calendario)"
+                  />
+                </label>
+
+                <label>
+                  Aclaraciones o notas (opcional)
+                  <textarea
+                    rows={2}
+                    maxLength={300}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Ej. ¿Tenés alguna preferencia o indicación para el turno?"
+                  />
+                </label>
+
+                <p className="small muted">
+                  Para modificar o cancelar, podés hacerlo desde "Mis turnos" o avisando a {user.business}.
+                </p>
+
+                <div className="booking-controls">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setStep(1)}
+                    aria-label="Volver a horarios"
+                  >
+                    <ArrowLeft size={15} /> Volver
+                  </button>
+                  <button disabled={busy} className="btn primary">
+                    {busy
+                      ? "Reservando..."
+                      : depositOn && depositAmount > 0
+                      ? "Reservar y ver datos de seña"
+                      : "Confirmar mi turno"}
+                    <Check size={15} />
+                  </button>
                 </div>
-              )}
-
-              <button
-                type="button"
-                onClick={reset}
-                className="w-full pt-2 font-display text-xs font-bold text-inkmute hover:text-ink transition-colors"
-              >
-                ← Reservar otro turno
-              </button>
-            </div>
-          </div>
+              </form>
+            )}
+          </>
         )}
-      </div>
-
-      <p className="border-t-2 border-dashed border-ink/10 px-6 py-3 text-center text-[11px] font-semibold text-inkmute">
-        ⚡ Hecho con Cupito — reservás en 60 segundos, sin app y sin llamadas
-      </p>
-
-      {showCalHelp && (
-        <CalendarHelpModal onClose={() => setShowCalHelp(false)} />
-      )}
-
-      {showShop && (
-        <ShopOverlay products={biz.products} items={items} setQty={(id, q) => setItems((prev) => { const n = { ...prev }; if (q <= 0) delete n[id]; else n[id] = q; return n; })}
-          total={productsTotal} count={itemCount} onClose={() => setShowShop(false)} />
-      )}
-      {showPay && (
-        <TransferModal amount={deposit} settings={settings} business={user.business} onClose={() => setShowPay(false)} onSent={(txId) => finish({ claimTx: txId })} />
-      )}
-      {showLookupModal && (
-        <LookupBookingsModal
-          businessName={user.business}
-          bookings={biz.bookings}
-          services={biz.services}
-          professionals={biz.professionals}
-          whatsapp={settings.whatsapp}
-          onCancelBooking={async (bId, lookupPhone) => {
-            const r = await cancelBookingByClient(user.id, bId, "Cancelado por el cliente desde Mis Turnos", lookupPhone);
-            if (r.ok) toast("Turno cancelado ✓ El horario fue liberado.");
-            else if (r.error !== "FALTA_MENOS_24H") toast(r.error || "No se pudo cancelar.", "warn");
-            return r;
-          }}
-          onClose={() => setShowLookupModal(false)}
-        />
-      )}
+      </section>
     </div>
   );
 
-  function slotBtn(t: string) {
-    const busy = !selectedDate || !isTimeAvailable(selectedDate, t);
+  // Si está incrustado en el preview del Dashboard, no necesita la barra de navegación exterior completa
+  if (isPreview) {
     return (
-      <button key={t} disabled={busy} onClick={() => { setTime(t); setError(null); }}
-        className={`rounded-lg border-2 py-2 font-display text-sm font-bold transition-all duration-150 ${busy ? "cursor-not-allowed border-ink/8 bg-ink/5 text-ink/25 line-through" : time === t ? theme.activeSlot : "border-ink/10 bg-white/60 hover:-translate-y-0.5 hover:border-ink/40"}`}>
-        {t}
-      </button>
+      <div style={{ '--business-accent': accentColor } as React.CSSProperties}>
+        {bookingCardContent}
+      </div>
     );
   }
-}
 
-/* Modal explicativo de sincronización con calendario del celular */
-function CalendarHelpModal({ onClose }: { onClose: () => void }) {
+  // Vista de página completa
   return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="pop-in max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border-2 border-ink/15 bg-paper p-6 shadow-2xl text-ink" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-ink/10 pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-evergreen text-lime">
-              <IconCalendar className="h-5 w-5" />
-            </span>
-            <h3 className="font-display text-lg font-extrabold text-ink">Cómo guardar tu turno en el celular</h3>
+    <main
+      className="booking-page business-custom"
+      style={{ '--business-accent': accentColor } as React.CSSProperties}
+    >
+      {/* Barra de navegación superior */}
+      <nav className="booking-nav">
+        <a href="#/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              background: accentColor,
+              color: "white",
+              display: "grid",
+              placeItems: "center",
+              fontWeight: 800,
+            }}
+          >
+            c
           </div>
-          <button type="button" onClick={onClose} className="rounded-full p-1.5 text-inkmute hover:bg-ink/5 hover:text-ink">
-            ✕
+          <span style={{ fontSize: 20, fontWeight: 750, letterSpacing: "-0.5px", color: "#1f4732" }}>
+            cupito<span style={{ color: accentColor }}>.</span>
+          </span>
+        </a>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            type="button"
+            onClick={() => setShowLookupModal(true)}
+            className="btn small"
+            style={{ fontSize: 13, padding: "8px 14px" }}
+          >
+            <Search size={14} /> Mis turnos
           </button>
+
+          {sessionUserId === user.id ? (
+            <a href="#/app" className="text-link" style={{ fontSize: 13, fontWeight: 600 }}>
+              <ArrowLeft size={14} /> Volver a mi panel
+            </a>
+          ) : sessionUserId ? (
+            <a href="#/app" className="text-link" style={{ fontSize: 13, fontWeight: 600 }}>
+              Mi panel →
+            </a>
+          ) : null}
         </div>
+      </nav>
 
-        <div className="mt-4 space-y-4 text-sm leading-relaxed">
-          {/* Opción iPhone */}
-          <div className="rounded-2xl border-2 border-ink/10 bg-white p-4">
-            <p className="flex items-center gap-2 font-display text-base font-extrabold text-ink">
-              🍏 En iPhone / iPad (Apple Calendar)
-            </p>
-            <ol className="mt-2 space-y-1.5 pl-5 list-decimal text-xs sm:text-sm text-ink/80">
-              <li>Tocá el botón <strong>«Agregar a Apple Calendar (.ics)»</strong>.</li>
-              <li>Tu iPhone abrirá la vista previa del evento con la fecha, hora y dirección del negocio.</li>
-              <li>Tocá <strong>«Añadir a Calendario»</strong> (arriba a la derecha).</li>
-              <li>¡Listo! El turno quedará guardado con alarmas 24 h y 1 h antes.</li>
-            </ol>
-          </div>
+      {/* Contenedor central de 2 columnas */}
+      {bookingCardContent}
 
-          {/* Opción Android */}
-          <div className="rounded-2xl border-2 border-ink/10 bg-white p-4">
-            <p className="flex items-center gap-2 font-display text-base font-extrabold text-ink">
-              🤖 En Android / Google Calendar
-            </p>
-            <ol className="mt-2 space-y-1.5 pl-5 list-decimal text-xs sm:text-sm text-ink/80">
-              <li>Tocá el botón <strong>«Abrir en Google Calendar»</strong>.</li>
-              <li>Se abrirá la app o web de Google Calendar con todos los datos cargados.</li>
-              <li>Tocá <strong>«Guardar»</strong> en la esquina superior.</li>
-              <li>¡Listo! Tip: agregale notificación 24 h y 1 h antes así no te lo olvidás.</li>
-            </ol>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-5 w-full rounded-full bg-evergreen py-3 font-display text-sm font-bold text-lime hover:bg-pine transition-all"
-        >
-          Entendido, cerrar
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- tienda (pantalla completa) ---------- */
-function ShopOverlay({ products, items, setQty, total, count, onClose }: {
-  products: { id: string; name: string; price: number; desc: string }[];
-  items: Record<string, number>;
-  setQty: (id: string, q: number) => void;
-  total: number;
-  count: number;
-  onClose: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  const q = query.trim().toLowerCase();
-  const filtered = q ? products.filter((p) => p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q)) : products;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-[85] flex flex-col bg-ink/60 backdrop-blur-[3px]" onClick={onClose}>
-      <div className="pop-in mx-auto flex h-full w-full max-w-2xl flex-col overflow-hidden bg-paper sm:my-6 sm:h-[calc(100%-3rem)] sm:rounded-[24px] sm:border-2 sm:border-ink/15" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between gap-3 border-b-2 border-dashed border-ink/10 bg-white px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-evergreen text-lime"><IconBag className="h-4 w-4" /></span>
-            <div>
-              <p className="font-display text-lg font-extrabold leading-tight text-ink">Nuestra tienda</p>
-              <p className="text-xs text-inkmute">Sumalos a tu turno y retirá todo junto</p>
+      {/* Modal Mis Turnos */}
+      {showLookupModal && (
+        <div className="booking-modal-overlay" onClick={() => setShowLookupModal(false)}>
+          <div className="booking-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="booking-modal-header">
+              <h3>Consultar mis turnos</h3>
+              <button
+                type="button"
+                onClick={() => setShowLookupModal(false)}
+                className="btn"
+                style={{ padding: 6, border: 0 }}
+              >
+                <X size={18} />
+              </button>
             </div>
-          </div>
-          <button onClick={onClose} aria-label="Cerrar tienda" className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral">✕</button>
-        </div>
-        <div className="border-b border-ink/8 bg-white px-5 py-3">
-          <input className="field" placeholder={`Buscar entre ${products.length} productos…`} value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
-        </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          {filtered.length === 0 ? (
-            <p className="py-10 text-center text-sm text-inkmute">No encontramos nada con “{query}”. Probá con otra palabra.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {filtered.map((p) => {
-                const qty = items[p.id] ?? 0;
+
+            <p className="small muted" style={{ marginBottom: 16 }}>
+              Ingresá el número de celular con el que reservaste en <b>{user.business}</b> para ver o cancelar tus turnos.
+            </p>
+
+            <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+              <input
+                type="tel"
+                placeholder="Ej. 11 1234 5678"
+                value={lookupPhone}
+                onChange={(e) => setLookupPhone(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: "11px 14px",
+                  borderRadius: 10,
+                  border: "1px solid #dcebe2",
+                  fontSize: 14,
+                }}
+              />
+            </div>
+
+            {lookupFeedback && <div className="notice" style={{ margin: "10px 0" }}>{lookupFeedback}</div>}
+
+            {lookupPhone.trim() && clientBookings.length === 0 && (
+              <p className="notice" style={{ margin: "14px 0" }}>
+                No encontramos ningún turno registrado con ese número de teléfono.
+              </p>
+            )}
+
+            <div style={{ display: "grid", gap: 10 }}>
+              {clientBookings.map((b) => {
+                const s = biz.services.find((x) => x.id === b.serviceId);
+                const isCancelled = b.status === "cancelada";
                 return (
-                  <div key={p.id} className={`card card-hover flex flex-col p-4 ${qty > 0 ? "!border-fern" : ""}`}>
-                    <p className="font-display text-[15px] font-extrabold text-ink">{p.name}</p>
-                    <p className="mt-0.5 flex-1 text-xs leading-snug text-inkmute">{p.desc}</p>
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="font-display text-lg font-extrabold text-fern">{fmtMoney(p.price)}</span>
-                      {qty === 0 ? (
-                        <button onClick={() => setQty(p.id, 1)} className="flex items-center gap-1.5 rounded-full bg-evergreen px-4 py-2 font-display text-xs font-bold text-lime transition-all hover:-translate-y-0.5 hover:bg-pine">
-                          <IconPlus className="h-3.5 w-3.5" /> Agregar
-                        </button>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <button onClick={() => setQty(p.id, qty - 1)} aria-label={`Quitar ${p.name}`} className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink/15 font-display text-base font-bold text-ink transition-all hover:border-coral hover:text-coral">−</button>
-                          <span className="w-5 text-center font-display text-base font-extrabold text-fern">{qty}</span>
-                          <button onClick={() => setQty(p.id, qty + 1)} aria-label={`Agregar más ${p.name}`} className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink/15 font-display text-base font-bold text-ink transition-all hover:border-evergreen hover:bg-evergreen hover:text-lime">+</button>
-                        </span>
-                      )}
+                  <div
+                    key={b.id}
+                    style={{
+                      border: "1px solid #dce8df",
+                      borderRadius: 12,
+                      padding: "14px 16px",
+                      background: isCancelled ? "#fafafa" : "#ffffff",
+                      opacity: isCancelled ? 0.6 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div>
+                        <b>{s?.name || "Servicio"}</b>
+                        <p className="small muted" style={{ marginTop: 4 }}>
+                          {fmtLong(b.date)} a las {b.time} hs
+                        </p>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "3px 8px",
+                          borderRadius: 6,
+                          background: isCancelled ? "#fee2e2" : "#dcfce7",
+                          color: isCancelled ? "#991b1b" : "#166534",
+                        }}
+                      >
+                        {b.status || "confirmada"}
+                      </span>
                     </div>
+
+                    {!isCancelled && (
+                      <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+                        <button
+                          type="button"
+                          className="btn small"
+                          style={{ color: "#dc2626", borderColor: "#fecaca" }}
+                          onClick={async () => {
+                            if (!window.confirm("¿Seguro que querés cancelar este turno?")) return;
+                            const r = await cancelBookingByClient(user.id, b.id, "Cancelado por el cliente", lookupPhone);
+                            if (r.ok) {
+                              setLookupFeedback("Turno cancelado correctamente.");
+                            } else {
+                              setLookupFeedback(r.error || "No se pudo cancelar el turno.");
+                            }
+                          }}
+                        >
+                          Cancelar este turno
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-3 border-t-2 border-ink/10 bg-evergreen px-5 py-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-paper/60">{count} producto{count === 1 ? "" : "s"} en tu turno</p>
-            <p className="font-display text-2xl font-extrabold text-lime">{fmtMoney(total)}</p>
           </div>
-          <button onClick={onClose} className="rounded-full bg-lime px-6 py-3 font-display text-sm font-bold text-ink transition-all hover:-translate-y-0.5 hover:bg-limedeep">
-            {count > 0 ? "Listo, seguir con mi turno" : "Volver a la reserva"}
-          </button>
         </div>
-      </div>
-    </div>
-  );
-}
+      )}
 
-/* ---------- seña por transferencia ---------- */
-function TransferModal({ amount, settings, business, onClose, onSent }: {
-  amount: number; settings: BizSettings; business: string; onClose: () => void; onSent: (txId: string) => void;
-}) {
-  const [txId, setTxId] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const hasData = !!(settings.transferAlias || settings.transferCBU);
-
-  const send = () => {
-    if (txId.trim().length < 4) return setErr("Pegá el número de comprobante de tu transferencia.");
-    onSent(txId.trim());
-  };
-
-  return (
-    <div className="fixed inset-0 z-[85] flex items-end justify-center bg-ink/60 p-4 backdrop-blur-[2px] sm:items-center" onClick={onClose}>
-      <div className="pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="font-display text-2xl font-extrabold">Pagar seña</h3>
-            <p className="mt-1 text-sm text-inkmute">{business} · <strong className="text-fern">{fmtMoney(amount)}</strong></p>
-          </div>
-          <button onClick={onClose} aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral">✕</button>
-        </div>
-
-        <div className="mt-5 space-y-4">
-          {hasData ? (
-            <div className="rounded-xl border-2 border-dashed border-limedeep/70 bg-lime/15 p-4 text-sm">
-              <p className="font-display text-[15px] font-extrabold text-ink">1 · Transferí el monto exacto a:</p>
-              {settings.transferAlias && <p className="mt-2 text-ink/85">Alias: <strong className="font-mono font-bold">{settings.transferAlias}</strong></p>}
-              {settings.transferCBU && <p className="text-ink/85">CBU/CVU: <strong className="font-mono">{settings.transferCBU}</strong></p>}
-              {settings.transferHolder && <p className="text-ink/85">Titular: <strong>{settings.transferHolder}</strong></p>}
-              <p className="mt-2 text-xs font-semibold text-fern">Monto exacto: {fmtMoney(amount)}</p>
+      {/* Modal de Reseñas */}
+      {showReviewsModal && (
+        <div className="booking-modal-overlay" onClick={() => setShowReviewsModal(false)}>
+          <div className="booking-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="booking-modal-header">
+              <h3>Reseñas de {user.business}</h3>
+              <button
+                type="button"
+                onClick={() => setShowReviewsModal(false)}
+                className="btn"
+                style={{ padding: 6, border: 0 }}
+              >
+                <X size={18} />
+              </button>
             </div>
-          ) : (
-            <div className="rounded-xl border-2 border-coral/40 bg-coral/5 p-4 text-sm text-ink/80">
-              {business} todavía no cargó sus datos de transferencia en Cupito. Escribiles para coordinar la seña.
+
+            {/* Lista de reseñas */}
+            <div style={{ display: "grid", gap: 12, maxHeight: 260, overflowY: "auto", marginBottom: 20 }}>
+              {biz.reviews.length === 0 ? (
+                <p className="small muted">Todavía no hay reseñas. ¡Sé el primero en dejar una!</p>
+              ) : (
+                biz.reviews.map((r) => (
+                  <div
+                    key={r.id}
+                    style={{
+                      border: "1px solid #e2ece5",
+                      borderRadius: 10,
+                      padding: "12px 14px",
+                      background: "#fdfefe",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: "#1f4732" }}>{r.client}</span>
+                      <span style={{ color: "#eab308", fontSize: 13 }}>
+                        {"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 13, color: "#547563", marginTop: 6, lineHeight: 1.5 }}>{r.text}</p>
+                  </div>
+                ))
+              )}
             </div>
-          )}
 
-          <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">2 · Pegá el Nº de comprobante de tu transferencia *</label>
-            <input className="field font-mono" placeholder="Ej: 0023-458912-7" value={txId} onChange={(e) => setTxId(e.target.value)} disabled={!hasData} />
-            <p className="mt-1 text-[11px] leading-snug text-inkmute">
-              Lo encontrás en el detalle de la transferencia, en tu app del banco. {business} verifica que el dinero haya llegado y confirma tu turno.
-            </p>
-          </div>
+            {/* Formulario para dejar reseña */}
+            <form onSubmit={submitReview} style={{ borderTop: "1px solid #e2ece5", paddingTop: 16 }}>
+              <h4 style={{ fontSize: 15, fontWeight: 700, color: "#1f4732", marginBottom: 12 }}>
+                Dejar una opinión
+              </h4>
 
-          {err && <p className="shake rounded-lg border-2 border-coral/40 bg-coral/10 px-3 py-2 text-xs font-semibold text-coral">{err}</p>}
-          <button onClick={send} disabled={!hasData}
-            className="w-full rounded-xl bg-coral py-3.5 font-display text-base font-bold text-white transition-all enabled:hover:-translate-y-0.5 enabled:hover:shadow-[5px_6px_0_rgba(255,122,89,0.3)] disabled:cursor-not-allowed disabled:opacity-50">
-            Ya transferí — enviar comprobante
-          </button>
-          <p className="text-center text-[11px] leading-snug text-inkmute">Tu turno queda reservado como «pendiente» hasta que el negocio verifique la transferencia.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LookupBookingsModal({
-  businessName,
-  bookings,
-  services,
-  professionals,
-  whatsapp,
-  onCancelBooking,
-  onClose,
-}: {
-  businessName: string;
-  bookings: Booking[];
-  services: Service[];
-  professionals: Professional[];
-  whatsapp?: string;
-  onCancelBooking: (id: string, phone: string) => Promise<{ ok: boolean; error?: string }>;
-  onClose: () => void;
-}) {
-  const [inputPhone, setInputPhone] = useState("");
-  const [blockedMsg, setBlockedMsg] = useState(false);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const phoneVal = normalizeArgentinaPhone(inputPhone);
-  const nowKey = dateKey(new Date());
-
-  const matched = useMemo(() => {
-    if (phoneVal.cleanDigits.length < 6) return [];
-    const queryDigits = phoneVal.cleanDigits.slice(-8);
-    return bookings.filter(
-      (b) =>
-        b.phone.replace(/\D/g, "").endsWith(queryDigits) &&
-        b.date >= nowKey &&
-        b.status !== "cancelada"
-    );
-  }, [bookings, phoneVal.cleanDigits, nowKey]);
-
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/65 p-4 backdrop-blur-[3px]" onClick={onClose}>
-      <div className="pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3 border-b border-ink/10 pb-4">
-          <div>
-            <h3 className="font-display text-xl font-extrabold text-ink">Mis turnos en {businessName}</h3>
-            <p className="mt-0.5 text-xs text-inkmute">Consultá tus próximas citas o cancelá gratis hasta 24 h antes.</p>
-          </div>
-          <button onClick={onClose} aria-label="Cerrar" className="flex h-8 w-8 items-center justify-center rounded-full border border-ink/15 text-inkmute hover:border-coral hover:text-coral transition-colors">✕</button>
-        </div>
-
-        <div className="mt-4 space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-inkmute">
-              Ingresá tu número de celular <span className="normal-case font-semibold text-ink/60">(sin 0 ni 15)</span>
-            </label>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-extrabold text-ink/40">
-                🇦🇷 +54 9
-              </span>
-              <input
-                className="field !pl-20 font-mono text-sm font-semibold"
-                type="tel"
-                inputMode="numeric"
-                placeholder="11 5555-0000"
-                value={phoneVal.formatted || inputPhone}
-                onChange={(e) => setInputPhone(cleanPhoneDigits(e.target.value))}
-                autoFocus
-              />
-            </div>
-            <p className="mt-1 text-[11px] text-inkmute">
-              {phoneVal.cleanDigits.length < 6 ? "Ingresá al menos tu número (ej: 11 4567-8901) para buscar tus turnos." : phoneVal.hint}
-            </p>
-          </div>
-
-          <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-            {phoneVal.cleanDigits.length >= 6 && matched.length === 0 ? (
-              <div className="rounded-xl border-2 border-dashed border-ink/10 bg-white/60 p-5 text-center text-xs text-inkmute">
-                No encontramos turnos activos para este número en {businessName}.
-              </div>
-            ) : null}
-
-            {matched.map((b) => {
-              const srv = services.find((s) => s.id === b.serviceId);
-              const pro = professionals.find((p) => p.id === b.proId);
-              return (
-                <div key={b.id} className="rounded-xl border-2 border-ink/10 bg-white p-3.5 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-display text-sm font-bold text-ink">{srv?.name || "Servicio"}</span>
-                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-800">Confirmado</span>
-                  </div>
-                  <div className="text-xs text-inkmute flex flex-wrap justify-between gap-1">
-                    <span>📅 {fmtLong(b.date)} a las <strong>{b.time} hs</strong></span>
-                    {pro && <span>con {pro.name}</span>}
-                  </div>
-                  <div className="pt-2 border-t border-ink/8 flex justify-end">
-                    <button
-                      type="button"
-                      disabled={cancellingId === b.id}
-                      onClick={async () => {
-                        if (window.confirm("¿Seguro que deseás cancelar este turno?")) {
-                          setCancellingId(b.id);
-                          const r = await onCancelBooking(b.id, inputPhone);
-                          setCancellingId(null);
-                          if (!r.ok && r.error === "FALTA_MENOS_24H") setBlockedMsg(true);
-                        }
-                      }}
-                      className="rounded-lg border border-coral/30 bg-coral/10 px-3 py-1.5 font-display text-xs font-bold text-coral hover:bg-coral hover:text-white transition-all disabled:opacity-60"
-                    >
-                      {cancellingId === b.id ? "Cancelando…" : "Cancelar turno"}
-                    </button>
-                  </div>
+              {reviewSuccess ? (
+                <div className="notice" style={{ background: "#ecfdf5", color: "#065f46" }}>
+                  ¡Gracias por tu opinión! Se guardó correctamente.
                 </div>
-              );
-            })}
-            {blockedMsg && (
-              <div className="rounded-xl border-2 border-amber-500/40 bg-amber-50 p-3 text-center">
-                <p className="text-xs font-bold text-amber-900">Faltan menos de 24 h: la cancelación online está cerrada.</p>
-                {whatsapp ? (
-                  <a href={createWhatsAppUrl(whatsapp, `Hola! Soy cliente de ${businessName} y necesito cambiar o cancelar un turno 🙏`)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-2 font-display text-xs font-bold text-white">
-                    Hablar con el local
-                  </a>
-                ) : (
-                  <p className="mt-1 text-[11px] text-amber-800">Comunicate directamente con el local.</p>
-                )}
-              </div>
-            )}
+              ) : (
+                <div className="form-grid">
+                  <label>
+                    Tu nombre
+                    <input
+                      required
+                      placeholder="Ej. Sofía"
+                      value={newReviewAuthor}
+                      onChange={(e) => setNewReviewAuthor(e.target.value)}
+                    />
+                  </label>
+
+                  <label>
+                    Puntuación
+                    <select
+                      value={newReviewRating}
+                      onChange={(e) => setNewReviewRating(Number(e.target.value))}
+                    >
+                      <option value={5}>⭐⭐⭐⭐⭐ Excelente (5 estrellas)</option>
+                      <option value={4}>⭐⭐⭐⭐ Muy bueno (4 estrellas)</option>
+                      <option value={3}>⭐⭐⭐ Bueno (3 estrellas)</option>
+                      <option value={2}>⭐⭐ Regular (2 estrellas)</option>
+                      <option value={1}>⭐ Malo (1 estrella)</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Comentario
+                    <textarea
+                      required
+                      rows={2}
+                      placeholder="Contá qué te pareció la atención..."
+                      value={newReviewText}
+                      onChange={(e) => setNewReviewText(e.target.value)}
+                    />
+                  </label>
+
+                  <button type="submit" className="btn primary" style={{ width: "100%", marginTop: 8 }}>
+                    Enviar reseña
+                  </button>
+                </div>
+              )}
+            </form>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </main>
   );
 }
