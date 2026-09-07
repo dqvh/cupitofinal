@@ -1,9 +1,9 @@
 import { fitsWorkingDay } from "../lib/scheduling";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, MapPin, Sparkles,
+  ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, MapPin,
   ShieldCheck, Package, Plus, Minus, Calendar, Download, Search,
-  MessageCircle, ExternalLink, Star, X
+  MessageCircle, ExternalLink, Star, X, ChevronDown
 } from "lucide-react";
 import {
   useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
@@ -108,6 +108,7 @@ function BookingForm({
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [productsOpen, setProductsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -234,6 +235,11 @@ function BookingForm({
   const productsTotal = useMemo(() => {
     return (biz.products || []).reduce((acc, p) => acc + (cart[p.id] || 0) * p.price, 0);
   }, [biz.products, cart]);
+
+  const productsCount = useMemo(
+    () => Object.values(cart).reduce((total, quantity) => total + quantity, 0),
+    [cart]
+  );
 
   const cartItemsArray = useMemo(() => {
     return Object.entries(cart)
@@ -363,6 +369,7 @@ function BookingForm({
     setEmail("");
     setNotes("");
     setCart({});
+    setProductsOpen(false);
     setError(null);
     setDone(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -430,7 +437,10 @@ function BookingForm({
       {/* Columna Izquierda: Tarjeta del Negocio */}
       <aside className="business-card">
         <div className="large-logo">
-          <Sparkles size={36} />
+          <picture>
+            <source srcSet="/cupito-logo.webp" type="image/webp" />
+            <img src="/cupito-logo.png" width="64" height="64" alt="Logo de Cupito" decoding="async" />
+          </picture>
         </div>
 
         {isDemo && <span className="demo-pill">Página de demostración</span>}
@@ -851,54 +861,69 @@ function BookingForm({
 
                 {/* Productos opcionales de tienda */}
                 {biz.products && biz.products.length > 0 && (
-                  <>
-                    <h3 style={{ marginTop: 28, fontSize: 16, fontWeight: 700, color: "#1f4732" }}>
-                      ¿Te llevás algo más?
-                    </h3>
-                    <p className="small muted" style={{ marginTop: 4 }}>
-                      Opcional. Lo retirás cuando vengas al local.
-                    </p>
+                  <section className="booking-products-panel" aria-label="Productos opcionales">
+                    <button
+                      type="button"
+                      className="booking-products-toggle"
+                      aria-expanded={productsOpen}
+                      aria-controls="booking-products-list"
+                      onClick={() => setProductsOpen((open) => !open)}
+                    >
+                      <span className="booking-products-toggle-copy">
+                        <span className="booking-products-toggle-icon"><Package size={18} /></span>
+                        <span>
+                          <strong>¿Te llevás algo más?</strong>
+                          <small>Opcional · lo retirás cuando vengas</small>
+                        </span>
+                      </span>
+                      <span className="booking-products-toggle-action">
+                        {productsCount > 0 ? `${productsCount} · ${fmtMoney(productsTotal)}` : productsOpen ? "Ocultar" : "Agregar"}
+                        <ChevronDown size={17} className={productsOpen ? "rotate-180" : ""} />
+                      </span>
+                    </button>
 
-                    <div className="booking-products">
-                      {biz.products.map((p) => {
-                        const count = cart[p.id] || 0;
-                        return (
-                          <article key={p.id} className="booking-product">
-                            <span className="product-thumb">
-                              <Package size={22} />
-                            </span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <h3 style={{ fontSize: 14, fontWeight: 600, color: "#224732" }}>{p.name}</h3>
-                              <p style={{ fontSize: 12, color: "#6e8979", marginTop: 2 }}>
-                                {fmtMoney(p.price)}
-                              </p>
-                            </div>
-                            <div className="quantity-control">
-                              <button
-                                type="button"
-                                aria-label={"Quitar " + p.name}
-                                disabled={count === 0}
-                                onClick={() => setCart({ ...cart, [p.id]: Math.max(0, count - 1) })}
-                              >
-                                <Minus size={12} />
-                              </button>
-                              <span style={{ fontSize: 13, fontWeight: 700, minWidth: 16, textAlign: "center" }}>
-                                {count}
+                    {productsOpen && (
+                      <div id="booking-products-list" className="booking-products">
+                        {biz.products.map((p) => {
+                          const count = cart[p.id] || 0;
+                          return (
+                            <article key={p.id} className="booking-product">
+                              <span className="product-thumb">
+                                <Package size={20} />
                               </span>
-                              <button
-                                type="button"
-                                aria-label={"Agregar " + p.name}
-                                disabled={count >= 5}
-                                onClick={() => setCart({ ...cart, [p.id]: count + 1 })}
-                              >
-                                <Plus size={12} />
-                              </button>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </>
+                              <div className="booking-product-copy">
+                                <h3>{p.name}</h3>
+                                <p>{fmtMoney(p.price)}</p>
+                              </div>
+                              <div className="quantity-control">
+                                <button
+                                  type="button"
+                                  aria-label={"Quitar " + p.name}
+                                  disabled={count === 0}
+                                  onClick={() => setCart({ ...cart, [p.id]: Math.max(0, count - 1) })}
+                                >
+                                  <Minus size={12} />
+                                </button>
+                                <span aria-live="polite">{count}</span>
+                                <button
+                                  type="button"
+                                  aria-label={"Agregar " + p.name}
+                                  disabled={count >= 5}
+                                  onClick={() => setCart({ ...cart, [p.id]: count + 1 })}
+                                >
+                                  <Plus size={12} />
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {productsCount > 0 && !productsOpen && (
+                      <p className="booking-products-summary">{productsCount} producto{productsCount === 1 ? "" : "s"} agregado{productsCount === 1 ? "" : "s"} · {fmtMoney(productsTotal)}</p>
+                    )}
+                  </section>
                 )}
 
                 <div className="booking-controls">
@@ -1064,20 +1089,10 @@ function BookingForm({
       {/* Barra de navegación superior */}
       <nav className="booking-nav">
         <a href="#/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              background: accentColor,
-              color: "white",
-              display: "grid",
-              placeItems: "center",
-              fontWeight: 800,
-            }}
-          >
-            c
-          </div>
+          <picture className="booking-brand-mark">
+            <source srcSet="/cupito-logo.webp" type="image/webp" />
+            <img src="/cupito-logo.png" width="34" height="34" alt="Logo de Cupito" decoding="async" />
+          </picture>
           <span style={{ fontSize: 20, fontWeight: 750, letterSpacing: "-0.5px", color: "#1f4732" }}>
             cupito<span style={{ color: accentColor }}>.</span>
           </span>

@@ -241,7 +241,7 @@ export default function Landing() {
               <span>Más turnos.</span>
             </h1>
             <p>
-              Tu página de reservas, agenda y clientes en un solo lugar. Compartí un enlace y dejá que elijan su horario.
+              Tu página de reservas, agenda y clientes en un solo lugar. Compartí un enlace, dejá que elijan su horario y recuperá tiempo todos los días.
             </p>
             <div className="lp-hero-buttons">
               <a
@@ -270,6 +270,11 @@ export default function Landing() {
               <span>
                 <Check size={13} /> Hecho en Argentina
               </span>
+            </div>
+            <div className="lp-hero-proof" aria-label="Ventajas de Cupito">
+              <span><ShieldCheck size={15} /><strong>Sin app</strong><small>para tus clientes</small></span>
+              <span><Clock size={15} /><strong>24/7</strong><small>reservas abiertas</small></span>
+              <span><Palette size={15} /><strong>Tu marca</strong><small>en cada detalle</small></span>
             </div>
           </div>
 

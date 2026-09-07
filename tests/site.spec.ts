@@ -125,3 +125,35 @@ test('panel mobile muestra acciones cotidianas sin desbordar', async ({ page }) 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'artifacts/dashboard-mobile.png', fullPage: true });
 });
+
+test('reserva mobile: productos opcionales colapsados y fáciles de agregar', async ({ page }) => {
+  await seed(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/prueba');
+  await page.evaluate(() => {
+    const key = 'cupito_data_test-owner';
+    const data = JSON.parse(localStorage.getItem(key)!);
+    data.products = [
+      { id: 'p1', name: 'Aceite nutritivo', price: 2500, desc: 'Cuidado para después del servicio' },
+      { id: 'p2', name: 'Pack de cuidado semanal', price: 4800, desc: 'Para mantener el resultado' },
+      { id: 'p3', name: 'Gift card', price: 7000, desc: 'Un regalo simple' },
+    ];
+    localStorage.setItem(key, JSON.stringify(data));
+  });
+  await page.reload();
+  await expect(page.locator('.large-logo img')).toHaveAttribute('alt', 'Logo de Cupito');
+  await page.getByRole('button', { name: /Consulta de prueba/ }).click();
+  await page.getByRole('button', { name: 'Elegir horario' }).click();
+  await page.getByRole('button', { name: '09:00', exact: true }).click();
+
+  const productsToggle = page.getByRole('button', { name: /¿Te llevás algo más\?/ });
+  await expect(productsToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#booking-products-list')).toHaveCount(0);
+  await productsToggle.click();
+  await expect(productsToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#booking-products-list')).toBeVisible();
+  await page.getByRole('button', { name: 'Agregar Aceite nutritivo' }).click();
+  await expect(productsToggle).toContainText('1 · $2.500');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'artifacts/booking-products-mobile.png', fullPage: true });
+});
