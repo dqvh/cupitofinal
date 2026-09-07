@@ -29,6 +29,9 @@ import {
   sbValidateSession,
   sbHasSession,
   sbGetAccessToken,
+  sbLoadSession,
+  sbSaveSession,
+  toSession,
   takeForbiddenUser,
   clearRemoteForbidden,
 } from "./supabase";
@@ -1105,11 +1108,36 @@ async function adoptAuthAccount(authId: string): Promise<string | null> {
     importRemoteAccount(remote);
     return null;
   }
+  // Si la cuenta existe localmente por email, asociamos el auth_id
+  const sess = sbLoadSession();
+  const sessEmail = sess?.email?.toLowerCase().trim();
+  if (sessEmail) {
+    const hitByEmail = users.find((u) => u.email.toLowerCase() === sessEmail && !deleted.has(u.id));
+    if (hitByEmail) {
+      hitByEmail.auth_id = authId;
+      safeSet(USERS_KEY, JSON.stringify(users));
+      saveSession(hitByEmail.id);
+      emit();
+      if (isSupabaseConfigured) api.syncUserDataFromCloud(hitByEmail.id).catch(() => {});
+      return null;
+    }
+  }
   // Sin fila: ¿venía de un registro con email por confirmar?
   const pending = loadPendingBiz();
   if (pending && pending.authId === authId) {
     const created = await createBizRowFromPending(pending);
     if (created) return null;
+  }
+  // Si no hay fila pero tenemos sesión Auth con metadatos (name, business) guardados al registrar
+  const val = await sbValidateSession().catch(() => null);
+  if (val && val.authId === authId) {
+    const meta = val.user_metadata || {};
+    if (meta.business || meta.name) {
+      const bName = String(meta.business || meta.name || "Mi Negocio");
+      const oName = String(meta.name || bName);
+      const createdErr = await completeBizSetupCore(oName, bName);
+      if (!createdErr) return null;
+    }
   }
   // Login válido pero sin negocio (ej: confirmó el email en otro dispositivo).
   // No cerramos sesión: la UI pide nombre+negocio y lo crea (NEEDS_SETUP).
@@ -1493,7 +1521,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         safeSet(dataKey(remote.user.id), JSON.stringify(remote.data));
       } else {
         // La nube está vacía y este dispositivo tiene los datos posta: subir, no pisar.
-        syncUserToRemote(remote.user, local).catch(() => {});
+        if (sbHasSession()) syncUserToRemote(remote.user, local).catch(() => {});
       }
     }
     emit();
@@ -1507,7 +1535,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const remoteData = await fetchRemoteBizData(userId);
     if (!remoteData) {
       // La nube no tiene fila para este negocio (cuenta creada sin conexión):
-      // subir lo local en vez de rendirse.
+      // subir lo local solo si hay sesión activa para que RLS no lo rechace.
       try {
         const local = loadData(userId);
         const hasStuff =
@@ -1515,7 +1543,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
           (local.bookings || []).length > 0 ||
           (local.waitlist || []).length > 0;
         const owner = users.find((u) => u.id === userId);
-        if (owner && hasStuff) {
+        if (sbHasSession() && owner && hasStuff) {
           await syncUserToRemote(owner, local).catch(() => {});
           return true;
         }
@@ -1589,7 +1617,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
           settings: remoteData.settings ?? localData.settings,
         };
         const owner = users.find((u) => u.id === userId);
-        if (owner) syncUserToRemote(owner, pushed).catch(() => {});
+        if (sbHasSession() && owner) syncUserToRemote(owner, pushed).catch(() => {});
       }
     } catch { /* noop */ }
     return true;
@@ -1696,6 +1724,10 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       });
       const r = await res.json().catch(() => ({}));
       if (res.ok && r.ok && r.user) {
+        if (r.session) {
+          const sess = toSession(r.session);
+          if (sess) sbSaveSession(sess);
+        }
         const recovery = r.recovery || Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
         const user: User = {
           id: r.user.id,
@@ -1716,9 +1748,10 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         users = [...withoutDup, user];
         safeSet(USERS_KEY, JSON.stringify(users));
         saveSession(user.id);
-        // Conectar la sesión ANTES de guardar: sin JWT la nube rechaza
-        // el primer guardado (RLS) y aparece "La nube rechazó el guardado".
-        await sbSignIn(em, password).catch(() => {});
+        // Conectar la sesión si el servidor no pudo emitir token directo
+        if (!sbHasSession()) {
+          await sbSignIn(em, password).catch(() => {});
+        }
         clearRemoteForbidden(user.id);
         const fresh = defaultData();
         fresh.services = [
@@ -2843,7 +2876,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     forbiddenNoticedFor.current = null;
     const checkForbidden = () => {
       const f = takeForbiddenUser();
-      if (f && f.userId === uid && forbiddenNoticedFor.current !== uid) {
+      if (f && f.userId === uid && forbiddenNoticedFor.current !== uid && sbHasSession()) {
         forbiddenNoticedFor.current = uid;
         toast(
           f.status === 400
@@ -2867,7 +2900,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [sessionUserId]);
 
   // Si hay sesión local vieja pero no hay JWT, las escrituras no llegan a la nube:
-  // avisar una vez que hay que volver a entrar (la sesión Auth expira o se cerró en otro lado).
+  // avisar una vez para reconectar con botón directo.
   const reloginNoticed = useRef(false);
   const forbiddenNoticedFor = useRef<string | null>(null);
   useEffect(() => {
@@ -2875,7 +2908,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured || sbHasSession()) return;
     reloginNoticed.current = true;
     const t = setTimeout(() => {
-      if (!sbHasSession()) toast("Cerrá sesión y volvé a entrar para reconectar la nube", "warn");
+      if (!sbHasSession()) {
+        toast("Tu sesión en la nube expiró: iniciá sesión para sincronizar cambios", "warn", {
+          label: "Entrar",
+          onClick: () => { window.location.hash = "#/auth"; },
+        });
+      }
     }, 5000);
     return () => clearTimeout(t);
   }, [memo.user, toast]);

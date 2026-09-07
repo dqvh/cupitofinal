@@ -16,11 +16,13 @@ CREATE TABLE IF NOT EXISTS cupito_users (
   plan TEXT DEFAULT 'semilla',
   created_at BIGINT,
   subscription JSONB,
-  deleted BOOLEAN DEFAULT FALSE
+  deleted BOOLEAN DEFAULT FALSE,
+  recovery TEXT
 );
 -- Migración para bases ya creadas:
 ALTER TABLE cupito_users ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
 ALTER TABLE cupito_users ADD COLUMN IF NOT EXISTS auth_id TEXT UNIQUE;
+ALTER TABLE cupito_users ADD COLUMN IF NOT EXISTS recovery TEXT;
 
 -- 2. Tabla de Datos de Negocio (servicios, horarios, reservas, reseñas, cupones)
 CREATE TABLE IF NOT EXISTS cupito_data (

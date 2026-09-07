@@ -190,7 +190,12 @@ INSTRUCCIONES IMPORTANTES:
       try {
         const err = await loginAsync(em, password);
         if (err) {
-          setError(err);
+          if (err === "NEEDS_SETUP") {
+            setError("Cuenta confirmada ✓ Por favor completá los datos de tu negocio para empezar.");
+            setMode("registro");
+          } else {
+            setError(err);
+          }
         } else {
           toast("¡Hola de nuevo! Agenda al día ✓");
           window.location.hash = "#/app";

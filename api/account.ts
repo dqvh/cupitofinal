@@ -79,19 +79,27 @@ export default async function handler(req: Request): Promise<Response> {
         return json({ error: "Ya existe una cuenta con ese email. ¿Querés iniciar sesión?" }, 409);
       }
 
+      // Clave única de recuperación de 64 caracteres (un solo uso)
+      const recovery = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
+
       // 2. Crear o reutilizar usuario en Supabase Auth con email_confirm: true
       let authId = "";
       const createRes = await fetch(`${url}/auth/v1/admin/users`, {
         method: "POST",
         headers: svcHeaders(serviceKey),
-        body: JSON.stringify({ email, password, email_confirm: true }),
+        body: JSON.stringify({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { name, business, recovery },
+        }),
       });
       const created = await createRes.json().catch(() => ({}));
       if (created?.id) {
         authId = String(created.id);
       } else {
-        // Si ya existía en Auth (ej: intento previo), actualizar password y confirmar
-        const listRes = await fetch(`${url}/auth/v1/admin/users`, { headers: svcHeaders(serviceKey) });
+        // Si ya existía en Auth (ej: intento previo), actualizar password y metadatos
+        const listRes = await fetch(`${url}/auth/v1/admin/users?page=1&per_page=1000`, { headers: svcHeaders(serviceKey) });
         if (listRes.ok) {
           const listed = await listRes.json().catch(() => ({}));
           const found = (listed?.users || []).find((u: any) => String(u.email || "").toLowerCase() === email);
@@ -100,7 +108,11 @@ export default async function handler(req: Request): Promise<Response> {
             await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(authId)}`, {
               method: "PUT",
               headers: svcHeaders(serviceKey),
-              body: JSON.stringify({ password, email_confirm: true }),
+              body: JSON.stringify({
+                password,
+                email_confirm: true,
+                user_metadata: { name, business, recovery },
+              }),
             });
           }
         }
@@ -135,8 +147,6 @@ export default async function handler(req: Request): Promise<Response> {
         status: "activa",
       } : null;
 
-      const recovery = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
-
       const user = {
         id: authId,
         auth_id: authId,
@@ -152,18 +162,39 @@ export default async function handler(req: Request): Promise<Response> {
         deleted: false,
       };
 
-      // 4. Guardar en cupito_users (upsert)
-      const uRes = await fetch(`${url}/rest/v1/cupito_users?on_conflict=id`, {
+      // 4. Guardar en cupito_users (upsert con auto-recuperación de columnas faltantes como PGRST204)
+      let userPayload: Record<string, unknown> = { ...user };
+      let uRes = await fetch(`${url}/rest/v1/cupito_users?on_conflict=id`, {
         method: "POST",
         headers: { ...svcHeaders(serviceKey), Prefer: "resolution=merge-duplicates,return=representation" },
-        body: JSON.stringify(user),
+        body: JSON.stringify(userPayload),
       });
       if (!uRes.ok) {
-        const t = await uRes.text().catch(() => "");
-        return json({ error: `Error guardando negocio: ${t}` }, 500);
+        let t = await uRes.text().catch(() => "");
+        let retries = 0;
+        while (!uRes.ok && retries < 3) {
+          const match = t.match(/Could not find the '(\w+)' column/i);
+          if (match && match[1] && match[1] in userPayload) {
+            delete userPayload[match[1]];
+            retries++;
+            uRes = await fetch(`${url}/rest/v1/cupito_users?on_conflict=id`, {
+              method: "POST",
+              headers: { ...svcHeaders(serviceKey), Prefer: "resolution=merge-duplicates,return=representation" },
+              body: JSON.stringify(userPayload),
+            });
+            if (!uRes.ok) {
+              t = await uRes.text().catch(() => "");
+            }
+          } else {
+            break;
+          }
+        }
+        if (!uRes.ok) {
+          return json({ error: `Error guardando negocio: ${t}` }, 500);
+        }
       }
 
-      // 5. Guardar en cupito_data (upsert datos default)
+      // 5. Guardar en cupito_data (upsert datos default con respaldo seguro de recovery)
       const defaultData = {
         services: [
           { id: "srv-1", name: "Atención General", duration: 30, price: 0, active: true },
@@ -175,6 +206,7 @@ export default async function handler(req: Request): Promise<Response> {
         coupons: [],
         waitlist: [],
         blockedSlots: [],
+        recovery, // respaldo en JSONB
         settings: {
           depositEnabled: false,
           depositPct: 20,
@@ -201,18 +233,44 @@ export default async function handler(req: Request): Promise<Response> {
         },
       };
 
-      await fetch(`${url}/rest/v1/cupito_data?on_conflict=user_id`, {
+      let dataPayload: Record<string, unknown> = {
+        user_id: authId,
+        data: defaultData,
+        updated_at: now,
+        deleted: false,
+      };
+      let dRes = await fetch(`${url}/rest/v1/cupito_data?on_conflict=user_id`, {
         method: "POST",
         headers: { ...svcHeaders(serviceKey), Prefer: "resolution=merge-duplicates" },
-        body: JSON.stringify({
-          user_id: authId,
-          data: defaultData,
-          updated_at: now,
-          deleted: false,
-        }),
+        body: JSON.stringify(dataPayload),
       });
+      if (!dRes.ok) {
+        let dt = await dRes.text().catch(() => "");
+        const match = dt.match(/Could not find the '(\w+)' column/i);
+        if (match && match[1] && match[1] in dataPayload) {
+          delete dataPayload[match[1]];
+          await fetch(`${url}/rest/v1/cupito_data?on_conflict=user_id`, {
+            method: "POST",
+            headers: { ...svcHeaders(serviceKey), Prefer: "resolution=merge-duplicates" },
+            body: JSON.stringify(dataPayload),
+          });
+        }
+      }
 
-      return json({ ok: true, user, slug, recovery });
+      // 6. Generar sesión en el servidor para que el cliente quede autenticado de inmediato
+      let session: any = null;
+      try {
+        const tokenRes = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+          method: "POST",
+          headers: { apikey: serviceKey, "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        if (tokenRes.ok) {
+          session = await tokenRes.json().catch(() => null);
+        }
+      } catch {}
+
+      return json({ ok: true, user, slug, recovery, session });
     }
 
     /* ---------------- RECUPERAR CONTRASEÑA ---------------- */
@@ -235,30 +293,68 @@ export default async function handler(req: Request): Promise<Response> {
         return json({ error: "No encontramos ninguna cuenta con ese email." }, 404);
       }
 
-      // 2. Verificar clave de recuperación
-      if (!row.recovery || row.recovery.trim().toLowerCase() !== recovery.toLowerCase()) {
+      const authId = row.auth_id || row.id;
+
+      // Consultar Auth admin y cupito_data como respaldo si cupito_users no tiene columna recovery
+      let authUser: any = null;
+      try {
+        const aRes = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(authId)}`, {
+          headers: svcHeaders(serviceKey),
+        });
+        if (aRes.ok) authUser = await aRes.json().catch(() => null);
+      } catch {}
+
+      let dRows: any[] = [];
+      try {
+        const dRes = await fetch(
+          `${url}/rest/v1/cupito_data?select=data&user_id=eq.${encodeURIComponent(row.id)}`,
+          { headers: svcHeaders(serviceKey) }
+        );
+        if (dRes.ok) dRows = await dRes.json().catch(() => []);
+      } catch {}
+
+      // 2. Verificar clave de recuperación (revisando cupito_users, user_metadata o cupito_data)
+      const authRecovery = authUser?.user_metadata?.recovery;
+      const dataRecovery = dRows?.[0]?.data?.recovery;
+      const expectedRecovery = String(row.recovery || authRecovery || dataRecovery || "");
+      if (!expectedRecovery || expectedRecovery.trim().toLowerCase() !== recovery.toLowerCase()) {
         return json({ error: "La clave de recuperación no es válida para esta cuenta." }, 401);
       }
 
-      // 3. Actualizar contraseña en Supabase Auth
-      const authId = row.auth_id || row.id;
+      // 3. Actualizar contraseña y clave en Supabase Auth
+      const newRecovery = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
       const updateAuthRes = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(authId)}`, {
         method: "PUT",
         headers: svcHeaders(serviceKey),
-        body: JSON.stringify({ password, email_confirm: true }),
+        body: JSON.stringify({
+          password,
+          email_confirm: true,
+          user_metadata: { ...(authUser?.user_metadata || {}), recovery: newRecovery },
+        }),
       });
       if (!updateAuthRes.ok) {
         const at = await updateAuthRes.text().catch(() => "");
         return json({ error: `No se pudo actualizar la contraseña: ${at}` }, 500);
       }
 
-      // 4. Generar nueva clave de recuperación (un solo uso)
-      const newRecovery = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
+      // 4. Actualizar clave de recuperación en cupito_data
+      if (dRows?.[0]?.data) {
+        await fetch(`${url}/rest/v1/cupito_data?user_id=eq.${encodeURIComponent(row.id)}`, {
+          method: "PATCH",
+          headers: svcHeaders(serviceKey),
+          body: JSON.stringify({
+            data: { ...dRows[0].data, recovery: newRecovery },
+            updated_at: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+
+      // 5. Intentar actualizar en cupito_users (no bloquea si la columna aún no existe)
       await fetch(`${url}/rest/v1/cupito_users?id=eq.${encodeURIComponent(authId)}`, {
         method: "PATCH",
         headers: svcHeaders(serviceKey),
         body: JSON.stringify({ recovery: newRecovery }),
-      });
+      }).catch(() => {});
 
       return json({ ok: true, message: "Contraseña actualizada exitosamente.", newRecovery });
     }

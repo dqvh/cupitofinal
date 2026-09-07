@@ -77,27 +77,58 @@ async function selectOne<T>(path: string): Promise<T | null> {
 }
 
 async function upsert(table: "cupito_users" | "cupito_data", row: Record<string, unknown>, onConflict: string): Promise<void> {
-  const res = await rest(`/${table}?on_conflict=${onConflict}`, {
+  // Las políticas RLS en Supabase solo permiten escribir al dueño logueado (auth.uid() = auth_id).
+  // Sin token activo, una petición anónima siempre será rechazada con 401/403.
+  // Evitamos peticiones destinadas a fallar para no generar falsas alertas de guardado en el panel.
+  const token = await sbGetAccessToken().catch(() => "");
+  if (!token) {
+    return;
+  }
+
+  let payload = { ...row };
+  let res = await rest(`/${table}?on_conflict=${onConflict}`, {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-    body: JSON.stringify(row),
+    body: JSON.stringify(payload),
   });
+
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    // 401/403 = RLS rechazó la escritura (sesión vieja o sin JWT).
-    // 400 = pedido mal formado (casi siempre: falta correr el SQL nuevo).
-    // Se registra para avisar en pantalla en vez de fallar en silencio.
-    if (res.status === 400 || res.status === 401 || res.status === 403) {
-      const uid = row.id ?? row.user_id;
-      if (uid) noteRemoteForbidden(String(uid), res.status);
+    let txt = await res.text().catch(() => "");
+    // Si la base de datos del usuario no tiene alguna columna (PGRST204), la removemos y reintentamos
+    let retries = 0;
+    while (!res.ok && retries < 2) {
+      const match = txt.match(/Could not find the '(\w+)' column/i);
+      if (match && match[1] && match[1] in payload) {
+        delete payload[match[1]];
+        retries++;
+        res = await rest(`/${table}?on_conflict=${onConflict}`, {
+          method: "POST",
+          headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          txt = await res.text().catch(() => "");
+        }
+      } else {
+        break;
+      }
     }
-    const err = new Error(`Supabase upsert ${res.status}: ${txt.slice(0, 200)}`) as Error & { status?: number };
-    err.status = res.status;
-    throw err;
-  } else {
-    const uid = row.id ?? row.user_id;
-    if (uid) clearRemoteForbidden(String(uid));
+
+    if (!res.ok) {
+      // 401/403 = RLS rechazó la escritura (sesión vieja o sin JWT).
+      // 400 = pedido mal formado (casi siempre: falta correr el SQL nuevo).
+      if (res.status === 400 || res.status === 401 || res.status === 403) {
+        const uid = row.id ?? row.user_id;
+        if (uid) noteRemoteForbidden(String(uid), res.status);
+      }
+      const err = new Error(`Supabase upsert ${res.status}: ${txt.slice(0, 200)}`) as Error & { status?: number };
+      err.status = res.status;
+      throw err;
+    }
   }
+
+  const uid = row.id ?? row.user_id;
+  if (uid) clearRemoteForbidden(String(uid));
 }
 
 /* Cola de escrituras rechazadas por la nube (para toast de diagnóstico) */
@@ -200,7 +231,16 @@ export async function fetchAllRemoteUsers(): Promise<User[]> {
  */
 export async function syncUserToRemote(user: User, data?: BizData): Promise<boolean> {
   if (!isSupabaseConfigured) return false;
+  // Sin sesión activa de Supabase Auth, RLS rechazará cualquier escritura (401).
+  // No intentamos sincronizar si no hay sesión iniciada.
+  if (!sbHasSession()) return false;
   try {
+    const session = sbLoadSession();
+    const effectiveAuthId = (user as User & { auth_id?: string }).auth_id || session?.user_id || null;
+    if (!user.auth_id && session?.user_id) {
+      (user as User & { auth_id?: string }).auth_id = session.user_id;
+    }
+
     await upsert("cupito_users", {
       id: user.id,
       name: user.name,
@@ -211,7 +251,7 @@ export async function syncUserToRemote(user: User, data?: BizData): Promise<bool
       plan: user.plan,
       created_at: user.createdAt,
       subscription: user.subscription || null,
-      auth_id: (user as User & { auth_id?: string }).auth_id || null,
+      auth_id: effectiveAuthId,
       deleted: false,
     }, "id");
 
@@ -304,7 +344,7 @@ export interface SbSession {
 
 const SB_SESSION_KEY = "cupito_sb_session";
 
-function sbLoadSession(): SbSession | null {
+export function sbLoadSession(): SbSession | null {
   try {
     const raw = window.localStorage.getItem(SB_SESSION_KEY);
     if (!raw) return null;
@@ -316,7 +356,7 @@ function sbLoadSession(): SbSession | null {
   }
 }
 
-function sbSaveSession(s: SbSession) {
+export function sbSaveSession(s: SbSession) {
   try {
     window.localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s));
   } catch { /* noop */ }
@@ -328,7 +368,7 @@ export function sbClearSession() {
   } catch { /* noop */ }
 }
 
-function toSession(data: any): SbSession | null {
+export function toSession(data: any): SbSession | null {
   const at = data?.access_token;
   const rt = data?.refresh_token;
   const u = data?.user;
@@ -588,7 +628,8 @@ export async function sbResendConfirmation(email: string): Promise<boolean> {
   }
 }
 
-/** Valida la sesión contra el servidor (para el arranque). */export async function sbValidateSession(): Promise<{ authId: string; email: string } | null> {
+/** Valida la sesión contra el servidor (para el arranque). */
+export async function sbValidateSession(): Promise<{ authId: string; email: string; user_metadata?: Record<string, any> } | null> {
   const token = await sbGetAccessToken();
   if (!token) return null;
   try {
@@ -597,7 +638,7 @@ export async function sbResendConfirmation(email: string): Promise<boolean> {
     });
     if (!res.ok) throw new Error("invalid");
     const u = await res.json();
-    return { authId: String(u.id), email: String(u.email || "") };
+    return { authId: String(u.id), email: String(u.email || ""), user_metadata: u?.user_metadata || {} };
   } catch {
     sbClearSession();
     return null;
