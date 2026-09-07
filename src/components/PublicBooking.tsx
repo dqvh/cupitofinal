@@ -163,6 +163,24 @@ function BookingForm({
   const [waitlistSent, setWaitlistSent] = useState(false);
 
   const submittingRef = useRef(false);
+  const topAnchorRef = useRef<HTMLDivElement>(null);
+
+  const scrollToTop = () => {
+    if (typeof window !== "undefined") {
+      try {
+        window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      } catch {
+        window.scrollTo(0, 0);
+      }
+      if (topAnchorRef.current) {
+        topAnchorRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  };
+
+  useEffect(() => {
+    scrollToTop();
+  }, [step, done]);
 
   // Validación telefónica argentina
   const phoneVal = useMemo(() => normalizeArgentinaPhone(phone), [phone]);
@@ -676,6 +694,7 @@ function BookingForm({
 
   const bookingCardContent = (
     <div className={`booking-shell ${isPreview ? "preview-shell" : ""}`}>
+      <div ref={topAnchorRef} tabIndex={-1} className="sr-only" aria-hidden="true" />
       {/* Header Mobile Compacto Sticky (56px) */}
       <div className="sticky top-0 z-30 col-span-full flex h-14 w-full items-center justify-between border-b border-black/[0.08] bg-white/95 px-4 backdrop-blur-md md:hidden">
         <div className="flex items-center gap-2.5 min-w-0">

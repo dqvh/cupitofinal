@@ -900,9 +900,39 @@ export default function Dashboard() {
             {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} />}
 
             {view === "hoy" && (
-              <div className="workspace-greeting my-1 text-xs sm:text-sm">
-                <Sun size={18} aria-hidden="true" />
-                <p>Hola, {user.name.split(" ")[0]}. <span>Tenés {data.bookings.filter(booking => booking.date === today && booking.status !== "cancelada").length} turnos para hoy.</span></p>
+              <div className="welcome mt-3 sm:mt-5 mb-3 flex flex-wrap items-center justify-between gap-3.5 rounded-2xl border border-[#245442]/15 bg-[#F1F6F3] p-4 sm:p-5 shadow-xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#245442] shadow-xs border border-[#245442]/20">
+                    <Sun className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="font-display text-base sm:text-lg font-bold text-[#1D1D1F]">
+                      ¡Hola, {user.name.split(" ")[0]}! Tu día, bajo control.
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#4B5563] mt-0.5">
+                      Tenés <strong className="font-bold text-[#1D1D1F]">{data.bookings.filter((b) => b.date === today && b.status !== "cancelada").length} turnos</strong> para hoy
+                      {data.bookings.filter((b) => b.date === today && b.status === "pendiente").length > 0
+                        ? ` y ${data.bookings.filter((b) => b.date === today && b.status === "pendiente").length} pendiente${data.bookings.filter((b) => b.date === today && b.status === "pendiente").length === 1 ? "" : "s"} de confirmar`
+                        : " · Todo listo para recibir a tus clientes"}.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => { setPrefill(null); setShowNew(true); }}
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#245442] hover:bg-[#1C4335] !text-white font-bold px-4 py-2.5 text-xs shadow-xs transition-colors"
+                  >
+                    <IconPlus className="h-3.5 w-3.5 !text-white" /> Nuevo turno
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setView("reservas")}
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white text-[#1D1D1F] hover:bg-[#F5F5F7] px-4 py-2.5 text-xs font-semibold shadow-xs transition-colors"
+                  >
+                    Ver agenda completa →
+                  </button>
+                </div>
               </div>
             )}
 

@@ -2,7 +2,12 @@
    Estilos Modernos de Reserva Pública - Cupito (Alta Legibilidad y Contraste)
    ========================================================================== */
 
+html {
+  scroll-behavior: smooth;
+}
+
 .booking-page {
+  scroll-behavior: smooth;
   min-height: 100vh;
   background: linear-gradient(165deg, #f0fdf4 0%, #f8fafc 50%, #f1f5f9 100%);
   padding: calc(36px + env(safe-area-inset-top, 0px)) 20px calc(88px + env(safe-area-inset-bottom, 0px));

@@ -184,3 +184,135 @@ test('sidebar: pestañas activas tienen contraste blanco legible', async ({ page
   expect(equipoSpanColor).toBe('rgb(255, 255, 255)');
 });
 
+test('dashboard: botón nuevo turno en cabecera tiene alto contraste y no es blanco', async ({ page }) => {
+  await seed(page, true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/app');
+  await page.waitForTimeout(800);
+
+  const welcomeBanner = page.locator('.welcome');
+  await expect(welcomeBanner).toBeVisible();
+  const nuevoTurnoBtn = welcomeBanner.getByRole('button', { name: 'Nuevo turno' });
+  await expect(nuevoTurnoBtn).toBeVisible();
+
+  const btnStyle = await nuevoTurnoBtn.evaluate(el => {
+    const cs = getComputedStyle(el);
+    return {
+      color: cs.color,
+      backgroundColor: cs.backgroundColor,
+    };
+  });
+
+  // El texto debe ser blanco
+  expect(btnStyle.color).toBe('rgb(255, 255, 255)');
+  // El fondo NO debe ser blanco ni transparente
+  expect(btnStyle.backgroundColor).not.toBe('rgb(255, 255, 255)');
+  expect(btnStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  expect(btnStyle.backgroundColor).toContain('36, 84, 66');
+
+  await page.screenshot({ path: 'artifacts/dashboard-welcome-mobile.png' });
+});
+
+test('dashboard: turnos en mobile tienen estructura limpia y barra de acciones separada', async ({ page }) => {
+  await seed(page, true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/app');
+  await page.evaluate(() => {
+    const session = localStorage.getItem('cupito_session') || 'test-owner';
+    const key = `cupito_data_${session}`;
+    const raw = localStorage.getItem(key);
+    const data = raw ? JSON.parse(raw) : {};
+    const today = new Date().toISOString().split('T')[0];
+    data.professionals = [
+      { id: 'pro1', name: 'Lucas', color: '#0284c7' },
+      { id: 'pro2', name: 'Feli', color: '#16a34a' },
+    ];
+    data.services = [
+      { id: 's1', name: 'Corte Tradicional / Fade', price: 9500, duration: 35 },
+    ];
+    data.products = [
+      { id: 'p1', name: 'Cera Mate', price: 3500 },
+      { id: 'p2', name: 'Shampoo', price: 4200 },
+    ];
+    data.bookings = [
+      {
+        id: 'b-test-1',
+        client: 'Feli',
+        phone: '1123456789',
+        serviceId: 's1',
+        date: today,
+        time: '10:15',
+        status: 'pendiente',
+        proId: 'pro2',
+        items: [{ productId: 'p1', qty: 1 }, { productId: 'p2', qty: 1 }],
+      },
+      {
+        id: 'b-test-2',
+        client: 'Mariano García',
+        phone: '1198765432',
+        serviceId: 's1',
+        date: today,
+        time: '11:00',
+        status: 'confirmada',
+        proId: 'pro1',
+      },
+    ];
+    localStorage.setItem(key, JSON.stringify(data));
+  });
+  await page.reload();
+  await page.waitForTimeout(800);
+
+  const bookingRows = page.locator('.workspace-content .space-y-3 > div');
+  await expect(bookingRows).toHaveCount(2);
+
+  const firstRow = bookingRows.first();
+  await expect(firstRow).toBeVisible();
+  await expect(firstRow.getByText('10:15')).toBeVisible();
+  await expect(firstRow.getByText('Feli').first()).toBeVisible();
+  await expect(firstRow.getByText('Pendiente')).toBeVisible();
+  await expect(firstRow.getByText('Corte Tradicional / Fade')).toBeVisible();
+  await expect(firstRow.getByText('+2 prod.')).toBeVisible();
+  await expect(firstRow.getByRole('button', { name: /Confirmar/i })).toBeVisible();
+  await expect(firstRow.getByRole('link', { name: /WhatsApp/i })).toBeVisible();
+  await expect(firstRow.getByRole('button', { name: /Detalles/i })).toBeVisible();
+
+  await firstRow.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'artifacts/dashboard-turnos-mobile.png' });
+});
+
+test('reserva: upscroll suave al cambiar de paso', async ({ page }) => {
+  await seed(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/prueba');
+  await page.evaluate(() => {
+    const key = 'cupito_data_test-owner';
+    const data = JSON.parse(localStorage.getItem(key)!);
+    data.services = [
+      { id: 's1', name: 'Corte Tradicional', price: 9000, duration: 30 },
+      { id: 's2', name: 'Corte + Barba', price: 13000, duration: 45 },
+      { id: 's3', name: 'Perfilado de Cejas', price: 4000, duration: 15 },
+      { id: 's4', name: 'Coloración y Reflejos', price: 22000, duration: 90 },
+      { id: 's5', name: 'Tratamiento Capilar', price: 15000, duration: 60 },
+    ];
+    localStorage.setItem(key, JSON.stringify(data));
+  });
+  await page.reload();
+  await page.waitForTimeout(600);
+
+  // Scrollear hacia abajo en la lista de servicios
+  await page.evaluate(() => window.scrollTo(0, 350));
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
+
+  // Seleccionar servicio al final y avanzar a paso 1
+  await page.getByRole('button', { name: /Tratamiento Capilar/ }).click();
+  await page.getByRole('button', { name: 'Elegir horario' }).click();
+
+  // Esperar el scroll suave al inicio
+  await page.waitForTimeout(600);
+  const scrollYAfterStep1 = await page.evaluate(() => window.scrollY);
+  expect(scrollYAfterStep1).toBeLessThan(100);
+
+  await page.screenshot({ path: 'artifacts/booking-step1-upscroll.png' });
+});
+
+

@@ -42,6 +42,20 @@
   color: #FFFFFF !important;
 }
 
+.workspace-app .btn.primary,
+.workspace-app .welcome .btn.primary,
+.workspace-app button.btn.primary {
+  background: var(--workspace-accent, #245442) !important;
+  color: #FFFFFF !important;
+  border-color: var(--workspace-accent, #245442) !important;
+}
+
+.workspace-app .btn.primary *,
+.workspace-app .welcome .btn.primary * {
+  color: #FFFFFF !important;
+}
+
+
 .workspace-app .workspace-content {
   max-width: 1240px;
   width: 100%;
