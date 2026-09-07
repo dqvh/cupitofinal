@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { usePublicPage, useStore } from "../lib/store";
 import PublicBooking from "./PublicBooking";
 import { LogoMark } from "./kit";
+import { RotateCw } from "lucide-react";
 
 /* Página pública de reservas: cupito.app/{slug} o cupito.app/reservar/{slug} */
 export default function PublicPage({ slug }: { slug: string }) {
@@ -61,7 +62,7 @@ export default function PublicPage({ slug }: { slug: string }) {
         <LogoMark className="h-14 w-14 animate-pulse text-[#16845f]" />
         <div className="space-y-1">
           <p className="font-display text-2xl font-bold sm:text-3xl">Cargando {slug}...</p>
-          <p className="text-xs text-[#527963]">Consultando disponibilidad en vivo ☁️</p>
+          <p className="text-xs text-[#527963]">Consultando disponibilidad en vivo</p>
         </div>
       </div>
     );
@@ -93,10 +94,10 @@ export default function PublicPage({ slug }: { slug: string }) {
               setLoadingRemote(true);
               fetchPageRemote(slug).finally(() => setLoadingRemote(false));
             }}
-            className="btn"
+            className="btn inline-flex items-center gap-1.5"
             style={{ borderRadius: 999, padding: "12px 20px" }}
           >
-            🔄 Reintentar
+            <RotateCw className="h-4 w-4" /> Reintentar
           </button>
         </div>
         <a href="#/" className="text-link" style={{ fontSize: 13, marginTop: 12 }}>

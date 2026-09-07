@@ -380,13 +380,13 @@ function BookingForm({
 
   const whatsAppProofUrl = useMemo(() => {
     if (!settings.whatsapp) return null;
-    const msg = `Hola ${user.business}! Acabo de reservar mi turno para ${service?.name || "un servicio"} el ${shownDate} a las ${time} hs. Te adjunto el comprobante de la seña 🙌`;
+    const msg = `Hola ${user.business}! Acabo de reservar mi turno para ${service?.name || "un servicio"} el ${shownDate} a las ${time} hs. Te adjunto el comprobante de la seña.`;
     return createWhatsAppUrl(settings.whatsapp, msg);
   }, [settings.whatsapp, user.business, service?.name, shownDate, time]);
 
   const whatsAppGeneralUrl = useMemo(() => {
     if (!settings.whatsapp) return null;
-    const msg = `Hola ${user.business}! Vengo de su página y quería hacer una consulta sobre los turnos 🙌`;
+    const msg = `Hola ${user.business}! Vengo de su página y quería hacer una consulta sobre los turnos.`;
     return createWhatsAppUrl(settings.whatsapp, msg);
   }, [settings.whatsapp, user.business]);
 
@@ -434,6 +434,33 @@ function BookingForm({
 
   const bookingCardContent = (
     <div className={`booking-shell ${isPreview ? "preview-shell" : ""}`}>
+      {/* Header Mobile Compacto Sticky (56px) */}
+      <div className="sticky top-0 z-30 col-span-full flex h-14 w-full items-center justify-between border-b border-black/[0.08] bg-white/95 px-4 backdrop-blur-md md:hidden">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <img src="/cupito-logo.png" width="28" height="28" alt="" className="h-7 w-7 rounded-lg shrink-0 object-cover" />
+          <div className="min-w-0 flex-1">
+            <span className="block truncate font-display text-xs font-bold text-[#1D1D1F] leading-none">
+              {user.business}
+            </span>
+            <span className="block text-[10px] text-[#6E6E73] font-medium mt-0.5">
+              {openDaysCount} días por sem. · Hora Bs.As.
+            </span>
+          </div>
+        </div>
+        {settings.whatsapp && (
+          <a
+            href={whatsAppGeneralUrl || "#"}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F5F5F7] text-[#16A34A] hover:bg-neutral-200/70"
+            title="WhatsApp"
+            aria-label="Contactar por WhatsApp"
+          >
+            <MessageCircle size={15} />
+          </a>
+        )}
+      </div>
+
       {/* Columna Izquierda: Tarjeta del Negocio */}
       <aside className="business-card">
         <div className="large-logo">
@@ -461,7 +488,7 @@ function BookingForm({
           </button>
         )}
 
-        <div className="business-info">
+        <div className="business-info hidden md:flex">
           <div>
             <MapPin size={17} />
             <span>
@@ -542,11 +569,12 @@ function BookingForm({
                   {fmtMoney((service?.price || 0) + productsTotal)}
                 </span>
               </div>
-              <p style={{ margin: 0, fontSize: 14, color: "#475569" }}>
-                📅 {shownDate} a las <b style={{ color: "#0f172a" }}>{time} hs</b> · con {pro ? pro.name : "nuestro equipo"}
+              <p style={{ margin: 0, fontSize: 14, color: "#475569", display: "flex", alignItems: "center", gap: 6 }}>
+                <Calendar size={15} className="text-[#16A34A] shrink-0" />
+                <span>{shownDate} a las <b style={{ color: "#0f172a" }}>{time} hs</b> · con {pro ? pro.name : "nuestro equipo"}</span>
               </p>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: depositOn && depositAmount > 0 ? "#b45309" : "#059669" }}>
-                {depositOn && depositAmount > 0 ? "⚠️ Seña pendiente de transferencia" : "✓ Pago en el local"}
+                {depositOn && depositAmount > 0 ? "Seña pendiente de transferencia" : "Pago en el local"}
               </p>
             </div>
 
@@ -616,10 +644,10 @@ function BookingForm({
             {/* Acciones de calendario */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "20px 0" }}>
               <a href={gcalHref} target="_blank" rel="noreferrer" className="btn">
-                <Calendar size={15} /> Google Calendar
+                <Calendar size={15} /> Agregar a Google
               </a>
               <button type="button" onClick={handleDownloadIcs} className="btn">
-                <Download size={15} /> Descargar .ics
+                <Download size={15} /> Archivo .ics
               </button>
             </div>
 
@@ -643,7 +671,7 @@ function BookingForm({
             </div>
 
             <span className="small muted">PASO {step + 1} DE 3</span>
-            <h2>{["Un momento para vos", "Elegí cuándo venir", "Ya casi está"][step]}</h2>
+            <h2>{["1. Elegí tu servicio", "2. Día y horario", "3. Tus datos"][step]}</h2>
             <p>
               {[
                 "¿Qué te gustaría reservar?",
@@ -1067,6 +1095,39 @@ function BookingForm({
             )}
           </>
         )}
+
+        {/* Información del local al pie del formulario en mobile */}
+        <div className="mt-8 border-t border-black/[0.08] pt-5 md:hidden space-y-2.5 text-xs text-[#6E6E73]">
+          <div className="flex items-start gap-2">
+            <MapPin size={15} className="text-[#1D1D1F] shrink-0 mt-0.5" />
+            <div>
+              <span>{settings.address || "Consultá la dirección con el local"}</span>
+              {settings.mapsUrl && (
+                <a
+                  href={settings.mapsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-2 font-bold text-[#16A34A] underline inline-flex items-center gap-0.5"
+                >
+                  Ver mapa <ExternalLink size={10} />
+                </a>
+              )}
+            </div>
+          </div>
+          {settings.whatsapp && (
+            <div className="flex items-center gap-2">
+              <MessageCircle size={15} className="text-[#16A34A] shrink-0" />
+              <a
+                href={whatsAppGeneralUrl || "#"}
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold text-[#16A34A] underline"
+              >
+                Escribir al WhatsApp del local
+              </a>
+            </div>
+          )}
+        </div>
       </section>
     </div>
   );
@@ -1302,11 +1363,11 @@ function BookingForm({
                       value={String(newReviewRating)}
                       onChange={(val) => setNewReviewRating(Number(val))}
                       options={[
-                        { value: "5", label: "⭐⭐⭐⭐⭐ Excelente (5 estrellas)" },
-                        { value: "4", label: "⭐⭐⭐⭐ Muy bueno (4 estrellas)" },
-                        { value: "3", label: "⭐⭐⭐ Bueno (3 estrellas)" },
-                        { value: "2", label: "⭐⭐ Regular (2 estrellas)" },
-                        { value: "1", label: "⭐ Malo (1 estrella)" },
+                        { value: "5", label: "5 / 5 - Excelente" },
+                        { value: "4", label: "4 / 5 - Muy bueno" },
+                        { value: "3", label: "3 / 5 - Bueno" },
+                        { value: "2", label: "2 / 5 - Regular" },
+                        { value: "1", label: "1 / 5 - Malo" },
                       ]}
                       placeholder="Calificación"
                     />

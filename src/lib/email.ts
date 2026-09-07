@@ -50,7 +50,7 @@ interface ReviewRequestEmailParams {
 export async function sendReviewRequestEmail(params: ReviewRequestEmailParams) {
   if (!params.toEmail || !params.toEmail.includes("@")) return;
 
-  const subject = `¿Cómo te fue en ${params.businessName}? Contanos ⭐`;
+  const subject = `¿Cómo te fue en ${params.businessName}? Contanos`;
   const reviewUrl = `https://cupito.app/${params.slug}?resena=1`;
 
   const html = `
@@ -68,7 +68,7 @@ export async function sendReviewRequestEmail(params: ReviewRequestEmailParams) {
         <table role="presentation" width="100%" style="max-width:520px;background-color:#ffffff;border-radius:20px;border:1px solid #e4e4e7;overflow:hidden;" cellspacing="0" cellpadding="0">
           <tr>
             <td style="padding:32px 36px;text-align:center;">
-              <p style="margin:0;font-size:40px;">⭐</p>
+              <div style="margin:0 auto 16px;display:inline-block;padding:6px 14px;background:#f4f4f5;border-radius:999px;color:#18181b;font-size:12px;font-weight:700;letter-spacing:0.5px;">VALORACIÓN</div>
               <h1 style="margin:12px 0 8px;font-size:22px;font-weight:800;color:#09090b;">
                 ¡Hola ${escapeHtml(params.clientName.trim().split(" ")[0])}!
               </h1>
@@ -77,7 +77,7 @@ export async function sendReviewRequestEmail(params: ReviewRequestEmailParams) {
                 ¿Nos dejás una reseña? Te toma 30 segundos y nos ayuda un montón.
               </p>
               <a href="${reviewUrl}" target="_blank" style="display:inline-block;width:100%;box-sizing:border-box;background-color:#0c241c;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:14px 24px;border-radius:12px;text-align:center;">
-                ⭐ Dejar mi reseña
+                Dejar mi reseña
               </a>
               <p style="margin:16px 0 0;font-size:11px;color:#a1a1aa;">Se abre directo el formulario, sin registrarte.</p>
             </td>
@@ -187,7 +187,7 @@ export async function sendBookingConfirmationEmail(params: BookingEmailParams) {
                 <tr>
                   <td align="center" style="padding-bottom:10px;">
                     <a href="${params.gCalUrl}" target="_blank" style="display:inline-block;width:100%;box-sizing:border-box;background-color:#0c241c;color:#ffffff;text-decoration:none;font-size:13.5px;font-weight:700;padding:13px 20px;border-radius:12px;text-align:center;">
-                      📅 Guardar en Google Calendar
+                      Guardar en Google Calendar
                     </a>
                   </td>
                 </tr>` : ""}
@@ -306,7 +306,7 @@ export async function sendBookingReminderEmail(params: BookingEmailParams) {
                 <tr>
                   <td align="center" style="padding-bottom:10px;">
                     <a href="${params.gCalUrl}" target="_blank" style="display:inline-block;width:100%;box-sizing:border-box;background-color:#0c241c;color:#ffffff;text-decoration:none;font-size:13.5px;font-weight:700;padding:13px 20px;border-radius:12px;text-align:center;">
-                      📅 Guardar en Google Calendar
+                      Guardar en Google Calendar
                     </a>
                   </td>
                 </tr>` : ""}
@@ -478,7 +478,7 @@ export async function sendWelcomeAccountEmail(params: WelcomeAccountEmailParams)
 export async function sendSubscriptionWelcomeEmail(params: SubscriptionEmailParams) {
   if (!params.toEmail || !params.toEmail.includes("@")) return;
 
-  const subject = `Tu suscripción a Cupito ${params.planName} está activa 🚀`;
+  const subject = `Tu suscripción a Cupito ${params.planName} está activa`;
   const adminUrl = "https://cupito.app/#/app";
   const publicUrl = `https://cupito.app/${params.slug}`;
 

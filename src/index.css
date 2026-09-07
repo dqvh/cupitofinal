@@ -24,15 +24,19 @@ button:disabled { cursor: not-allowed; }
   --color-evergreen: #06231a;
   --color-pine: #0a3327;
   --color-moss: #114b3a;
-  --color-fern: #059669;
-  --color-ink: #0f172a;
-  --color-inkmute: #64748b;
-  --color-paper: #f8faf9;
+  --color-fern: #16a34a;
+  --color-ink: #1d1d1f;
+  --color-inkmute: #6e6e73;
+  --color-paper: #f5f5f7;
   --color-card: #ffffff;
-  --color-lime: #10b981;
-  --color-limedeep: #047857;
+  --color-lime: #16a34a;
+  --color-limedeep: #15803d;
   --color-coral: #f43f5e;
   --color-mint: #6ee7b7;
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
 }
 
 html { scroll-behavior: smooth; scroll-padding-top: 92px; }
@@ -44,10 +48,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-::selection { background: rgba(16, 185, 129, 0.2); color: #06231a; }
+::selection { background: rgba(22, 163, 74, 0.15); color: #1d1d1f; }
 
 /* ---------- scrollbar de marca (desktop) ---------- */
-html { scrollbar-width: thin; scrollbar-color: #059669 transparent; }
+html { scrollbar-width: thin; scrollbar-color: #16a34a transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -62,21 +66,21 @@ html { scrollbar-width: thin; scrollbar-color: #059669 transparent; }
 /* ---------- texturas limpias ---------- */
 .noise { display: none; }
 .gridlines {
-  background-image: linear-gradient(to right, rgba(16,185,129,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(16,185,129,0.05) 1px, transparent 1px);
+  background-image: linear-gradient(to right, rgba(0,0,0,0.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.02) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 .gridlines-dark {
-  background-image: linear-gradient(to right, rgba(15,23,42,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.03) 1px, transparent 1px);
+  background-image: linear-gradient(to right, rgba(0,0,0,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.03) 1px, transparent 1px);
   background-size: 40px 40px;
 }
-.app-bg { background: #f8faf9; }
+.app-bg { background: #f5f5f7; }
 
 /* ---------- cards ---------- */
 .card {
   background: var(--color-card);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 16px rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-lg, 24px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 16px rgba(0, 0, 0, 0.02);
 }
 .card-hover { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease; }
 .card-hover:hover {
@@ -139,8 +143,8 @@ html { scrollbar-width: thin; scrollbar-color: #059669 transparent; }
 .field {
   width: 100%;
   min-height: 44px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid #e5e5ea;
   background: #ffffff;
   padding: 10px 14px;
   font-size: 14px;
@@ -149,11 +153,11 @@ html { scrollbar-width: thin; scrollbar-color: #059669 transparent; }
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 .field:focus {
-  border-color: #10b981;
+  border-color: #16a34a;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
 }
-.field::placeholder { color: #94a3b8; }
+.field::placeholder { color: #8e8e93; }
 
 @keyframes shake {
   10%, 90% { transform: translateX(-1px); }

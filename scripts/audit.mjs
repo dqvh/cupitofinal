@@ -16,6 +16,7 @@ const debugPort = await new Promise((resolvePort, reject) => {
   });
 });
 const browser = await chromium.launch({
+  channel: 'msedge',
   headless: true,
   args: ['--no-sandbox', `--remote-debugging-port=${debugPort}`],
 });

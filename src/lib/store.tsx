@@ -1318,7 +1318,8 @@ if (typeof window !== "undefined" && isSupabaseConfigured) {
 interface StoreApi {
   users: User[];
   sessionUserId: string | null;
-  toast: (text: string, kind?: "ok" | "warn") => void;
+  toast: (text: string, kind?: "ok" | "warn", action?: { label: string; onClick: () => void }, duration?: number) => void;
+  restoreBooking(b: Booking): void;
   register(input: { name: string; business: string; email: string; password: string }): string | null;
   login(email: string, password: string): string | null;
   loginAsync(email: string, password: string): Promise<string | null>;
@@ -2268,7 +2269,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (phone.replace(/\D/g, "").length < 8) return "Necesitamos un teléfono válido para avisarte.";
     const cleanPhone = phone.replace(/\D/g, "");
     if (data.waitlist.some((w) => w.date === date && w.phone.replace(/\D/g, "") === cleanPhone))
-      return "Ya estás en la lista de espera para ese día 😉";
+      return "Ya estás en la lista de espera para ese día.";
     const entry: WaitlistEntry = { id: uid(), date, serviceId, client: client.trim(), phone: phone.trim(), createdAt: Date.now() };
     data.waitlist = [...data.waitlist, entry];
     saveData(targetId, data);
@@ -2508,6 +2509,16 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     }
     emit();
   },
+  restoreBooking(b: Booking) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    if (!data.bookings.some((x) => x.id === b.id)) {
+      data.bookings.push(b);
+      data.bookings.sort((x, y) => (x.date + x.time).localeCompare(y.date + y.time));
+      saveData(sessionUserId, data);
+      emit();
+    }
+  },
   markDepositPaid(id, method) {
     if (!sessionUserId) return;
     const data = loadData(sessionUserId);
@@ -2645,7 +2656,12 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
 
 /* ================= contexto ================= */
 
-export interface ToastMsg { id: number; text: string; kind: "ok" | "warn" }
+export interface ToastMsg {
+  id: number;
+  text: string;
+  kind: "ok" | "warn";
+  action?: { label: string; onClick: () => void };
+}
 
 interface StoreCtx extends StoreApi {
   user: User | null;
@@ -2664,11 +2680,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const version = useSyncExternalStore(subscribe, () => storeVersion);
 
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
-  const toast = useCallback((text: string, kind: "ok" | "warn" = "ok") => {
-    const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, text, kind }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3400);
-  }, []);
+  const toast = useCallback(
+    (
+      text: string,
+      kind: "ok" | "warn" = "ok",
+      action?: { label: string; onClick: () => void },
+      duration = 3400
+    ) => {
+      const id = Date.now() + Math.random();
+      setToasts((t) => [...t, { id, text, kind, action }]);
+      setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? (duration || 8000) : duration);
+    },
+    []
+  );
 
   const memo = useMemo(() => {
     void version;
@@ -2703,7 +2727,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         toast(
           f.status === 400
             ? "La nube rechazó el guardado: corré el SQL nuevo en Supabase y después tocá algo para reintentar"
-            : "La nube rechazó el guardado: cerrá sesión y volvé a entrar para reconectar 🔄",
+            : "La nube rechazó el guardado: cerrá sesión y volvé a entrar para reconectar",
           "warn"
         );
       }
@@ -2730,7 +2754,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured || sbHasSession()) return;
     reloginNoticed.current = true;
     const t = setTimeout(() => {
-      if (!sbHasSession()) toast("Cerrá sesión y volvé a entrar para reconectar la nube 🔄", "warn");
+      if (!sbHasSession()) toast("Cerrá sesión y volvé a entrar para reconectar la nube", "warn");
     }, 5000);
     return () => clearTimeout(t);
   }, [memo.user, toast]);
@@ -2740,11 +2764,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="pointer-events-none fixed bottom-5 left-1/2 z-[90] flex w-full max-w-sm -translate-x-1/2 flex-col items-center gap-2 px-4">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast-in pointer-events-auto flex items-center gap-2.5 rounded-full border-2 px-4 py-2.5 text-sm font-semibold shadow-block-ink ${t.kind === "ok" ? "border-ink/10 bg-evergreen text-paper" : "border-coral/40 bg-card text-coral"}`}>
-            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${t.kind === "ok" ? "bg-lime text-ink" : "bg-coral/15"}`}>
-              {t.kind === "ok" ? "✓" : "!"}
-            </span>
-            {t.text}
+          <div
+            key={t.id}
+            className={`toast-in pointer-events-auto flex items-center justify-between gap-3 rounded-full border px-4 py-2.5 text-xs font-semibold shadow-xl backdrop-blur-md ${
+              t.kind === "ok" ? "border-black/10 bg-black text-white" : "border-black/10 bg-neutral-900 text-white"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                  t.kind === "ok" ? "bg-[#16A34A] text-white" : "bg-rose-500 text-white"
+                }`}
+              >
+                {t.kind === "ok" ? "✓" : "!"}
+              </span>
+              <span>{t.text}</span>
+            </div>
+            {t.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  t.action?.onClick();
+                  setToasts((prev) => prev.filter((x) => x.id !== t.id));
+                }}
+                className="ml-2 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold text-white transition-all hover:bg-white/30 active:scale-95"
+              >
+                {t.action.label}
+              </button>
+            )}
           </div>
         ))}
       </div>

@@ -13,6 +13,7 @@ import {
   EyeOff,
   Loader2,
   Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import { useStore, getSessionUser, type Plan } from "../lib/store";
 import { LogoMark, LegalModal, TERMS_DOC, PRIVACY_DOC } from "./kit";
@@ -69,7 +70,7 @@ export default function Auth({ initialMode = "registro" }: { initialMode?: "regi
     const oName = name.trim() || su?.name || "";
     const oBiz = business.trim() || su?.business || "";
     const oEmail = email.trim() || su?.email || "";
-    toast("¡Bienvenido a Cupito! 🎉");
+    toast("¡Bienvenido a Cupito!");
     if (oEmail) {
       const slug =
         oBiz.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
@@ -482,7 +483,7 @@ INSTRUCCIONES IMPORTANTES:
                     )}
 
                     {caps && (
-                      <p className="caps-notice">⚠️ Tenés la tecla Bloq Mayús activada.</p>
+                      <p className="caps-notice flex items-center gap-1.5"><AlertCircle size={14} className="text-amber-500 shrink-0" /> Tenés la tecla Bloq Mayús activada.</p>
                     )}
 
                     {mode === "login" && (

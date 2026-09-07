@@ -27,6 +27,7 @@ import {
   CheckCheck,
   MousePointer2,
   Pause,
+  Sun,
 } from "lucide-react";
 import LandingTour from "./components/LandingTour";
 import { PLAN_META, PLAN_AMOUNTS, PLAN_FEATURES, type Plan } from "./lib/plans";
@@ -249,7 +250,7 @@ export default function Landing() {
                 href="#/registro"
                 onClick={goToRegister()}
               >
-                Empezá gratis <ArrowUpRight size={19} />
+                Crear mi página gratis <ArrowUpRight size={19} />
               </a>
               <a
                 className="lp-button ghost"
@@ -257,18 +258,18 @@ export default function Landing() {
                 onClick={goToDemo}
               >
                 <Play size={14} fill="currentColor" />
-                Explorá la demo
+                Ver demo en vivo
               </a>
             </div>
-            <div className="lp-under-cta">
-              <span>
-                <Check size={13} /> Sin tarjeta
+            <div className="lp-under-cta flex flex-wrap items-center justify-center gap-4 text-xs">
+              <span className="inline-flex items-center gap-1.5 text-[#1D1D1F] font-medium">
+                <Check size={14} className="stroke-[2.5] text-[#15803D]" /> Sin tarjeta de crédito
               </span>
-              <span>
-                <Check size={13} /> 25 reservas gratis
+              <span className="inline-flex items-center gap-1.5 text-[#1D1D1F] font-medium">
+                <Check size={14} className="stroke-[2.5] text-[#15803D]" /> Configuración en 2 minutos
               </span>
-              <span>
-                <Check size={13} /> Hecho en Argentina
+              <span className="inline-flex items-center gap-1.5 text-[#1D1D1F] font-medium">
+                <Check size={14} className="stroke-[2.5] text-[#15803D]" /> Plan gratuito para siempre
               </span>
             </div>
             <div className="lp-hero-proof" aria-label="Ventajas de Cupito">
@@ -332,8 +333,8 @@ export default function Landing() {
                   <div className="lp-demo-heading">
                     <div>
                       <span>MIÉRCOLES, 16 DE SEPTIEMBRE</span>
-                      <p className="lp-demo-heading-title font-display text-lg font-bold text-[#254c36]">
-                        ¡Buen día, Sofi! <span>☀</span>
+                      <p className="lp-demo-heading-title font-display text-lg font-bold text-[#254c36] flex items-center gap-1">
+                        ¡Buen día, Sofi! <Sun size={16} className="text-amber-500 inline" />
                       </p>
                       <p>Tu agenda se ocupa. Vos, de lo tuyo.</p>
                     </div>
@@ -410,18 +411,19 @@ export default function Landing() {
                   </div>
                 </div>
               </div>
-            </div>
-            <div className="lp-floating-booking" key={tick}>
-              <span className="lp-float-icon">
-                <Check size={22} />
-              </span>
-              <div>
-                <strong>¡Entró una nueva reserva!</strong>
-                <p>
-                  {names[tick % names.length].split(" ")[0]} · {services[industry]}
-                </p>
+              {/* Floating Preview Toast */}
+              <div className="lp-floating-booking absolute right-4 bottom-4 overflow-hidden shadow-lg z-20" key={tick}>
+                <span className="lp-float-icon">
+                  <Check size={20} />
+                </span>
+                <div>
+                  <strong>¡Entró una nueva reserva!</strong>
+                  <p>
+                    {names[tick % names.length].split(" ")[0]} · {services[industry]}
+                  </p>
+                </div>
+                <span className="lp-float-now">Ahora</span>
               </div>
-              <span className="lp-float-now">Ahora</span>
             </div>
             <div className="lp-floating-link">
               <Link size={15} />
@@ -825,9 +827,9 @@ export default function Landing() {
           </div>
         </div>
         <div className="lp-footer-bottom">
-          <span>© {new Date().getFullYear()} Cupito.app</span>
-          <span>
-            Hecho con ganas, en Argentina. <span>↗</span>
+          <span>&copy; {new Date().getFullYear()} Cupito.app</span>
+          <span className="inline-flex items-center gap-1">
+            Hecho con ganas, en Argentina. <ArrowUpRight size={13} />
           </span>
         </div>
       </footer>

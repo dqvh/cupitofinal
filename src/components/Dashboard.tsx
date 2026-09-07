@@ -90,7 +90,12 @@ import {
 import "../styles/dashboard.css";
 import { AgendaWeek } from "./AgendaWeek";
 import { CustomerHistoryModal, type CustomerStats } from "./CustomerCRM";
-import { Sun, Download } from "lucide-react";
+import { Sun, Download, MoreHorizontal, Smartphone, List, Calendar, Ban, Zap, Phone, ArrowUpRight, Star } from "lucide-react";
+import Sidebar from "./Sidebar";
+import BookingRow from "./BookingRow";
+import SetupGuide from "./SetupGuide";
+import EmptyState from "./EmptyState";
+import Modal from "./Modal";
 
 type View = "hoy" | "reservas" | "clientes" | "lista" | "stats" | "servicios" | "equipo" | "tienda" | "promos" | "pagina" | "suscripcion" | "ajustes";
 
@@ -196,6 +201,24 @@ export default function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [agendaView, setAgendaView] = useState<"day" | "week">("day");
   const [crmCustomer, setCrmCustomer] = useState<CustomerStats | null>(null);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [showPreviewAccordion, setShowPreviewAccordion] = useState(false);
+
+  const handleDeleteBookingWithUndo = (id: string) => {
+    const bookingToDelete = data.bookings.find((b) => b.id === id);
+    if (!bookingToDelete) return;
+    removeBooking(id);
+    toast("Reserva eliminada.", {
+      action: {
+        label: "Deshacer",
+        onClick: () => {
+          store.restoreBooking(bookingToDelete);
+          toast("Reserva restaurada ✓");
+        },
+      },
+      duration: 8000,
+    });
+  };
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -234,7 +257,7 @@ export default function Dashboard() {
         const choice = await deferredPrompt.userChoice;
         if (choice && choice.outcome === "accepted") {
           setDeferredPrompt(null);
-          store.toast("¡Cupito agregado a tu pantalla de inicio! 📲");
+          store.toast("¡Cupito agregado a tu pantalla de inicio!");
           return;
         }
       } catch {}
@@ -411,12 +434,7 @@ export default function Dashboard() {
   const sectionOf = (v: View) => SECTIONS.find((s) => s.items.some((i) => i.id === v))?.label ?? "";
 
   return (
-    <div className="workspace-app app-bg flex min-h-screen flex-col">
-      {!store.isCloudSyncActive && (
-        <div className="workspace-local-notice sticky top-0 z-50 flex w-full items-center justify-center gap-3 bg-amber-400 px-4 py-2 text-center text-ink">
-          <p className="text-sm font-bold">Modo local: los cambios se guardan sólo en este dispositivo. Para usar la agenda desde otros equipos, contactá a hola@cupito.app.</p>
-        </div>
-      )}
+    <div className="workspace-app flex min-h-screen flex-col bg-[#F5F5F7] text-ink selection:bg-fern selection:text-white">
       {impersonating && (
         <div className="sticky top-0 z-50 flex w-full items-center justify-center gap-3 bg-coral px-4 py-2 text-center text-white">
           <IconUsers className="h-4 w-4 shrink-0" />
@@ -427,133 +445,15 @@ export default function Dashboard() {
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* ---------- sidebar ---------- */}
-        <aside className="sticky top-0 z-40 hidden h-screen w-64 shrink-0 flex-col bg-white text-slate-800 border-r border-slate-200/90 shadow-xs lg:flex">
-          <div className="flex flex-col gap-3 px-5 pb-5 pt-6 border-b border-slate-100">
-            <button
-              type="button"
-              onClick={() => setView("hoy")}
-              className="flex items-center gap-2.5 text-left focus:outline-hidden group"
-              title="Ir a la agenda del día"
-            >
-              <img src="/cupito-logo.png" width="34" height="34" alt="" className="rounded-xl shadow-xs transition-transform group-hover:scale-105" />
-              <span className="font-display text-xl font-extrabold tracking-tight text-slate-900 leading-none">
-                cupito<span className="text-emerald-600">.</span>
-              </span>
-            </button>
-
-            {/* Workspace selector */}
-            <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/90 bg-slate-50/80 p-2 text-left">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 font-display text-xs font-bold text-emerald-800">
-                {user.business.slice(0, 2).toUpperCase()}
-              </span>
-              <div className="min-w-0 flex-1">
-                <span className="block truncate font-display text-xs font-bold text-slate-900 leading-tight">
-                  {user.business}
-                </span>
-                <span className="block text-[10px] font-medium text-emerald-700">
-                  Plan {PLAN_META[user.plan].name}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <button type="button" className="workspace-nav-search mx-4 mt-4" onClick={() => setSearchOpen(true)}><span>Buscar en el panel</span><kbd>Ctrl K</kbd></button>
-          <nav aria-label="Navegación del panel" className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
-            {SECTIONS.map((sec) => (
-              <div key={sec.label}>
-                <p className="px-3 pb-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
-                  {sec.label}
-                </p>
-                <div className="space-y-0.5">
-                  {sec.items.map((n) => {
-                    const active = view === n.id;
-                    const todayCount = n.id === "hoy" ? data.bookings.filter((b) => b.date === today && b.status !== "cancelada").length : 0;
-                    return (
-                      <button
-                        key={n.id}
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => setView(n.id)}
-                        className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold transition-all duration-150 ${
-                          active
-                            ? "bg-emerald-50/90 text-emerald-900 font-extrabold shadow-xs border border-emerald-200/70"
-                            : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
-                        }`}
-                      >
-                        <span
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                            active
-                              ? "bg-emerald-600 text-white font-bold shadow-xs shadow-emerald-600/30"
-                              : "bg-slate-100 text-slate-500 group-hover:bg-slate-200/70 group-hover:text-slate-800"
-                          }`}
-                        >
-                          {n.icon({ className: "h-3.5 w-3.5" })}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate">{n.label}</span>
-                        {todayCount > 0 && (
-                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-1.5">
-                            {todayCount}
-                          </span>
-                        )}
-                        {n.id === "lista" && data.waitlist.length > 0 && (
-                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-extrabold text-white">
-                            {data.waitlist.length}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </nav>
-
-          <div className="border-t border-slate-200/80 p-3.5 space-y-2.5 bg-slate-50/40">
-            <a
-              href={`/${user.slug}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2 font-display text-xs font-bold text-white transition-all hover:bg-emerald-500 shadow-sm shadow-emerald-600/20"
-            >
-              <IconLink className="h-3.5 w-3.5" /> Ver mi página ↗
-            </a>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={promptInstall}
-                className="flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 font-display text-[11px] font-bold text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
-                title="Instalar como app en la pantalla del celular"
-              >
-                📲 {isStandalone ? "App lista" : "Instalar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCalendarModal(true)}
-                className="flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 font-display text-[11px] font-bold text-slate-700 transition-all hover:bg-slate-50 hover:border-slate-300"
-                title="Sincronizar turnos con el calendario del celular"
-              >
-                <IconCalendar className="h-3 w-3 text-emerald-600" /> Calendario
-              </button>
-            </div>
-            <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-2.5">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 border border-emerald-200 font-display text-xs font-bold text-emerald-800">
-                {user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
-              </span>
-              <div className="min-w-0 flex-1">
-                <span className="block truncate font-display text-xs font-bold text-slate-900">{user.business}</span>
-                <span className="block truncate text-[10px] text-slate-500" title={user.email}>{user.email}</span>
-              </div>
-              <button
-                type="button"
-                onClick={store.logout}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                title="Cerrar sesión"
-                aria-label="Cerrar sesión"
-              >
-                <IconLogout className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </aside>
+        <Sidebar
+          view={view}
+          onViewChange={setView}
+          user={user}
+          todayCount={data.bookings.filter((b) => b.date === today && b.status !== "cancelada").length}
+          waitlistCount={data.waitlist.length}
+          onSearchOpen={() => setSearchOpen(true)}
+          onLogout={store.logout}
+        />
 
         {/* ---------- main ---------- */}
         <div className="min-w-0 flex-1">
@@ -598,10 +498,10 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={promptInstall}
-                className="btn-press flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-display text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100"
+                className="btn-press flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-display text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100"
                 title="Instalar app en tu celular"
               >
-                <span>📲</span>
+                <Smartphone size={13} />
                 <span className="hidden xs:inline">{isStandalone ? "App lista" : "Instalar"}</span>
               </button>
               <a
@@ -611,7 +511,7 @@ export default function Dashboard() {
                 className="btn-press flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1 font-display text-xs font-bold text-white shadow-xs transition-colors hover:bg-emerald-500"
               >
                 <span>Ver</span>
-                <span className="text-[10px]">↗</span>
+                <ArrowUpRight size={12} />
               </a>
             </div>
           </header>
@@ -717,7 +617,7 @@ export default function Dashboard() {
                   onClick={() => setMobileMenuOpen(false)}
                   className="btn-press flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 font-display text-xs font-bold text-white shadow-xs"
                 >
-                  <IconLink className="h-3.5 w-3.5" /> Ver mi página ↗
+                  <IconLink className="h-3.5 w-3.5" /> Ver mi página <ArrowUpRight size={12} className="inline ml-0.5" />
                 </a>
                 <button
                   type="button"
@@ -734,69 +634,83 @@ export default function Dashboard() {
           </div>
 
           <main className="workspace-content mx-auto max-w-5xl px-5 py-8 pb-28 sm:px-8">
-            <div className="workspace-page-heading flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-6">
+            <div className="workspace-page-heading flex flex-wrap items-center justify-between gap-4 border-b border-black/[0.06] pb-6">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#6E6E73]">
                     <button
                       type="button"
                       onClick={() => setView("hoy")}
-                      className="hover:text-emerald-700 font-bold transition-colors cursor-pointer"
+                      className="hover:text-black font-bold transition-colors cursor-pointer"
                       title="Ir a la agenda de hoy"
                     >
                       Cupito
                     </button>
-                    <span className="text-slate-300">/</span>
-                    <span className="text-slate-500">{sectionOf(view)}</span>
-                    <span className="text-slate-300">/</span>
-                    <span className="text-emerald-800 font-bold">{viewTitle[0]}</span>
+                    <span className="text-black/20">/</span>
+                    <span className="text-[#6E6E73]">{sectionOf(view)}</span>
+                    <span className="text-black/20">/</span>
+                    <span className="text-[#1D1D1F] font-bold">{viewTitle[0]}</span>
                   </div>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#6E6E73] shadow-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#16A34A] animate-pulse" />
                     {store.isCloudSyncActive ? "Nube conectada" : "Este dispositivo"}
                   </span>
                   <CopyButton
                     text={`https://cupito.app/${user.slug}`}
                     label="Copiar mi link"
                     copiedLabel="¡Link copiado!"
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-xs hover:border-slate-300 hover:text-slate-900"
+                    className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-[#1D1D1F] shadow-xs hover:border-black/30"
                   />
                 </div>
-                <h1 className="mt-2 font-display text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">{viewTitle[0]}</h1>
-                <p className="mt-1 text-sm text-slate-500">{viewTitle[1]}</p>
+                <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-[#1D1D1F] sm:text-3xl lg:text-4xl">{viewTitle[0]}</h1>
+                <p className="mt-1 text-sm text-[#6E6E73]">{viewTitle[1]}</p>
               </div>
               <div className="flex items-center gap-2.5">
                 <button type="button" className="workspace-nav-search" onClick={() => setSearchOpen(true)} aria-label="Buscar acciones">Buscar <span aria-hidden="true">⌕</span></button>
                 <button
-                  type="button"
-                  onClick={() => setShowCalendarModal(true)}
-                  className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-2 font-display text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300"
-                  title="Sincronizar turnos con el calendario de tu celular"
-                >
-                  <IconCalendar className="h-3.5 w-3.5 text-emerald-600" /> Calendario
-                </button>
-                <button
-                  type="button"
-                  onClick={promptInstall}
-                  className="btn-press hidden md:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3.5 py-2 font-display text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
-                  title="Instalar en la pantalla de inicio del celular"
-                >
-                  📲 {isStandalone ? "App lista" : "Instalar app"}
-                </button>
-                <a
-                  href={`/${user.slug}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-press hidden sm:inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 font-display text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300"
-                >
-                  <IconLink className="h-3.5 w-3.5 text-slate-500" /> Ver mi página ↗
-                </a>
-                <button
                   onClick={() => { setPrefill(null); setShowNew(true); }}
-                  className="btn-press group inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2.5 font-display text-sm font-bold text-white shadow-md shadow-slate-900/10 hover:bg-slate-800"
+                  className="btn-press group inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 font-display text-sm font-bold text-white shadow-sm hover:bg-neutral-800"
                 >
-                  <IconPlus className="h-4 w-4 text-emerald-400" /> Nueva reserva
+                  <IconPlus className="h-4 w-4 text-[#16A34A]" /> Nueva reserva
                 </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setHeaderMenuOpen(!headerMenuOpen)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-[#1D1D1F] hover:bg-[#F5F5F7] transition-colors"
+                    aria-label="Más opciones"
+                    aria-expanded={headerMenuOpen}
+                  >
+                    <MoreHorizontal size={18} />
+                  </button>
+                  {headerMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-52 rounded-2xl border border-black/10 bg-white p-1.5 shadow-xl z-30 animate-in fade-in zoom-in-95">
+                      <button
+                        type="button"
+                        onClick={() => { setShowCalendarModal(true); setHeaderMenuOpen(false); }}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7]"
+                      >
+                        <IconCalendar className="h-4 w-4 text-[#16A34A]" /> Sincronizar calendario
+                      </button>
+                      <a
+                        href={`/${user.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setHeaderMenuOpen(false)}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7]"
+                      >
+                        <IconLink className="h-4 w-4 text-[#6E6E73]" /> Ver mi página <ArrowUpRight size={12} className="inline ml-0.5" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => { promptInstall(); setHeaderMenuOpen(false); }}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7]"
+                      >
+                        <IconStar className="h-4 w-4 text-[#6E6E73]" /> {isStandalone ? "App instalada" : "Instalar app"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -903,10 +817,24 @@ export default function Dashboard() {
               <div className="pop-in mt-8">
                 <div className="workspace-overview">
                   <section className="workspace-next" aria-label="Próximo turno">
-                    <span className="workspace-next-label"><IconClock className="h-4 w-4" /> {nextBooking ? "Lo próximo en tu agenda" : "Tu agenda, al día"}</span>
-                    <h2>{nextBooking ? nextBooking.time + " · " + nextBooking.client : "Todo listo para tu próximo cliente."}</h2>
-                    <p>{nextBooking ? (data.services.find(service => service.id === nextBooking.serviceId)?.name || "Turno") + " · " + fmtLong(selDate) : "No quedan turnos por atender en la fecha seleccionada. Podés agendar uno o compartir tu enlace."}</p>
-                    <button type="button" onClick={() => { if (nextBooking) setDetailBooking(nextBooking); else { setPrefill(null); setShowNew(true); } }}>{nextBooking ? "Ver detalle del turno" : "Agendar un turno"}<IconArrow className="h-4 w-4" /></button>
+                    <span className="workspace-next-label"><IconClock className="h-4 w-4 text-[#16A34A]" /> {nextBooking ? "Lo próximo en tu agenda" : "Tu agenda, al día"}</span>
+                    <h2>{nextBooking ? `Próximo: ${nextBooking.time} · ${nextBooking.client} (${data.services.find(service => service.id === nextBooking.serviceId)?.name || "Turno"})` : "Todo listo para tu próximo cliente."}</h2>
+                    <p>{nextBooking ? `${fmtLong(selDate)} · ${data.services.find(service => service.id === nextBooking.serviceId)?.duration || 30} min` : "No quedan turnos por atender en la fecha seleccionada. Podés agendar uno o compartir tu enlace."}</p>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={() => { if (nextBooking) setDetailBooking(nextBooking); else { setPrefill(null); setShowNew(true); } }}>
+                        {nextBooking ? "Ver detalle" : "Nueva reserva"}<IconArrow className="h-4 w-4" />
+                      </button>
+                      {nextBooking?.phone && (
+                        <a
+                          href={createWhatsAppUrl(nextBooking.phone, `Hola ${nextBooking.client.split(" ")[0]}! Te escribo desde ${user.business} por tu turno.`)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-xs font-bold text-[#1D1D1F] hover:bg-[#F5F5F7] transition-colors"
+                        >
+                          <IconWhatsApp className="h-3.5 w-3.5 text-[#16A34A]" /> WhatsApp
+                        </a>
+                      )}
+                    </div>
                   </section>
                   <section className="workspace-attention" aria-label="Acciones pendientes">
                     <h2>A un paso de resolverlo</h2>
@@ -983,12 +911,6 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <>
-                    <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                      <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} badge={selDate === today ? "Hoy" : "Día elegido"} trend="En tu grilla" />
-                      <StatCard label="Ingresos estimados" value={fmtMoney(dayIncome)} icon={<IconWallet className="h-5 w-5" />} accent badge="Estimado" trend="Según servicios" />
-                      <StatCard label="Ocupación" value={`${occupancy}%`} icon={<IconChart className="h-5 w-5" />} badge="Capacidad" trend="Del horario de atención" />
-                    </div>
-
                     {data.professionals.length > 0 && (
                       <div className="mt-6 flex flex-wrap gap-2">
                         <button onClick={() => setProFilter("todos")} className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === "todos" ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>Todos</button>
@@ -1017,12 +939,12 @@ export default function Dashboard() {
                               setStatus(id, s);
                               if (s === "atendida") {
                                 const r = requestReview(id);
-                                toast(r === "sent" ? "Turno atendido · link de reseña enviado por email 💌" : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp 📲", r === "sent" ? "ok" : "warn");
+                                toast(r === "sent" ? "Turno atendido · link de reseña enviado por email" : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp", r === "sent" ? "ok" : "warn");
                               }
                               else if (s === "ausente") { toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn"); }
                               else toast(s === "cancelada" ? "Turno cancelado. El hueco quedó libre." : "Turno confirmado.");
                             }}
-                            onDelete={(id) => { removeBooking(id); toast("Reserva eliminada.", "warn"); }}
+                            onDelete={handleDeleteBookingWithUndo}
                             onVerify={(id) => { store.markDepositPaid(id, "transferencia"); sound.playSuccess(); toast("Seña acreditada ✓"); }}
                             onReject={(id) => { store.rejectDeposit(id); toast("Comprobante rechazado. El cliente puede reenviarlo.", "warn"); }}
                             onReschedule={(b) => setRescheduling(b)}
@@ -1054,35 +976,35 @@ export default function Dashboard() {
             {view === "reservas" && (
               <div className="pop-in mt-8 space-y-6">
                 {/* Barra de herramientas operativa */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 pb-4">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] pb-4">
+                  <div className="hidden sm:flex items-center gap-2">
                     <div className="flex rounded-xl border border-slate-200 bg-slate-100 p-1 shadow-xs">
                       <button
                         type="button"
                         onClick={() => setReservasMode("lista")}
-                        className={`rounded-lg px-3 py-1.5 font-display text-xs font-bold transition-all ${
+                        className={`inline-flex items-center rounded-lg px-3 py-1.5 font-display text-xs font-bold transition-all ${
                           reservasMode === "lista"
                             ? "bg-slate-900 text-white shadow-xs"
                             : "text-slate-600 hover:text-slate-900"
                         }`}
                       >
-                        📋 Lista
+                        <List size={13} className="mr-1.5" /> Lista
                       </button>
                       <button
                         type="button"
                         onClick={() => setReservasMode("grilla")}
-                        className={`rounded-lg px-3 py-1.5 font-display text-xs font-bold transition-all ${
+                        className={`inline-flex items-center rounded-lg px-3 py-1.5 font-display text-xs font-bold transition-all ${
                           reservasMode === "grilla"
                             ? "bg-slate-900 text-white shadow-xs"
                             : "text-slate-600 hover:text-slate-900"
                         }`}
                       >
-                        📊 Grilla Horaria
+                        <Calendar size={13} className="mr-1.5" /> Grilla Horaria
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="hidden sm:flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -1091,7 +1013,7 @@ export default function Dashboard() {
                       }}
                       className="btn-press flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-display text-xs font-bold text-slate-700 hover:border-coral hover:text-coral transition-colors shadow-xs"
                     >
-                      🚫 Bloquear horario
+                      <Ban size={13} /> Bloquear horario
                     </button>
                     <button
                       type="button"
@@ -1107,7 +1029,7 @@ export default function Dashboard() {
                       className="btn-press flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-display text-xs font-bold text-slate-700 hover:border-emerald-600 hover:text-emerald-700 transition-colors shadow-xs"
                       title="Exportar todas las reservas con formato compatible con Excel"
                     >
-                      📥 Exportar Excel (.csv)
+                      <Download size={13} /> Exportar Excel (.csv)
                     </button>
                     <button
                       type="button"
@@ -1115,7 +1037,7 @@ export default function Dashboard() {
                         setPrefill(null);
                         setShowNew(true);
                       }}
-                      className="btn-press flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 font-display text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                      className="btn-press flex items-center gap-1.5 rounded-xl bg-black px-3.5 py-1.5 font-display text-xs font-bold text-white shadow-xs hover:bg-neutral-800"
                     >
                       <IconPlus className="h-3.5 w-3.5" /> + Reserva
                     </button>
@@ -1152,38 +1074,72 @@ export default function Dashboard() {
                       <p className="font-display text-sm font-bold text-ink">{fmtLong(gridDate)}</p>
                     </div>
 
-                    <TimeGridView
-                      date={gridDate}
-                      bookings={data.bookings}
-                      blockedSlots={data.blockedSlots || []}
-                      services={data.services}
-                      pros={data.professionals}
-                      hours={data.settings.hours}
-                      onBookSlot={(slotPrefill) => {
-                        setPrefill({
-                          client: "",
-                          phone: "",
-                          time: slotPrefill?.time,
-                          proId: slotPrefill?.proId,
-                        });
-                        setSelDate(gridDate);
-                        setShowNew(true);
-                      }}
-                      onBlockSlot={(timeSlot) => {
-                        setBlockPrefillTime(timeSlot);
-                        setShowBlockModal(true);
-                      }}
-                      onUnblockSlot={(id) => {
-                        removeBlockedSlot(id);
-                        toast("Horario desbloqueado ✓");
-                      }}
-                      onReschedule={(b) => setRescheduling(b)}
-                      businessName={user.business}
-                    />
+                    <div className="mt-4">
+                      <AgendaGrid
+                        date={gridDate}
+                        bookings={data.bookings}
+                        services={data.services}
+                        professionals={data.professionals}
+                        hours={data.settings.hours}
+                        blockedSlots={data.blockedSlots || []}
+                        onSelectSlot={(time, proId) => {
+                          setPrefill({ client: "", phone: "", time, proId });
+                          setShowNew(true);
+                        }}
+                        onSelectBooking={(b) => setDetailBooking(b)}
+                        onBlockSlot={(time) => {
+                          setBlockPrefillTime(time);
+                          setShowBlockModal(true);
+                        }}
+                        onUnblockSlot={(id) => {
+                          removeBlockedSlot(id);
+                          toast("Horario desbloqueado ✓");
+                        }}
+                        onReschedule={(b) => setRescheduling(b)}
+                        businessName={user.business}
+                      />
+                    </div>
                   </div>
                 ) : (
                   <div>
-                    <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                    {/* Mobile minimal toolbar */}
+                    <div className="space-y-3 sm:hidden mb-4">
+                      <div className="relative w-full">
+                        <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6E6E73]" />
+                        <input
+                          className="field !py-2 !pl-9 !pr-7 !text-xs !rounded-full !bg-white !border-black/10 w-full"
+                          placeholder="Buscar por cliente o teléfono..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        {searchQuery && (
+                          <button
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#6E6E73] hover:text-[#1D1D1F]"
+                            title="Borrar búsqueda"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex rounded-xl bg-[#F5F5F7] p-1 text-xs font-bold text-[#6E6E73]">
+                        {(["todas", "pendiente", "confirmada"] as const).map((f) => (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => setFilter(f)}
+                            className={`flex-1 rounded-lg py-1.5 transition-all text-center ${
+                              filter === f ? "bg-white text-[#1D1D1F] shadow-xs font-extrabold" : "hover:text-[#1D1D1F]"
+                            }`}
+                          >
+                            {f === "todas" ? "Todas" : f === "pendiente" ? "Pendientes" : "Confirmadas"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Desktop filters toolbar */}
+                    <div className="hidden sm:flex flex-row gap-3 items-center justify-between">
                       <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
                         {(["todas", "pendiente", "confirmada", "atendida", "cancelada"] as const).map((f) => {
                           const count = f === "todas" ? data.bookings.length : data.bookings.filter((b) => b.status === f).length;
@@ -1191,7 +1147,7 @@ export default function Dashboard() {
                             <button
                               key={f}
                               onClick={() => setFilter(f)}
-                              className={`btn-press whitespace-nowrap rounded-full border-2 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${filter === f ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}
+                              className={`btn-press whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-bold transition-all ${filter === f ? "border-black bg-black text-white shadow-xs" : "border-black/10 bg-white text-[#6E6E73] hover:border-black/30 hover:text-[#1D1D1F]"}`}
                             >
                               {f === "todas" ? "Todas" : STATUS[f].label} ({count})
                             </button>
@@ -1229,7 +1185,7 @@ export default function Dashboard() {
                               setPrefill(null);
                               setShowNew(true);
                             }}
-                            className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 font-display text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition-all hover:-translate-y-0.5"
+                            className="inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 font-display text-sm font-bold text-white shadow-sm hover:bg-neutral-800 transition-all hover:-translate-y-0.5"
                           >
                             <IconPlus className="h-4 w-4" /> Nueva reserva
                           </button>
@@ -1256,15 +1212,12 @@ export default function Dashboard() {
                                     setStatus(id, s);
                                     if (s === "atendida") {
                                       const r = requestReview(id);
-                                      toast(r === "sent" ? "Turno atendido · link de reseña enviado por email 💌" : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp 📲", r === "sent" ? "ok" : "warn");
+                                      toast(r === "sent" ? "Turno atendido · link de reseña enviado por email" : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp", r === "sent" ? "ok" : "warn");
                                     } else if (s === "ausente") {
                                       toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn");
                                     } else toast("Estado actualizado.");
                                   }}
-                                  onDelete={(id) => {
-                                    removeBooking(id);
-                                    toast("Reserva eliminada.", "warn");
-                                  }}
+                                  onDelete={handleDeleteBookingWithUndo}
                                   onVerify={(id) => {
                                     store.markDepositPaid(id, "transferencia");
                                     sound.playSuccess();
@@ -1338,7 +1291,7 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       <button onClick={() => setCheckoutPlan("escala")} className="flex w-full items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-3 text-left transition-all hover:border-emerald-600/50">
-                        <span className="text-sm">⚡</span>
+                        <Zap size={15} className="text-amber-500 shrink-0" />
                         <p className="text-xs text-slate-500"><strong className="text-slate-900">Tip:</strong> en el plan Escala la lista se ordena sola: recurrentes primero. <span className="font-bold text-emerald-700 underline underline-offset-2">Ver Escala</span></p>
                       </button>
                     )}
@@ -1352,7 +1305,9 @@ export default function Dashboard() {
                                 <p className="flex flex-wrap items-center gap-1.5 font-display text-[15px] font-bold text-ink">
                                   {w.client}
                                   {user.plan === "escala" && isRecurrentClient(w, data.bookings) && (
-                                    <span className="rounded-full bg-amber-100 border border-amber-300/80 px-2.5 py-0.5 text-[10px] font-bold text-amber-900 shadow-xs">⭐ Recurrente</span>
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300/80 px-2.5 py-0.5 text-[10px] font-bold text-amber-900 shadow-xs">
+                                      <Star size={10} className="fill-amber-600 text-amber-600" /> Recurrente
+                                    </span>
                                   )}
                                 </p>
                                 <p className="text-xs text-inkmute">{w.phone} · {serviceOf(w.serviceId)?.name ?? "Servicio"}</p>
@@ -1436,45 +1391,76 @@ export default function Dashboard() {
                   <StatusPill on={isPaid(user) && data.products.length > 0} label={isPaid(user) && data.products.length > 0 ? `${data.products.length} productos` : "Tienda vacía"} sub={isPaid(user) ? "en tu tienda" : "plan Crece"} />
                   <StatusPill on={data.settings.hours.some((h) => h.open)} label={`${data.settings.hours.filter((h) => h.open).length} días abiertos`} sub="por semana" />
                 </div>
-                <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
-                  <div>
-                    <div className="rounded-2xl border border-slate-900 bg-slate-900 p-6 text-white shadow-md">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Tu link de reservas</p>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
-                          <span className="blinkdot h-1.5 w-1.5 rounded-full bg-emerald-400" /> En línea
-                        </span>
-                      </div>
-                      <p className="mt-4 break-all font-display text-2xl font-extrabold text-white sm:text-3xl">cupito.app/{user.slug}</p>
-                      <div className="mt-5 flex flex-wrap gap-2.5">
-                        <button onClick={() => { const url = `https://cupito.app/${user.slug}`; navigator.clipboard?.writeText(url).then(() => toast("Link copiado 📋"), () => toast(url, "warn")); }}
-                          className="rounded-full bg-emerald-500 px-5 py-2.5 font-display text-sm font-bold text-slate-950 transition-all hover:-translate-y-0.5 hover:bg-emerald-400 shadow-sm">Copiar link</button>
-                        <button
-                          onClick={() => setShowShareModal(true)}
-                          className="rounded-full border border-white/20 bg-white/10 px-4 py-2.5 font-display text-sm font-bold text-white transition-all hover:bg-white/20"
-                        >
-                          💬 Mensajes WhatsApp / Instagram
-                        </button>
-                        <a href={`/${user.slug}`} target="_blank" rel="noreferrer" className="rounded-full border border-white/20 px-5 py-2.5 font-display text-sm font-bold text-white transition-all hover:bg-white/10">Abrir mi página ↗</a>
-                      </div>
-                    </div>
-                    <div className="card mt-5 p-5">
-                      <p className="font-display text-base font-extrabold text-ink">QR para tu mostrador</p>
-                      <p className="mt-1 text-sm text-inkmute">Imprimilo en hoja A4: los que esperan reservan la próxima en el momento.</p>
-                      <div className="mt-3"><QrBlock url={`https://cupito.app/${user.slug}`} onPrint={() => setShowPrintModal(true)} /></div>
-                    </div>
+                <div className="rounded-[24px] border border-black/[0.06] bg-white p-6 sm:p-8 shadow-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#6E6E73]">Tu link de reservas</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-bold text-[#16A34A]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#16A34A] animate-pulse" /> En línea
+                    </span>
                   </div>
-                  <div className="flex flex-col items-center">
-                    <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500 self-start">
-                      <IconSpark className="h-4 w-4 text-emerald-600" /> Así lo ven tus clientes — probalo en vivo
-                    </p>
-                    <div className="w-full max-w-[440px]">
-                      <PublicBooking isPreview={true} />
-                    </div>
-                    <p className="mt-4 w-full rounded-xl bg-slate-100/80 border border-slate-200/80 px-4 py-3 text-xs font-medium text-slate-600">
-                      💡 Reservá un turno acá y mirá cómo aparece <strong className="text-slate-900">al instante</strong> en tu Agenda del día.
-                    </p>
+                  <p className="mt-4 break-all font-display text-2xl font-bold text-[#1D1D1F] sm:text-3xl">cupito.app/{user.slug}</p>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <button
+                      onClick={() => { const url = `https://cupito.app/${user.slug}`; navigator.clipboard?.writeText(url).then(() => toast("Link copiado"), () => toast(url, "warn")); }}
+                      className="rounded-full bg-black px-6 py-2.5 font-display text-sm font-bold text-white shadow-sm hover:bg-neutral-800 transition-all active:scale-95"
+                    >
+                      Copiar enlace
+                    </button>
+                    <button
+                      onClick={() => setShowShareModal(true)}
+                      className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-[#F5F5F7] px-5 py-2.5 font-display text-sm font-bold text-[#1D1D1F] transition-all hover:bg-neutral-200"
+                    >
+                      <IconWhatsApp className="h-4 w-4 text-[#16A34A]" /> Compartir por WhatsApp
+                    </button>
+                    <a
+                      href={`/${user.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-5 py-2.5 font-display text-sm font-bold text-[#1D1D1F] transition-all hover:bg-[#F5F5F7]"
+                    >
+                      Abrir mi página <ArrowUpRight size={14} />
+                    </a>
                   </div>
+                </div>
+
+                <div className="mt-6 rounded-[24px] border border-black/[0.06] bg-white p-6 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setShowPreviewAccordion(!showPreviewAccordion)}
+                    className="flex w-full items-center justify-between text-left"
+                    aria-expanded={showPreviewAccordion}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F5F5F7] text-[#16A34A]">
+                        <IconSpark className="h-5 w-5" />
+                      </span>
+                      <div>
+                        <h3 className="font-display text-base font-bold text-[#1D1D1F]">Vista previa en vivo y código QR</h3>
+                        <p className="text-xs text-[#6E6E73]">Probá tu formulario tal como lo ven tus clientes o descargá el código QR.</p>
+                      </div>
+                    </div>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F5F5F7] text-[#6E6E73]">
+                      <IconChevron className={`h-4 w-4 transition-transform duration-200 ${showPreviewAccordion ? "rotate-180" : ""}`} />
+                    </span>
+                  </button>
+
+                  {showPreviewAccordion && (
+                    <div className="mt-6 pt-6 border-t border-black/[0.06] grid gap-8 lg:grid-cols-[1fr_1.1fr]">
+                      <div>
+                        <p className="font-display text-base font-bold text-[#1D1D1F]">QR para tu mostrador</p>
+                        <p className="mt-1 text-sm text-[#6E6E73]">Imprimilo en hoja A4: los clientes que esperan en el local reservan solos.</p>
+                        <div className="mt-4"><QrBlock url={`https://cupito.app/${user.slug}`} onPrint={() => setShowPrintModal(true)} /></div>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#6E6E73] self-start">
+                          Así lo ven tus clientes
+                        </p>
+                        <div className="w-full max-w-[440px] rounded-2xl border border-black/10 overflow-hidden shadow-md">
+                          <PublicBooking isPreview={true} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1490,60 +1476,18 @@ export default function Dashboard() {
             )}
           </main>
 
-          {/* Mobile Bottom Navigation Bar */}
-          <nav className="workspace-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-slate-200 bg-white/95 backdrop-blur-md px-2 shadow-lg lg:hidden" aria-label="Navegación móvil">
-            <button
-              type="button"
-              onClick={() => setView("hoy")}
-              className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${
-                view === "hoy" ? "text-emerald-700" : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <IconClock className={`h-5 w-5 ${view === "hoy" ? "text-emerald-600" : ""}`} />
-              <span>Agenda</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("reservas")}
-              className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${
-                view === "reservas" ? "text-emerald-700" : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <IconCalendar className={`h-5 w-5 ${view === "reservas" ? "text-emerald-600" : ""}`} />
-              <span>Turnos</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPrefill(null);
-                setShowNew(true);
-              }}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-600/30 active:scale-95 transition-transform -mt-3"
-              aria-label="Crear nuevo turno"
-            >
-              <IconPlus className="h-6 w-6" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("clientes")}
-              className={`flex flex-col items-center gap-1 text-[10px] font-bold transition-colors ${
-                view === "clientes" ? "text-emerald-700" : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              <IconUsers className={`h-5 w-5 ${view === "clientes" ? "text-emerald-600" : ""}`} />
-              <span>Clientes</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              className="flex flex-col items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-slate-900"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-              </svg>
-              <span>Menú</span>
-            </button>
-          </nav>
+          {/* Mobile Floating Action Button (FAB) 56px */}
+          <button
+            type="button"
+            onClick={() => {
+              setPrefill(null);
+              setShowNew(true);
+            }}
+            className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-black text-white shadow-lg shadow-black/20 hover:scale-105 active:scale-95 transition-all lg:hidden"
+            aria-label="Crear nuevo turno"
+          >
+            <IconPlus className="h-6 w-6 text-white" />
+          </button>
         </div>
       </div>
 
@@ -1607,7 +1551,7 @@ export default function Dashboard() {
             if (!res.ok) {
               toast(res.error || "No se pudo reprogramar el turno.", "warn");
             } else {
-              toast(`Turno de ${rescheduling.client} reprogramado para el ${fmtLong(newDate)} a las ${newTime} hs 🎉`);
+              toast(`Turno de ${rescheduling.client} reprogramado para el ${fmtLong(newDate)} a las ${newTime} hs`);
               setRescheduling(null);
             }
           }}
@@ -1628,8 +1572,8 @@ export default function Dashboard() {
               const r = requestReview(id);
               toast(
                 r === "sent"
-                  ? "Turno atendido · link de reseña enviado por email 💌"
-                  : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp 📲",
+                  ? "Turno atendido · link de reseña enviado por email"
+                  : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp",
                 r === "sent" ? "ok" : "warn"
               );
             } else if (s === "ausente") {
@@ -1759,74 +1703,7 @@ function StatCard({
   );
 }
 
-function EmptyState({ text, sub, action }: { text: string; sub: string; action?: ReactNode }) {
-  return (
-    <div className="mt-5 flex flex-col items-center rounded-2xl border border-dashed border-slate-200 bg-white/80 px-6 py-12 text-center shadow-xs">
-      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-        <IconCalendar className="h-6 w-6" />
-      </span>
-      <p className="mt-4 font-display text-lg font-bold text-slate-900">{text}</p>
-      <p className="mt-1 max-w-sm text-sm text-slate-500">{sub}</p>
-      {action && <div className="mt-5">{action}</div>}
-    </div>
-  );
-}
 
-function SetupGuide({ onGo, onCheckout, onOpenOnboarding }: { onGo: (v: View) => void; onCheckout: (p: Plan) => void; onOpenOnboarding: () => void }) {
-  const { user, data, updateSettings } = useStore();
-  if (!user || !data || data.settings.setupDismissed) return null;
-
-  const steps: { id: string; done: boolean; title: string; hint: string; go: () => void }[] = [
-    { id: "servicio", done: data.services.length > 0, title: "Cargá tu primer servicio", hint: "Nombre, precio y duración. Es lo que ven tus clientes.", go: () => onGo("servicios") },
-    { id: "horarios", done: JSON.stringify(data.settings.hours) !== JSON.stringify(defaultHours()), title: "Confirmá días y horarios", hint: "Los turnos se arman solos con esto según cuándo abras.", go: () => onGo("ajustes") },
-    { id: "pagina", done: !!(data.settings.whatsapp || data.settings.description || data.settings.address), title: "Completá tu página", hint: "WhatsApp, dirección o una descripción corta.", go: () => onGo("ajustes") },
-    { id: "plan", done: user.plan !== "semilla", title: "Elegí un plan", hint: user.plan === "semilla" ? "Estás en Semilla (gratis). Crece y Escala se pagan con Mercado Pago." : `Plan activo: ${PLAN_META[user.plan].name}.`, go: () => onCheckout("crece") },
-  ];
-  const done = steps.filter((s) => s.done).length;
-  if (done === steps.length) return null;
-
-  return (
-    <div className="pop-in mt-8 overflow-hidden rounded-[22px] border-2 border-evergreen bg-evergreen text-paper shadow-block">
-      <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-6">
-        <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.2em] text-emerald-300">
-            <IconSpark className="h-3.5 w-3.5" /> Primeros pasos
-          </span>
-          <h2 className="mt-2 font-display text-2xl font-extrabold">Tu local está listo para configurarse</h2>
-          <p className="mt-1 text-sm text-paper/70">En pocos minutos tenés tus servicios, horarios y tu link listo para compartir.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={onOpenOnboarding} className="rounded-full bg-emerald-400 px-4 py-2 font-display text-xs font-extrabold text-slate-950 transition-all hover:bg-emerald-300 shadow-sm">
-            ✨ Abrir Asistente
-          </button>
-          <button type="button" onClick={() => updateSettings({ setupDismissed: true })} className="text-xs font-bold text-paper/60 underline-offset-4 hover:text-emerald-300 hover:underline">Ocultar</button>
-        </div>
-      </div>
-      <div className="mt-3 px-6 pb-2">
-        <div className="h-1.5 overflow-hidden rounded-full bg-paper/15">
-          <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${(done / steps.length) * 100}%` }} />
-        </div>
-        <p className="mt-2 text-xs font-bold text-paper/55">{done} de {steps.length} listos</p>
-      </div>
-      <ul className="divide-y divide-paper/10">
-        {steps.map((s, i) => (
-          <li key={s.id}>
-            <button type="button" onClick={s.go} className="flex w-full items-center gap-4 px-6 py-4 text-left transition-colors hover:bg-paper/8">
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${s.done ? "bg-emerald-400 text-slate-950" : "bg-paper/10 text-paper"}`}>
-                {s.done ? <IconCheck className="h-4 w-4" /> : i + 1}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className={`block font-display text-sm font-bold ${s.done ? "text-paper/50 line-through" : "text-paper"}`}>{s.title}</span>
-                <span className="block text-xs text-paper/55">{s.hint}</span>
-              </span>
-              {!s.done && <IconArrow className="h-4 w-4 shrink-0 text-emerald-400" />}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 /* ============ ASISTENTE DE INICIO (ONBOARDING) ============ */
 function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToPlan: (p: Plan) => void }) {
@@ -1873,14 +1750,14 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
       address: address.trim(),
       setupDismissed: true,
     });
-    toast("¡Felicitaciones! Tu agenda ya está lista para recibir reservas 🎉");
+    toast("¡Felicitaciones! Tu agenda ya está lista para recibir reservas");
     onClose();
   };
 
   const copyLink = () => {
     void navigator.clipboard.writeText(publicUrl);
     setCopied(true);
-    toast("Link copiado al portapapeles 📋");
+    toast("Link copiado al portapapeles");
     setTimeout(() => setCopied(false), 2500);
   };
 
@@ -1891,7 +1768,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
         <div className="flex items-start justify-between gap-3">
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-lime/25 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-evergreen">
-              🚀 Configuración inicial · Paso {step + 1} de 3
+              Configuración inicial · Paso {step + 1} de 3
             </span>
             <h2 className="mt-2 font-display text-2xl font-extrabold text-ink sm:text-3xl">
               {step === 0 && "Días y horarios de atención"}
@@ -2063,7 +1940,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
                 </button>
               </div>
               <p className="mt-2 text-[11px] text-inkmute">
-                💡 Pegá este link en tu biografía de Instagram o mandáselo a tus clientes por WhatsApp.
+                Pegá este link en tu biografía de Instagram o mandáselo a tus clientes por WhatsApp.
               </p>
             </div>
 
@@ -2111,7 +1988,7 @@ function OnboardingModal({ onClose, onGoToPlan }: { onClose: () => void; onGoToP
               onClick={finishOnboarding}
               className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 py-4 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-md shadow-emerald-900/20"
             >
-              ¡Terminar y empezar a recibir turnos! 🎉
+              ¡Terminar y empezar a recibir turnos!
             </button>
           </div>
         )}
@@ -2200,194 +2077,6 @@ function downloadBookingCalendar(
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function BookingRow({
-  b,
-  service,
-  pro,
-  products,
-  businessName,
-  onStatus,
-  onDelete,
-  onVerify,
-  onReject,
-  onReschedule,
-  onOpenDetail,
-}: {
-  b: Booking;
-  service?: Service;
-  pro?: { id: string; name: string; color: string };
-  products: Product[];
-  businessName?: string;
-  onStatus: (id: string, s: BookingStatus) => void;
-  onDelete: (id: string) => void;
-  onVerify: (id: string) => void;
-  onReject: (id: string) => void;
-  onReschedule: (b: Booking) => void;
-  onOpenDetail: (b: Booking) => void;
-}) {
-  const claimPending = !!b.depositClaim && !b.paidDeposit && b.status !== "cancelada";
-  const cancelled = b.status === "cancelada";
-
-  const statusConfig: Record<BookingStatus, { label: string; bg: string; text: string; dot: string }> = {
-    pendiente: { label: "Por confirmar", bg: "bg-amber-50 border-amber-200", text: "text-amber-800", dot: "bg-amber-500" },
-    confirmada: { label: "Confirmada", bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-800", dot: "bg-emerald-500" },
-    atendida: { label: "Atendida", bg: "bg-slate-100 border-slate-200", text: "text-slate-700", dot: "bg-slate-500" },
-    cancelada: { label: "Cancelada", bg: "bg-rose-50 border-rose-200", text: "text-rose-700", dot: "bg-rose-500" },
-    ausente: { label: "No vino", bg: "bg-orange-50 border-orange-200", text: "text-orange-800", dot: "bg-orange-500" },
-  };
-  const sc = statusConfig[b.status] || statusConfig.pendiente;
-
-  return (
-    <div
-      onClick={() => onOpenDetail(b)}
-      className={`group relative flex flex-wrap items-center justify-between gap-3 sm:gap-4 rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs transition-all hover:border-slate-300 hover:shadow-md cursor-pointer ${
-        cancelled ? "opacity-60 bg-slate-50/60" : ""
-      }`}
-    >
-      {/* Left info */}
-      <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
-        <div
-          className={`flex h-12 w-14 sm:h-13 sm:w-16 shrink-0 flex-col items-center justify-center rounded-xl font-display transition-colors ${
-            cancelled
-              ? "bg-slate-100 text-slate-400"
-              : b.status === "confirmada"
-              ? "bg-emerald-700 text-white shadow-xs"
-              : b.status === "pendiente"
-              ? "bg-slate-900 text-white shadow-xs"
-              : "bg-slate-100 text-slate-700"
-          }`}
-        >
-          <span className="text-sm sm:text-base font-extrabold leading-none">{b.time}</span>
-          <span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider opacity-80">{service?.duration ?? 30}′</span>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-            <span className={`min-w-0 max-w-full break-words font-display text-sm sm:text-base font-bold leading-tight text-slate-900 ${cancelled ? "line-through text-slate-400" : ""}`}>
-              {b.client}
-            </span>
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.2 text-[10px] font-bold ${sc.bg} ${sc.text}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${sc.dot}`} />
-              {sc.label}
-            </span>
-            {b.source === "online" && (
-              <span className="hidden xs:inline-flex items-center rounded-full bg-slate-100 px-2 py-0.2 text-[9px] font-semibold text-slate-600">
-                Online
-              </span>
-            )}
-            {claimPending && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-200 px-2 py-0.2 text-[10px] font-bold text-rose-700 animate-pulse">
-                Seña a verificar
-              </span>
-            )}
-            {b.paidDeposit && (
-              <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.2 text-[10px] font-bold text-emerald-700">
-                ✓ Seña cobrada
-              </span>
-            )}
-          </div>
-
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500">
-            <span className="font-semibold text-slate-700">
-              {service ? service.name : "Servicio"}
-            </span>
-            {service && (
-              <>
-                <span className="text-slate-300">·</span>
-                <span className="font-bold text-emerald-800">{fmtMoney(service.price)}</span>
-              </>
-            )}
-            {pro && (
-              <>
-                <span className="text-slate-300">·</span>
-                <span className="inline-flex items-center gap-1 font-medium text-slate-600">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: pro.color || "#10b981" }} />
-                  {pro.name}
-                </span>
-              </>
-            )}
-            {b.phone && (
-              <span className="text-slate-400 hidden sm:inline">
-                · {b.phone}
-              </span>
-            )}
-            {b.items && b.items.length > 0 && (
-              <span className="text-emerald-700 font-semibold inline-flex items-center gap-1">
-                · <IconBag className="h-3 w-3" /> +{b.items.length} producto{b.items.length > 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Right actions */}
-      <div className="booking-row-actions flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto sm:flex-nowrap sm:gap-2" onClick={(e) => e.stopPropagation()}>
-        {claimPending ? (
-          <>
-            <button
-              type="button"
-              onClick={() => onVerify(b.id)}
-              className="btn-press rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
-            >
-              Acreditar
-            </button>
-            <button
-              type="button"
-              onClick={() => onReject(b.id)}
-              className="btn-press rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
-            >
-              Rechazar
-            </button>
-          </>
-        ) : b.status === "pendiente" ? (
-          <button
-            type="button"
-            onClick={() => onStatus(b.id, "confirmada")}
-            className="btn-press rounded-full bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-slate-800"
-          >
-            Confirmar
-          </button>
-        ) : b.status === "confirmada" ? (
-          <button
-            type="button"
-            onClick={() => onStatus(b.id, "atendida")}
-            className="btn-press rounded-full bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
-          >
-            Atendida ✓
-          </button>
-        ) : null}
-
-        {b.phone && (
-          <a
-            href={createWhatsAppUrl(
-              b.phone,
-              `Hola ${b.client.split(" ")[0]}! Te escribimos de ${businessName || "nuestro negocio"} para recordarte tu turno de ${
-                service?.name || "atención"
-              } el ${fmtLong(b.date)} a las ${b.time} hs. ¡Te esperamos!`
-            )}
-            target="_blank"
-            rel="noreferrer"
-            title="Enviar recordatorio por WhatsApp"
-            className="btn-press flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-xs hover:bg-emerald-100"
-          >
-            <IconWhatsApp className="h-4 w-4 text-emerald-600" />
-          </a>
-        )}
-
-        <button
-          type="button"
-          onClick={() => onOpenDetail(b)}
-          title="Ver detalles completos del turno"
-          className="btn-press flex h-8 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300"
-        >
-          <span>Detalles</span>
-          <span className="text-slate-400 text-[10px]">→</span>
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function BookingDetailModal({
@@ -2481,7 +2170,7 @@ function BookingDetailModal({
             </span>
           </div>
           <span className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
-            {b.source === "online" ? "🌐 Reserva Online" : "📝 Reserva Manual"}
+            {b.source === "online" ? "Reserva Online" : "Reserva Manual"}
           </span>
         </div>
 
@@ -2523,9 +2212,9 @@ function BookingDetailModal({
                 <div className="flex items-center gap-2">
                   <a
                     href={`tel:${cleanPhoneDigits(b.phone)}`}
-                    className="btn-press inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs"
+                    className="btn-press inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs"
                   >
-                    📞 Llamar
+                    <Phone size={12} /> Llamar
                   </a>
                   <a
                     href={createWhatsAppUrl(
@@ -2554,7 +2243,7 @@ function BookingDetailModal({
           {claimPending && (
             <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-rose-900">💸 Comprobante de seña por verificar</span>
+                <span className="text-xs font-bold text-rose-900">Comprobante de seña por verificar</span>
                 <span className="text-xs font-mono font-bold text-rose-700">TX: {b.depositClaim?.txId}</span>
               </div>
               <p className="text-xs text-rose-800">
@@ -2628,7 +2317,7 @@ function BookingDetailModal({
               rel="noreferrer"
               className="btn-press inline-flex items-center justify-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 py-2 px-3 text-xs font-bold text-sky-800 hover:bg-sky-100 shadow-xs"
             >
-              Google Cal ↗
+              Google Cal <ArrowUpRight size={13} />
             </a>
             <button
               type="button"
@@ -2773,7 +2462,7 @@ function InstallAppModal({ onClose, onPrompt, hasDeferred }: { onClose: () => vo
   const isIos = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent || "");
 
   return (
-    <Modal title="📲 Instalar Cupito" onClose={onClose}>
+    <Modal title="Instalar Cupito" onClose={onClose}>
       <div className="space-y-4 text-ink">
         <p className="text-sm text-inkmute">
           Instalá el panel de control en la pantalla de inicio de tu celular para entrar en 1 toque y anotar turnos sin abrir el navegador.
@@ -2784,7 +2473,7 @@ function InstallAppModal({ onClose, onPrompt, hasDeferred }: { onClose: () => vo
             onClick={() => { onPrompt(); onClose(); }}
             className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 py-3.5 font-display text-sm font-bold text-white shadow-md transition-colors"
           >
-            📲 Instalar en este celular ahora
+            <Smartphone size={16} /> Instalar en este celular ahora
           </button>
         )}
 
@@ -2798,7 +2487,7 @@ function InstallAppModal({ onClose, onPrompt, hasDeferred }: { onClose: () => vo
                 Tocá el botón <strong>Compartir</strong> en la barra inferior de Safari (el cuadradito con la flechita hacia arriba ⎋).
               </li>
               <li>
-                Deslizá hacia abajo y seleccioná <strong>"Agregar a pantalla de inicio"</strong> (o "Añadir a pantalla de inicio" ➕).
+                Deslizá hacia abajo y seleccioná <strong>"Agregar a pantalla de inicio"</strong> (o "Añadir a pantalla de inicio" +).
               </li>
               <li>
                 Tocá <strong>"Agregar"</strong> arriba a la derecha.
@@ -2828,7 +2517,7 @@ function InstallAppModal({ onClose, onPrompt, hasDeferred }: { onClose: () => vo
         )}
 
         <div className="rounded-xl bg-lime/20 p-3 text-xs text-fern font-semibold flex items-center gap-2.5">
-          <span className="text-base">⚡</span>
+          <Zap size={15} className="shrink-0" />
           <span>Abre en pantalla completa sin barra de navegación, ultra liviana y rápida.</span>
         </div>
       </div>
@@ -2859,11 +2548,11 @@ function CalendarSyncModal({
   const gcalUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
 
   const whatsappShareText = selectedPro
-    ? `Hola ${selectedPro.name}! Te paso tu enlace personal para sincronizar tus turnos de Cupito en el calendario de tu celu:\n\n🍏 En iPhone: abrí este link y tocá "Suscribirse":\n${webcalUrl}\n\n🤖 En Android / Google Calendar:\n${gcalUrl}\n\n¡Cualquier turno nuevo o reprogramación se te actualiza solo!`
-    : `Hola! Te paso el enlace para sincronizar los turnos de ${user.business} en el calendario de tu celu:\n\n🍏 En iPhone: abrí este link y tocá "Suscribirse":\n${webcalUrl}\n\n🤖 En Android / Google Calendar:\n${gcalUrl}`;
+    ? `Hola ${selectedPro.name}! Te paso tu enlace personal para sincronizar tus turnos de Cupito en el calendario de tu celu:\n\nEn iPhone: abrí este link y tocá "Suscribirse":\n${webcalUrl}\n\nEn Android / Google Calendar:\n${gcalUrl}\n\n¡Cualquier turno nuevo o reprogramación se te actualiza solo!`
+    : `Hola! Te paso el enlace para sincronizar los turnos de ${user.business} en el calendario de tu celu:\n\nEn iPhone: abrí este link y tocá "Suscribirse":\n${webcalUrl}\n\nEn Android / Google Calendar:\n${gcalUrl}`;
 
   return (
-    <Modal title="📅 Calendario del Celular" onClose={onClose}>
+    <Modal title="Calendario del Celular" onClose={onClose}>
       <div className="space-y-4 text-ink">
         <p className="text-sm text-inkmute">
           Sincronizá los turnos en tiempo real con la app de Calendario de tu iPhone o Android. Cualquier reserva nueva o cambio se actualiza automáticamente en tu celu.
@@ -2885,7 +2574,7 @@ function CalendarSyncModal({
                     : "bg-white border border-ink/10 text-inkmute hover:text-ink"
                 }`}
               >
-                👥 Todo el negocio
+                Todo el negocio
               </button>
               {pros.map((p) => (
                 <button
@@ -2920,7 +2609,9 @@ function CalendarSyncModal({
             className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink/15 bg-white p-3.5 transition-all hover:border-slate-900 hover:shadow-sm"
           >
             <div className="flex items-center gap-3 text-left">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-xl">🍏</span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5">
+                <Smartphone size={20} className="text-ink" />
+              </span>
               <div>
                 <p className="font-display text-sm font-bold text-ink">
                   iPhone (Apple Calendar) {selectedPro && <span className="text-fern font-normal">· {selectedPro.name}</span>}
@@ -2938,7 +2629,9 @@ function CalendarSyncModal({
             className="btn-press flex w-full items-center justify-between gap-3 rounded-2xl border-2 border-ink/15 bg-white p-3.5 transition-all hover:border-slate-900 hover:shadow-sm"
           >
             <div className="flex items-center gap-3 text-left">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-xl">🤖</span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5">
+                <Calendar size={20} className="text-ink" />
+              </span>
               <div>
                 <p className="font-display text-sm font-bold text-ink">
                   Google Calendar {selectedPro && <span className="text-fern font-normal">· {selectedPro.name}</span>}
@@ -2949,24 +2642,6 @@ function CalendarSyncModal({
             <span className="rounded-full bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1 text-xs font-bold text-white shadow-sm transition-colors">Conectar</span>
           </a>
         </div>
-
-        {/* Compartir por WhatsApp a ese profesional */}
-        {selectedPro && selectedPro.phone ? (
-          <a
-            href={createWhatsAppUrl(selectedPro.phone, whatsappShareText)}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-600/30 bg-emerald-50 py-3 text-xs font-bold text-emerald-800 transition-all hover:bg-emerald-100"
-          >
-            <IconWhatsApp className="h-4 w-4 text-emerald-600" />
-            Enviar enlace a {selectedPro.name} por WhatsApp
-          </a>
-        ) : selectedPro ? (
-          <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs leading-relaxed text-amber-900">
-            <IconWhatsApp className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-            <span>Agregá el teléfono de {selectedPro.name} en <strong>Equipo</strong> para habilitar el envío directo por WhatsApp.</span>
-          </div>
-        ) : null}
 
         <div className="rounded-2xl border border-ink/10 bg-paper p-3.5 space-y-2">
           <div className="flex items-center justify-between">
@@ -2989,7 +2664,7 @@ function CalendarSyncModal({
             download={`cupito-${user.slug}${selectedPro ? `-${selectedPro.name.toLowerCase().replace(/[^a-z0-9]/g, "")}` : ""}.ics`}
             className="btn-press inline-flex items-center gap-1.5 text-xs font-bold text-fern hover:underline"
           >
-            ⬇️ Descargar archivo .ics {selectedPro ? `de ${selectedPro.name}` : "completo"}
+            <Download size={13} /> Descargar archivo .ics {selectedPro ? `de ${selectedPro.name}` : "completo"}
           </a>
         </div>
       </div>
@@ -3166,10 +2841,10 @@ function WaitlistNotifyModal({ info, businessName, onClose }: {
   onClose: () => void;
 }) {
   const firstName = info.client.split(" ")[0];
-  const msg = `Hola ${firstName}! Te escribimos de ${businessName} 🎉 Se liberó un lugar y te asignamos tu turno de ${info.serviceName} para el ${fmtLong(info.date)} a las ${info.time} hs. Respondeme para confirmar que venís. ¡Te esperamos!`;
+  const msg = `Hola ${firstName}! Te escribimos de ${businessName}. Se liberó un lugar y te asignamos tu turno de ${info.serviceName} para el ${fmtLong(info.date)} a las ${info.time} hs. Respondeme para confirmar que venís. ¡Te esperamos!`;
   const hasPhone = info.phone.replace(/\D/g, "").length >= 8;
   return (
-    <Modal title="Turno asignado 🎉" onClose={onClose}>
+    <Modal title="Turno asignado" onClose={onClose}>
       <div className="space-y-4 text-ink">
         <div className="rounded-2xl border-2 border-limedeep/50 bg-lime/15 p-4">
           <p className="font-display text-base font-extrabold">{info.client} ya salió de la lista de espera</p>
@@ -3551,7 +3226,7 @@ function TimeGridView({
                 : "bg-ink/8 text-inkmute hover:text-ink"
             }`}
           >
-            👥 Todo el equipo ({pros.length})
+            Todo el equipo ({pros.length})
           </button>
           {pros.map((p) => (
             <button
@@ -3640,7 +3315,7 @@ function TimeGridView({
                     ) : blocked ? (
                       <div className="flex items-center gap-2">
                         <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-xs font-bold text-ink/70">
-                          🚫 Bloqueado: {blocked.reason}
+                          Bloqueado: {blocked.reason}
                         </span>
                       </div>
                     ) : (
@@ -3754,7 +3429,7 @@ function TimeGridView({
                     {isGlobalBlocked ? (
                       <div className="flex items-center gap-2">
                         <span className="rounded-full bg-ink/10 px-2.5 py-0.5 text-xs font-bold text-ink/70">
-                          🚫 Bloqueado para todo el equipo: {slotBlocks[0]?.reason || "Pausado"}
+                          Bloqueado para todo el equipo: {slotBlocks[0]?.reason || "Pausado"}
                         </span>
                       </div>
                     ) : !hasActiveBookings ? (
@@ -3843,7 +3518,7 @@ function TimeGridView({
                                   className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold text-white"
                                   style={{ background: bPro.color }}
                                 >
-                                  👤 {bPro.name}
+                                  {bPro.name}
                                 </span>
                               )}
                             </div>
@@ -4031,7 +3706,7 @@ function ClientsCRMView({
                 <div className="rounded-xl border border-dashed border-ink/15 bg-white/60 p-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-inkmute">
-                      📝 Nota privada del negocio
+                      Nota privada del negocio
                     </span>
                     {!isEditing && (
                       <button
@@ -4092,7 +3767,7 @@ function ClientsCRMView({
                   })}
                   className="btn-press flex items-center justify-center gap-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-colors"
                 >
-                  Ver historial completo de turnos ↗
+                  Ver historial completo de turnos <ArrowUpRight size={13} />
                 </button>
               </div>
             );
@@ -4113,21 +3788,21 @@ function ShareTemplatesModal({ business, slug, onClose }: { business: string; sl
       title: "Respuesta automática para WhatsApp Business",
       subtitle: "Para configurar como saludo o mensaje de ausencia en WhatsApp",
       badge: "Recomendado",
-      text: `¡Hola! 👋 Gracias por comunicarte con ${business}.\n\nPodés ver todos nuestros servicios, precios actualizados y reservar tu turno en el día y horario que prefieras desde acá:\n👉 ${url}\n\n¡Es súper fácil y rápido! Te esperamos.`,
+      text: `¡Hola! Gracias por comunicarte con ${business}.\n\nPodés ver todos nuestros servicios, precios actualizados y reservar tu turno en el día y horario que prefieras desde acá:\n${url}\n\n¡Es súper fácil y rápido! Te esperamos.`,
     },
     {
       id: "ig-bio",
       title: "Texto para tu Bio de Instagram",
       subtitle: "Corto, claro y directo para el enlace de tu perfil",
       badge: "Instagram",
-      text: `📍 ${business}\n🗓️ Reservá tu turno online las 24 hs 👇\n🔗 ${url}`,
+      text: `${business}\nReservá tu turno online las 24 hs:\n${url}`,
     },
     {
       id: "stories",
       title: "Para Historias / Estados de WhatsApp",
       subtitle: "Para cuando abrís agenda y querés llenar los turnos de la semana",
       badge: "Difusión",
-      text: `¡Abrimos la agenda para esta semana en ${business}! 🗓️✨\n\nElegí tu turno antes de que se agoten los lugares:\n👉 ${url}`,
+      text: `¡Abrimos la agenda para esta semana en ${business}!\n\nElegí tu turno antes de que se agoten los lugares:\n${url}`,
     },
   ];
 
@@ -4153,11 +3828,11 @@ function ShareTemplatesModal({ business, slug, onClose }: { business: string; sl
             <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 onClick={() => {
-                  navigator.clipboard?.writeText(t.text).then(() => toast("¡Mensaje copiado al portapapeles! 📋"));
+                  navigator.clipboard?.writeText(t.text).then(() => toast("¡Mensaje copiado al portapapeles!"));
                 }}
                 className="btn-press rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 font-display text-xs font-bold text-white shadow-sm transition-colors"
               >
-                Copiar mensaje 📋
+                Copiar mensaje
               </button>
             </div>
           </div>
@@ -4227,7 +3902,7 @@ function PrintPosterModal({ business, slug, onClose }: { business: string; slug:
             Cerrar
           </button>
           <button onClick={handlePrint} className="rounded-xl bg-slate-900 hover:bg-slate-800 px-5 py-2 text-xs font-bold text-white shadow-sm transition-colors">
-            🖨️ Imprimir cartel (A4)
+            Imprimir cartel (A4)
           </button>
         </div>
       </div>
@@ -4250,7 +3925,7 @@ function ServiceModal({ service, onClose }: { service?: Service; onClose: () => 
     if (!Number.isFinite(p) || p <= 0) return setError("El precio tiene que ser mayor a 0.");
     if (!Number.isFinite(d) || d < 5) return setError("La duración mínima es 5 minutos.");
     if (service) { updateService(service.id, { name: name.trim(), price: p, duration: d }); toast("Servicio actualizado ✓"); }
-    else { addService({ name: name.trim(), price: p, duration: d }); toast(`"${name.trim()}" ya está en tu página 🎉`); }
+    else { addService({ name: name.trim(), price: p, duration: d }); toast(`"${name.trim()}" ya está en tu página`); }
     onClose();
   };
 
@@ -4392,7 +4067,7 @@ function StatsView({ db }: { db: BizData }) {
             onClick={exportCSV}
             className="inline-flex items-center gap-2 rounded-full border-2 border-slate-900 bg-slate-900/5 px-5 py-2.5 font-display text-xs font-bold text-slate-900 transition-all hover:bg-slate-900 hover:text-white"
           >
-            📊 Exportar reservas a Excel (CSV)
+            Exportar reservas a Excel (CSV)
           </button>
         )}
       </div>
@@ -4491,7 +4166,7 @@ function StatsView({ db }: { db: BizData }) {
         <div className="grid gap-6 lg:grid-cols-2">
           <Reveal className="card p-6 border-2 border-evergreen/30 bg-card">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="font-display text-lg font-extrabold text-ink">⏰ Horarios más concurridos</h3>
+              <h3 className="font-display text-lg font-extrabold text-ink">Horarios más concurridos</h3>
               <span className="rounded-full bg-evergreen/10 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-evergreen">Escala</span>
             </div>
             <p className="mt-1 text-xs text-inkmute">Distribución de turnos por franja del día para optimizar tu personal.</p>
@@ -4512,7 +4187,7 @@ function StatsView({ db }: { db: BizData }) {
 
           <Reveal delay={100} className="card p-6 border-2 border-evergreen/30 bg-card">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="font-display text-lg font-extrabold text-ink">👥 Fidelidad y Retención</h3>
+              <h3 className="font-display text-lg font-extrabold text-ink">Fidelidad y Retención</h3>
               <span className="rounded-full bg-evergreen/10 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-evergreen">Escala</span>
             </div>
             <p className="mt-1 text-xs text-inkmute">Porcentaje de clientes que volvieron a reservar en tu negocio.</p>
@@ -4534,7 +4209,7 @@ function StatsView({ db }: { db: BizData }) {
             <div className="flex flex-wrap items-center justify-between gap-5">
               <div className="max-w-xl">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-700 px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white">
-                  ⭐ Exclusivo Plan Escala
+                  Exclusivo Plan Escala
                 </span>
                 <h3 className="mt-2 font-display text-xl font-extrabold text-ink">
                   Estadísticas avanzadas, retención y exportación
@@ -4560,7 +4235,7 @@ function StatsView({ db }: { db: BizData }) {
           <div>
             <h3 className="flex items-center gap-2 font-display text-lg font-extrabold text-ink"><IconStar className="h-5 w-5 text-limedeep" /> Reseñas de tus clientes</h3>
             {reviews.length > 0 ? (
-              <p className="mt-1 text-sm text-inkmute">Promedio de <strong className="text-fern">{avgRating.toFixed(1)} ★</strong> en {reviews.length} reseña{reviews.length === 1 ? "" : "s"} reales dejadas por tus clientes.</p>
+              <p className="mt-1 text-sm text-inkmute">Promedio de <strong className="text-fern">{avgRating.toFixed(1)}</strong> en {reviews.length} reseña{reviews.length === 1 ? "" : "s"} reales dejadas por tus clientes.</p>
             ) : (
               <p className="mt-1 text-sm text-inkmute">Tus clientes pueden dejar reseñas directamente desde tu página pública.</p>
             )}
@@ -4569,13 +4244,13 @@ function StatsView({ db }: { db: BizData }) {
             href={`/${user?.slug}`}
             target="_blank"
             rel="noreferrer"
-            className="rounded-full border-2 border-ink/15 px-5 py-2 font-display text-xs font-bold text-ink transition-all hover:-translate-y-0.5 hover:border-slate-900 hover:bg-slate-900 hover:text-white"
+            className="inline-flex items-center gap-1 rounded-full border-2 border-ink/15 px-5 py-2 font-display text-xs font-bold text-ink transition-all hover:-translate-y-0.5 hover:border-slate-900 hover:bg-slate-900 hover:text-white"
           >
-            Ver en mi página pública ↗
+            Ver en mi página pública <ArrowUpRight size={13} />
           </a>
         </div>
         <p className="mt-4 rounded-xl border-2 border-dashed border-limedeep/60 bg-lime/10 px-4 py-3 text-sm text-ink/80">
-          💡 Las reseñas provienen de clientes reales que visitan tu enlace público o completan su turno. Podés moderarlas o eliminarlas en cualquier momento.
+          Las reseñas provienen de clientes reales que visitan tu enlace público o completan su turno. Podés moderarlas o eliminarlas en cualquier momento.
         </p>
         {reviews.length > 0 ? (
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -4638,7 +4313,7 @@ function TeamView({ onSyncCalendar }: { onSyncCalendar?: (proId: string) => void
                   <p className="text-sm text-inkmute">{p.role}</p>
                   {p.phone && <p className="mt-1 text-xs font-semibold text-emerald-700">WhatsApp · {formatArgentinaPhone(p.phone)}</p>}
                   <span className={`inline-block mt-2 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${hasCustom ? "bg-evergreen/10 text-evergreen border border-evergreen/20" : "bg-ink/5 text-inkmute border border-ink/10"}`}>
-                    {hasCustom ? "🕒 Horarios propios" : "🏢 Horario del negocio"}
+                    {hasCustom ? "Horarios propios" : "Horario del negocio"}
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -4703,7 +4378,7 @@ function TeamView({ onSyncCalendar }: { onSyncCalendar?: (proId: string) => void
             } else {
               const err = addProfessional(payload.name, payload.role, payload.hours, payload.phone);
               if (err) return err;
-              toast(`${payload.name} se sumó al equipo 🎉`);
+              toast(`${payload.name} se sumó al equipo`);
               return null;
             }
           }}
@@ -4778,7 +4453,7 @@ function ProModal({
         <div className="rounded-2xl border-2 border-ink/10 bg-paper p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-display text-sm font-bold text-ink">🕒 Horarios de atención</p>
+              <p className="font-display text-sm font-bold text-ink">Horarios de atención</p>
               <p className="text-xs text-inkmute">
                 {useCustomHours
                   ? "Este profesional tiene horarios propios."
@@ -4863,7 +4538,7 @@ function ProModal({
                     </div>
                     {h.open && h.from2 && (
                       <div className="pop-in mt-2 flex flex-wrap items-center gap-1.5 border-t border-dashed border-coral/20 pt-1.5 text-xs">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-coral">✂ Reabre</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-coral">Reabre</span>
                         <input
                           type="time"
                           className="field !w-auto !py-1 !px-2 !text-xs"
@@ -4945,7 +4620,7 @@ function ProductModal({ product, onClose }: { product?: Product; onClose: () => 
     if (name.trim().length < 2) return setError("Poné un nombre al producto.");
     if (!Number.isFinite(p) || p <= 0) return setError("El precio tiene que ser mayor a 0.");
     if (product) { updateProduct(product.id, { name: name.trim(), desc: desc.trim(), price: p }); toast("Producto actualizado ✓"); }
-    else { addProduct({ name: name.trim(), desc: desc.trim() || "Producto de tu tienda", price: p }); toast(`"${name.trim()}" ya está en tu tienda 🛍️`); }
+    else { addProduct({ name: name.trim(), desc: desc.trim() || "Producto de tu tienda", price: p }); toast(`"${name.trim()}" ya está en tu tienda`); }
     onClose();
   };
 
@@ -5023,7 +4698,7 @@ function CouponModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   return (
     <Modal title="Nuevo cupón" onClose={onClose}>
-      <form onSubmit={(e) => { e.preventDefault(); const err = addCoupon({ code, pct }); if (err) return setError(err); toast(`Cupón ${code.trim().toUpperCase()} creado 🎟️`); onClose(); }} className="space-y-4">
+      <form onSubmit={(e) => { e.preventDefault(); const err = addCoupon({ code, pct }); if (err) return setError(err); toast(`Cupón ${code.trim().toUpperCase()} creado`); onClose(); }} className="space-y-4">
         <div>
           <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Código *</label>
           <input className="field uppercase placeholder:normal-case" placeholder="MARTES20" value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
@@ -5115,10 +4790,10 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
                       : "bg-blue-50 border border-blue-200 text-blue-700"
                   }`}>
                     {subStatus.isExpired
-                      ? "🔴 Período vencido"
+                      ? "Período vencido"
                       : subStatus.isGracePeriod
-                      ? "⚠️ Período de gracia (3 días)"
-                      : "⚡ Pago manual / Transferencia"}
+                      ? "Período de gracia (3 días)"
+                      : "Pago manual / Transferencia"}
                   </span>
                 )}
               </div>
@@ -5172,8 +4847,8 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
             <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="max-w-xl">
-                  <p className="font-display text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                    <span className="text-emerald-600">🔄</span> ¿Querés que tu plan no venza mes a mes?
+                  <p className="font-display text-sm font-bold text-slate-900">
+                    ¿Querés que tu plan no venza mes a mes?
                   </p>
                   <p className="text-xs text-slate-600 mt-1 leading-relaxed">
                     Activá el débito automático con Mercado Pago. Ingresás tu tarjeta una sola vez y Mercado Pago renueva tu plan mes a mes de forma automática, sin que tengas que transferir a mano cada 30 días.
@@ -5246,7 +4921,7 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
             >
               {isPopular && !active && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-900 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-xs">
-                  ⭐ Más elegido
+                  Más elegido
                 </span>
               )}
               {active && (
@@ -5304,7 +4979,7 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-xs">
-        <p className="font-bold text-slate-900">💳 ¿Cómo funciona el cobro de la suscripción?</p>
+        <p className="font-bold text-slate-900">¿Cómo funciona el cobro de la suscripción?</p>
         <p className="mt-1 text-xs sm:text-sm leading-relaxed text-slate-500">
           Al tocar en <strong>Elegir con Mercado Pago</strong>, se abre el checkout oficial de Mercado Pago. Podés ingresar tu tarjeta de débito o crédito para que el cobro sea automático todos los meses. Si en algún momento querés cancelar o cambiar de plan, lo hacés con 1 clic desde este panel sin trámites ni llamadas.
         </p>
@@ -5333,7 +5008,7 @@ function QrBlock({ url, onPrint }: { url: string; onPrint?: () => void }) {
         </a>
         {onPrint && (
           <button onClick={onPrint} className="flex-1 rounded-xl bg-slate-900 hover:bg-slate-800 py-2.5 text-center font-display text-xs font-bold text-white transition-all shadow-sm">
-            🖨️ Imprimir cartel
+            Imprimir cartel
           </button>
         )}
       </div>
@@ -5357,29 +5032,109 @@ function LockedFeature({ icon, title, desc, onUpgrade }: { icon: ReactNode; titl
 /* ============ AJUSTES ============ */
 type SettingsTab = "negocio" | "pagina" | "pagos" | "horarios" | "plan" | "cuenta";
 
-function SettingsView({ user, settings, onSaveProfile, onSelectPlan, initialTab = "negocio", onTabChange }: { initialTab?: SettingsTab; onTabChange: (tab: SettingsTab) => void; user: NonNullable<ReturnType<typeof useStore>["user"]>; settings: BizSettings; onSaveProfile: (b: string, n: string) => void; onSelectPlan: (p: Plan) => void }) {
+function SettingsView({
+  user,
+  settings,
+  onSaveProfile,
+  onSelectPlan,
+  initialTab = "negocio",
+  onTabChange,
+}: {
+  initialTab?: SettingsTab;
+  onTabChange: (tab: SettingsTab) => void;
+  user: NonNullable<ReturnType<typeof useStore>["user"]>;
+  settings: BizSettings;
+  onSaveProfile: (b: string, n: string) => void;
+  onSelectPlan: (p: Plan) => void;
+}) {
   const tab = initialTab;
   const setTab = onTabChange;
   const { updateSettings } = useStore();
+  const [showLocalNotice, setShowLocalNotice] = useState(true);
 
-  const tabs: { id: SettingsTab; label: string; icon: ReactNode }[] = [
-    { id: "negocio", label: "Negocio", icon: <IconWallet className="h-4 w-4" /> },
-    { id: "pagina", label: "Mi página", icon: <IconLink className="h-4 w-4" /> },
-    { id: "pagos", label: "Pagos y seña", icon: <IconTicket className="h-4 w-4" /> },
-    { id: "horarios", label: "Horarios", icon: <IconClock className="h-4 w-4" /> },
-    { id: "plan", label: "Plan", icon: <IconStar className="h-4 w-4" /> },
-    { id: "cuenta", label: "Cuenta", icon: <IconLogout className="h-4 w-4" /> },
+  const mainGroups: {
+    id: string;
+    label: string;
+    tabs: { id: SettingsTab; label: string; icon: ReactNode }[];
+  }[] = [
+    {
+      id: "local",
+      label: "Local",
+      tabs: [
+        { id: "negocio", label: "Negocio", icon: <IconWallet className="h-3.5 w-3.5" /> },
+        { id: "horarios", label: "Horarios", icon: <IconClock className="h-3.5 w-3.5" /> },
+      ],
+    },
+    {
+      id: "reservas",
+      label: "Reservas",
+      tabs: [
+        { id: "pagos", label: "Pagos y seña", icon: <IconTicket className="h-3.5 w-3.5" /> },
+      ],
+    },
+    {
+      id: "cuenta",
+      label: "Cuenta",
+      tabs: [
+        { id: "plan", label: "Plan", icon: <IconStar className="h-3.5 w-3.5" /> },
+        { id: "cuenta", label: "Cuenta", icon: <IconLogout className="h-3.5 w-3.5" /> },
+      ],
+    },
   ];
 
   return (
     <div className="pop-in mt-8">
-      <div className="no-scrollbar flex gap-1 overflow-x-auto border-b-2 border-ink/10">
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`relative flex shrink-0 items-center gap-2 px-4 py-3 font-display text-sm font-bold transition-colors ${tab === t.id ? "text-slate-900" : "text-slate-500 hover:text-slate-900"}`}>
-            {t.icon}{t.label}
-            {tab === t.id && <span className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full bg-emerald-600" />}
+      {/* Sutil aviso de modo local dentro de Ajustes */}
+      {showLocalNotice && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-black/[0.08] bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#F5F5F7] text-[#1D1D1F]">
+              <IconGear className="h-4 w-4" />
+            </span>
+            <p className="text-xs text-[#6E6E73] leading-relaxed">
+              <strong className="text-[#1D1D1F]">Modo local:</strong> los cambios se guardan sólo en este dispositivo. Para usar la agenda desde otros equipos, contactá a hola@cupito.app.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowLocalNotice(false)}
+            className="shrink-0 rounded-lg p-1.5 text-[#6E6E73] hover:bg-black/5 hover:text-[#1D1D1F] transition-colors"
+            aria-label="Cerrar aviso"
+          >
+            ✕
           </button>
+        </div>
+      )}
+
+      {/* 3 Grupos de Ajustes: Local, Reservas, Cuenta */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-black/[0.06] pb-3">
+        {mainGroups.map((group, idx) => (
+          <div key={group.id} className="flex items-center gap-1.5">
+            {idx > 0 && <span className="text-black/20 mx-1 hidden sm:inline">|</span>}
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#6E6E73] mr-0.5">
+              {group.label}:
+            </span>
+            <div className="flex items-center gap-1">
+              {group.tabs.map((t) => {
+                const isSel = tab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                      isSel
+                        ? "bg-black text-white font-bold shadow-sm"
+                        : "bg-[#F5F5F7] text-[#6E6E73] hover:bg-neutral-200/70 hover:text-[#1D1D1F]"
+                    }`}
+                  >
+                    {t.icon}
+                    <span>{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         ))}
       </div>
 
@@ -5495,11 +5250,11 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <label className="block text-xs font-bold uppercase tracking-wider text-inkmute">
-            🎨 Paleta de colores de tu página
+            Paleta de colores de tu página
           </label>
           {!paid && (
             <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
-              🔒 Paletas exclusivas: Plan Crece
+              Paletas exclusivas: Plan Crece
             </span>
           )}
         </div>
@@ -5514,7 +5269,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
                 type="button"
                 onClick={() => {
                   if (isLocked) {
-                    toast("🎨 Las paletas de colores exclusivas están disponibles en el plan Crece.", "warn");
+                    toast("Las paletas de colores exclusivas están disponibles en el plan Crece.", "warn");
                     onRequestUpgrade();
                     return;
                   }
@@ -5530,7 +5285,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
               >
                 <span className={`h-6 w-6 shrink-0 rounded-full bg-gradient-to-tr ${th.sampleGradient} shadow-inner flex items-center justify-center`}>
                   {isSel && <span className="h-2 w-2 rounded-full bg-white shadow" />}
-                  {isLocked && !isSel && <span className="text-[10px]">🔒</span>}
+                  {isLocked && !isSel && <IconLock className="h-3 w-3 text-white drop-shadow" />}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-ink">{th.name}</p>
@@ -5721,16 +5476,17 @@ function HoursCard({
             setHours(next);
             toast("Lunes copiado a días hábiles. Guardá para aplicar los cambios.");
           }}
-          className="btn-press inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 shadow-xs"
+          className="btn-press inline-flex items-center gap-1.5 rounded-xl border border-black/[0.08] bg-[#F5F5F7] px-3.5 py-1.5 text-xs font-semibold text-[#1D1D1F] hover:bg-neutral-200/70 shadow-xs"
         >
-          ⚡ Aplicar horario del lunes a días hábiles (Lun-Vie)
+          <IconSpark className="h-3.5 w-3.5 text-[#16A34A]" />
+          <span>Aplicar horario del lunes a días hábiles (Lun-Vie)</span>
         </button>
       </div>
       <div className="mt-5 space-y-3">
         {order.map((i) => {
           const h = hours[i];
           return (
-            <div key={i} className={`rounded-xl border-2 p-4 transition-colors ${h.open ? "border-ink/12 bg-white/60" : "border-ink/8 bg-ink/[0.03]"}`}>
+            <div key={i} className={`rounded-xl border p-4 transition-colors ${h.open ? "border-black/[0.08] bg-white" : "border-black/[0.04] bg-[#F5F5F7]/50"}`}>
               <div className="flex flex-wrap items-center gap-3">
                 <Toggle on={h.open} onChange={(v) => set(i, { open: v })} label={`Abrir ${DAY_NAMES[i]}`} />
                 <span className={`w-24 font-display text-sm font-extrabold ${h.open ? "text-ink" : "text-ink/35"}`}>{DAY_NAMES[i]}</span>
@@ -5742,16 +5498,16 @@ function HoursCard({
                   </span>
                 )}
                 {h.open && !h.from2 && (
-                  <button type="button" onClick={() => set(i, { to: "13:00", from2: "15:00", to2: "20:00" })} className="ml-auto rounded-full border-2 border-coral/40 px-3 py-1.5 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">+ Corte al mediodía</button>
+                  <button type="button" onClick={() => set(i, { to: "13:00", from2: "15:00", to2: "20:00" })} className="ml-auto rounded-full border border-black/10 px-3 py-1.5 text-xs font-bold text-[#1D1D1F] transition-colors hover:bg-[#F5F5F7]">+ Corte al mediodía</button>
                 )}
               </div>
               {h.open && h.from2 && (
-                <div className="pop-in mt-3 flex flex-wrap items-center gap-2 border-t-2 border-dashed border-coral/30 pt-3 text-sm">
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-coral">✂ Reabre</span>
+                <div className="pop-in mt-3 flex flex-wrap items-center gap-2 border-t border-black/[0.06] pt-3 text-sm">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#16A34A]">Reabre</span>
                   <input aria-label={DAY_NAMES[i] + ": reapertura"} type="time" className="field !w-auto" value={h.from2} onChange={(e) => set(i, { from2: e.target.value })} />
                   <span className="text-inkmute">a</span>
                   <input aria-label={DAY_NAMES[i] + ": segundo cierre"} type="time" className="field !w-auto" value={h.to2 ?? "20:00"} onChange={(e) => set(i, { to2: e.target.value })} />
-                  <button type="button" onClick={() => set(i, { from2: undefined, to2: undefined })} className="ml-auto text-xs font-bold text-inkmute underline-offset-4 hover:text-coral hover:underline">Quitar corte</button>
+                  <button type="button" onClick={() => set(i, { from2: undefined, to2: undefined })} className="ml-auto text-xs font-bold text-inkmute underline-offset-4 hover:text-[#1D1D1F] hover:underline">Quitar corte</button>
                 </div>
               )}
             </div>
@@ -5759,23 +5515,45 @@ function HoursCard({
         })}
       </div>
 
-      <div className="sticky bottom-3 z-10 mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        {error && <p role="alert" className="mb-3 text-sm font-semibold text-red-700">{error}</p>}
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" disabled={!dirty} className="rounded-full bg-emerald-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50" onClick={() => {
-            const issue = validateHours(hours);
-            setError(issue);
-            if (issue) return;
-            onChange(hours);
-            toast("Horarios guardados ✓");
-          }}>Guardar horarios</button>
-          {dirty ? <button type="button" className="rounded-full px-4 py-3 text-sm font-semibold" onClick={() => { setHours(savedHours.map((day) => ({ ...day }))); setError(null); }}>Descartar cambios</button> : <span role="status" className="text-sm text-slate-600">Sin cambios pendientes</span>}
+      <div className="sticky bottom-3 z-10 mt-5 rounded-2xl border border-black/[0.08] bg-white/95 backdrop-blur-md p-4 shadow-lg flex flex-wrap items-center justify-between gap-3">
+        {error && <p role="alert" className="w-full text-xs font-semibold text-rose-600">{error}</p>}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={!dirty}
+            className="rounded-full bg-black hover:bg-neutral-800 px-6 py-2.5 text-xs font-bold text-white shadow-sm disabled:opacity-40 transition-all active:scale-95"
+            onClick={() => {
+              const issue = validateHours(hours);
+              setError(issue);
+              if (issue) return;
+              onChange(hours);
+              toast("Horarios guardados ✓");
+            }}
+          >
+            Guardar horarios
+          </button>
+          {dirty ? (
+            <button
+              type="button"
+              className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-xs font-semibold text-[#1D1D1F] hover:bg-[#F5F5F7] transition-colors"
+              onClick={() => {
+                setHours(savedHours.map((day) => ({ ...day })));
+                setError(null);
+              }}
+            >
+              Descartar cambios
+            </button>
+          ) : (
+            <span role="status" className="text-xs font-medium text-[#6E6E73]">
+              Sin cambios pendientes
+            </span>
+          )}
         </div>
       </div>
       {/* Anticipación máxima de reservas */}
-      <div className="mt-8 border-t-2 border-dashed border-ink/10 pt-6">
+      <div className="mt-8 border-t border-black/[0.06] pt-6">
         <label className="mb-1 block font-display text-sm font-extrabold text-ink">
-          📅 ¿Con cuánta anticipación pueden reservar tus clientes?
+          ¿Con cuánta anticipación pueden reservar tus clientes?
         </label>
         <p className="mb-3 text-xs text-inkmute">
           Elegí el límite máximo de días hacia adelante en el calendario para que no saquen turnos con meses de anticipación.
@@ -5796,10 +5574,10 @@ function HoursCard({
                   onUpdateSettings({ maxAdvanceDays: opt.days });
                   toast(`Límite configurado a ${opt.label} ✓`);
                 }}
-                className={`btn-press rounded-xl border-2 py-2.5 px-3 text-center font-display text-xs font-bold transition-all ${
+                className={`btn-press rounded-xl border py-2.5 px-3 text-center font-display text-xs font-bold transition-all ${
                   isSel
-                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                    : "border-ink/12 bg-white text-ink hover:border-ink/40"
+                    ? "border-black bg-black text-white shadow-sm"
+                    : "border-black/[0.08] bg-white text-ink hover:border-black/20"
                 }`}
               >
                 {opt.label}
@@ -5810,9 +5588,9 @@ function HoursCard({
       </div>
 
       {/* Días cerrados / Feriados */}
-      <div className="mt-8 border-t-2 border-dashed border-ink/10 pt-6">
+      <div className="mt-8 border-t border-black/[0.06] pt-6">
         <label className="mb-1 block font-display text-sm font-extrabold text-ink">
-          🚫 Feriados y Días Cerrados (No Laborables)
+          Feriados y Días Cerrados (No Laborables)
         </label>
         <p className="mb-3 text-xs text-inkmute">
           Fechas puntuales donde el negocio no abre. Esos días quedarán deshabilitados en el calendario público y nadie podrá reservar.
