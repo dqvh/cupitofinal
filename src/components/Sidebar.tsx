@@ -148,13 +148,13 @@ export default function Sidebar({
               }`}
             >
               <div className="flex items-center gap-2.5">
-                <Icon size={16} className={active ? "text-white" : "text-[#6E6E73] group-hover:text-[#1D1D1F]"} />
-                <span>{item.label}</span>
+                <Icon size={16} className={active ? "!text-white" : "text-[#6E6E73] group-hover:text-[#1D1D1F]"} />
+                <span className={active ? "!text-white font-bold" : ""}>{item.label}</span>
               </div>
               {item.badge !== undefined && (
                 <span
                   className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${
-                    active ? "bg-white/20 text-white" : "bg-neutral-200 text-[#1D1D1F]"
+                    active ? "bg-white/20 !text-white" : "bg-neutral-200 text-[#1D1D1F]"
                   }`}
                 >
                   {item.badge}
@@ -168,6 +168,7 @@ export default function Sidebar({
         <div className="pt-1">
           <button
             type="button"
+            aria-expanded={moreExpanded}
             onClick={() => setMoreExpanded(!moreExpanded)}
             className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
               isMoreActive
@@ -189,7 +190,7 @@ export default function Sidebar({
 
           {/* Submenu for "Más" */}
           {moreExpanded && (
-            <div className="mt-1 ml-3 pl-3 border-l border-black/[0.08] space-y-0.5">
+            <div data-submenu className="mt-1 ml-3 pl-3 border-l border-black/[0.08] space-y-0.5">
               {MORE_VIEWS.map((sub) => {
                 const active = view === sub.id;
                 const SubIcon = sub.icon;
@@ -198,6 +199,7 @@ export default function Sidebar({
                   <button
                     key={sub.id}
                     type="button"
+                    aria-current={active ? "page" : undefined}
                     onClick={() => onViewChange(sub.id)}
                     className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
                       active
@@ -206,13 +208,13 @@ export default function Sidebar({
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <SubIcon size={14} className={active ? "text-white" : "text-[#6E6E73]"} />
-                      <span>{sub.label}</span>
+                      <SubIcon size={14} className={active ? "!text-white" : "text-[#6E6E73]"} />
+                      <span className={active ? "!text-white font-bold" : ""}>{sub.label}</span>
                     </div>
                     {waitlistBadge !== null && (
                       <span
                         className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold ${
-                          active ? "bg-white/20 text-white" : "bg-neutral-200 text-[#1D1D1F]"
+                          active ? "bg-white/20 !text-white" : "bg-neutral-200 text-[#1D1D1F]"
                         }`}
                       >
                         {waitlistBadge}

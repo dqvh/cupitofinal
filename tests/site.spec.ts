@@ -157,3 +157,30 @@ test('reserva mobile: productos opcionales colapsados y fáciles de agregar', as
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'artifacts/booking-products-mobile.png', fullPage: true });
 });
+
+test('sidebar: pestañas activas tienen contraste blanco legible', async ({ page }) => {
+  await seed(page, true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/app');
+  await page.waitForTimeout(1000);
+
+  const aside = page.locator('aside');
+  await expect(aside).toBeVisible();
+
+  // 1. Pestaña principal activa (Hoy)
+  const hoyBtn = aside.getByRole('button', { name: 'Hoy', exact: true });
+  await expect(hoyBtn).toHaveAttribute('aria-current', 'page');
+  const hoyColor = await hoyBtn.evaluate(el => getComputedStyle(el).color);
+  expect(hoyColor).toBe('rgb(255, 255, 255)');
+
+  // 2. Pestaña del submenú Más (Equipo)
+  const equipoBtn = aside.getByRole('button', { name: 'Equipo', exact: true });
+  if (!(await equipoBtn.isVisible())) {
+    await aside.getByRole('button', { name: 'Más', exact: true }).click();
+  }
+  await equipoBtn.click();
+  await expect(equipoBtn).toHaveAttribute('aria-current', 'page');
+  const equipoSpanColor = await equipoBtn.locator('span').first().evaluate(el => getComputedStyle(el).color);
+  expect(equipoSpanColor).toBe('rgb(255, 255, 255)');
+});
+

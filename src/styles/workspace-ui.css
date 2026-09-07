@@ -25,11 +25,21 @@
   color: var(--workspace-ink);
 }
 
+.workspace-app > div > aside nav [data-submenu] button {
+  min-height: 34px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
 .workspace-app > div > aside nav button[aria-current="page"] {
   background: #1D1D1F;
   border-color: #1D1D1F;
-  color: #FFFFFF;
+  color: #FFFFFF !important;
   box-shadow: none;
+}
+
+.workspace-app > div > aside nav button[aria-current="page"] * {
+  color: #FFFFFF !important;
 }
 
 .workspace-app .workspace-content {
