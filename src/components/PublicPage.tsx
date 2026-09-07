@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { usePublicPage, useStore } from "../lib/store";
+import { usePublicPage, useStore, ensureDemo, DEMO_SLUG } from "../lib/store";
 import PublicBooking from "./PublicBooking";
 import { LogoMark } from "./kit";
 import { RotateCw } from "lucide-react";
@@ -34,6 +34,15 @@ export default function PublicPage({ slug }: { slug: string }) {
   useEffect(() => {
     // Si estoy viendo mi propia página logueado, lo local ya es lo más fresco.
     if (page && sessionUserId && page.user.id === sessionUserId) {
+      setLoadingRemote(false);
+      return;
+    }
+
+    // Si es la demo y no existe localmente, re-sembrarla en vez de ir a la nube.
+    if (!page && slug.toLowerCase() === DEMO_SLUG) {
+      // Limpiar flag de demo borrada para que ensureDemo re-siembre
+      try { localStorage.removeItem("cupito_demo_deleted"); } catch { /* noop */ }
+      ensureDemo();
       setLoadingRemote(false);
       return;
     }
