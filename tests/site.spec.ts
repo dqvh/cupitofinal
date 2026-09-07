@@ -42,6 +42,10 @@ test('hidratación, menú mobile, planes y rutas secundarias', async ({ page }) 
   await expect(page.locator('input[type="email"]')).toBeVisible();
   await page.goto('/login');
   await expect(page.locator('input[type="email"]')).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/');
+  await expect(page.locator('h1')).toBeVisible();
+  await page.screenshot({ path: 'artifacts/landing-desktop.png' });
   expect(errors).toEqual([]);
 });
 
@@ -90,4 +94,34 @@ test('ajustes: borrador de horarios, validación, guardado y seña', async ({ pa
   await page.getByLabel('Titular de la cuenta').fill('Ana Prueba');
   await page.getByRole('button', { name: 'Activar seña', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Activar seña', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('búsqueda rápida abre horarios con teclado y restaura el foco', async ({ page }) => {
+  await seed(page, true);
+  await page.goto('/#/app');
+  await expect(page.getByRole('region', { name: 'Acciones pendientes' })).toBeVisible();
+  await page.screenshot({ path: 'artifacts/dashboard-desktop.png' });
+  await page.getByRole('button', { name: 'Buscar acciones' }).click();
+  await expect(page.getByRole('dialog', { name: 'Buscar en el panel' })).toBeVisible();
+  await page.getByLabel('Buscar sección o acción').fill('horarios');
+  await page.getByLabel('Buscar sección o acción').press('Enter');
+  await expect(page.getByRole('heading', { name: 'Días y horarios de atención' })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.keyboard.press('Control+k');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('panel mobile muestra acciones cotidianas sin desbordar', async ({ page }) => {
+  await seed(page, true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/app');
+  await expect(page.getByRole('region', { name: 'Acciones pendientes' })).toBeVisible();
+  await page.screenshot({ path: "artifacts/dashboard-overview-mobile.png", fullPage: true });
+  await page.getByRole('button', { name: 'Turnos por confirmar' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/reservas/i);
+  await expect(page.getByRole('heading', { level: 1 })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'artifacts/dashboard-mobile.png', fullPage: true });
 });

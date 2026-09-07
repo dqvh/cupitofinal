@@ -2,16 +2,19 @@ import lighthouse from 'lighthouse';
 import { launch } from 'chrome-launcher';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { preview } from 'vite';
+import { chromium } from '@playwright/test';
 
 await mkdir('artifacts', { recursive: true });
 const profile = await mkdtemp(resolve('artifacts/lighthouse-profile-'));
+const server = process.argv[2] ? null : await preview({ preview: { host: '127.0.0.1', port: 4175, strictPort: true } });
 const browser = await launch({
-  chromePath: process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : undefined),
+  chromePath: process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : chromium.executablePath()),
   userDataDir: profile,
   chromeFlags: ['--headless', '--no-sandbox'],
 });
 try {
-  const result = await lighthouse(process.argv[2] || 'http://127.0.0.1:4173', {
+  const result = await lighthouse(process.argv[2] || 'http://127.0.0.1:4175', {
     port: browser.port, output: ['json', 'html'], logLevel: 'error',
     onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
   });
@@ -22,4 +25,5 @@ try {
   }, null, 2));
 } finally {
   await browser.kill();
+  if (server) await new Promise(resolve => server.httpServer.close(resolve));
 }

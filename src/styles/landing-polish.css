@@ -1,0 +1,83 @@
+/* Una portada más editorial, con acciones claras y una demo compacta. */
+.lp { --lp-bg: #f8faf6; --lp-text: #153d2c; --lp-muted: #516859; background: var(--lp-bg); }
+.lp-header { max-width: 1280px; background: #ffffff; box-shadow: none; border-color: #dce7da; border-radius: 16px; }
+.lp-logo { color: #173e2c; }
+.lp-nav a { font-weight: 550; color: #486151; }
+.lp .lp-button { border-radius: 11px; font-weight: 650; letter-spacing: -.1px; }
+.lp .lp-button.lime { background: #174c35; border-color: #174c35; color: #fff; box-shadow: 0 4px 10px #183b2510; }
+.lp .lp-button.lime:hover { background: #216346; border-color: #216346; }
+.lp .lp-button.ghost, .lp .lp-button.outlined { background: #fff; border-color: #ccdbcd; color: #254d34; box-shadow: none; }
+.lp .lp-button.ghost:hover, .lp .lp-button.outlined:hover { background: #edf4e9; }
+.lp h1 { letter-spacing: -3px; font-weight: 650; }
+.lp h1 > span { color: #5b7b45; }
+.lp-eyebrow { border: 0; background: #eaf1df; color: #466137; border-radius: 100px; letter-spacing: 1px; }
+.lp-eyebrow .lp-tiny-icon { color: #456b35; }
+.lp-under-cta { color: #586a55; }
+.lp-hero-glow { display: none; }
+.lp-demo-window { border: 1px solid #d1dfce; box-shadow: 0 20px 55px #294b2910; }
+.lp-demo-top, .lp-demo-sidebar { background: #f5f8f0; }
+.lp-demo-stats > div { border-color: #e0e8d7; background: #f8faf5; }
+.lp-floating-booking { background: #fff; border-color: #dce7d7; box-shadow: 0 10px 26px #25452414; border-radius: 13px; }
+.lp .lp-floating-booking { animation: none; }
+.lp-floating-link { display: none; }
+.lp-orbit-label { color: #53694a; }
+.lp-industries { border-color: #dfe7d9; }
+.lp-industries button { min-height: 44px; border-radius: 100px; }
+.lp-tour { border-top: 1px solid #e3eade; }
+.lp-feature-card { border: 1px solid #e0e7da; background: #fff !important; box-shadow: none; }
+.lp-feature-card:first-child { background: #edf4e5 !important; }
+.lp-feature-card h3 { font-size: 21px; letter-spacing: -.5px; }
+.lp-feature-card p { line-height: 1.75; }
+.lp-feature-icon { border: 1px solid #dce7d3; background: #f6f9f0; border-radius: 13px; color: #3f6938; }
+.lp-how { border-block: 1px solid #e0e8d7; background: #edf3e7; }
+.lp-how h2, .lp-pricing h2 { letter-spacing: -1.6px; }
+.lp-step-top > span { font-size: 38px; font-weight: 500; color: #759267; }
+.lp-price-card { border: 1px solid #dce5d7; border-radius: 20px; background: #fff; }
+.lp-price-card.recommended { border: 2px solid #426e38; background: #f5f9ee; box-shadow: 0 10px 35px #284e2410; }
+.lp-recommended { color: #fff; background: #426e38; border-radius: 100px; }
+.lp-plan-name { font-weight: 650; }
+.lp-plan-feature { line-height: 1.6; align-items: flex-start; }
+.lp-plan-feature svg { margin-top: 4px; flex-shrink: 0; color: #4c773e; }
+.lp-price { letter-spacing: -1.7px; font-weight: 650; }
+.lp-trust { border: 1px solid #dfe7d9; border-radius: 16px; background: #fff; padding: 24px; }
+.lp-final { border: 0; background: #183f2d; color: #fff; }
+.lp-final h2, .lp-final h2 span { color: #f3f7e7; }
+.lp-final p, .lp-final-note, .lp-final .lp-kicker { color: #c5d5bd; }
+.lp .lp-final .lp-kicker { color: #c5d5bd !important; }
+.lp-final .lp-button.lime { background: #e1f0b9; border-color: #e1f0b9; color: #1b422b; }
+.lp-footer { background: #f8faf6; }
+@media(min-width:1100px) {
+  .lp-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); max-width: 1280px; padding: 88px 40px 95px; gap: 46px; }
+  .lp-hero-copy { text-align: left; }
+  .lp h1 { font-size: clamp(50px, 4.6vw, 67px); line-height: 1.1; }
+  .lp-hero-copy > p { margin-left: 0; font-size: 17px; max-width: 440px; }
+  .lp-hero-buttons, .lp-under-cta { justify-content: flex-start; }
+  .lp-product-visual { width: 100%; margin: 0; padding-bottom: 35px; }
+  .lp-demo-sidebar { width: 127px; padding: 20px 10px; }
+  .lp-demo-main { padding: 22px 18px 17px; }
+  .lp-demo-brand { font-size: 20px; }
+  .lp-demo-store { gap: 5px; }
+  .lp-demo-nav { font-size: 11px; padding: 10px 8px; gap: 8px; }
+  .lp-demo-stats strong { font-size: 29px; }
+  .lp-floating-booking { min-width: 300px; right: -12px; bottom: 0; }
+  .lp-orbit-label { justify-content: flex-start; padding-left: 8px; }
+}
+@media(max-width:600px) {
+  .lp-hero { padding-top: 34px; gap: 28px; }
+  .lp h1 { font-size: clamp(36px, 9.3vw, 48px); letter-spacing: -1.9px; }
+  .lp-hero-copy > p { font-size: 15px; line-height: 1.7; max-width: 350px; }
+  .lp-hero-buttons { width: 100%; gap: 9px; }
+  .lp-hero-buttons .lp-button { flex: 1; min-height: 49px; padding: 13px 10px; font-size: 13px; }
+  .lp-demo-body { min-height: 0; }
+  .lp-demo-stats { margin-top: 13px; }
+  .lp-demo-agenda-title { margin-top: 16px; }
+  .lp-demo-row { padding: 10px 0; }
+  .lp-demo-rows .lp-demo-row:nth-child(3) { display: none; }
+  .lp-demo-footer { margin-top: 9px; }
+  .lp-tour { padding-top: 50px; }
+  .lp-section-heading h2, .lp-how h2, .lp-pricing h2 { font-size: 32px; }
+  .lp-price-card { padding: 27px; }
+  .lp-trust { margin-inline: 20px; padding: 23px; }
+  .lp-final { margin-inline: 16px; padding: 48px 24px; }
+  .lp-final h2 { font-size: 32px; }
+}

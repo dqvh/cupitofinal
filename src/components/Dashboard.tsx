@@ -1,3 +1,5 @@
+import WorkspaceSearch from "./WorkspaceSearch";
+import "../styles/workspace-ui.css";
 import { validateHours, validateTransfer } from "../lib/scheduling";
 import { PLAN_FEATURES } from "../lib/plans";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
@@ -156,6 +158,16 @@ export default function Dashboard() {
   } = store;
   const sessionUserId = store.sessionUserId;
   const [view, setView] = useState<View>("hoy");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("negocio");
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [view, settingsTab]);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSearchOpen(open => !open); }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, []);
   const [selDate, setSelDate] = useState(dateKey(new Date()));
   const [weekStart, setWeekStart] = useState(0);
   const [showNew, setShowNew] = useState(false);
@@ -349,6 +361,8 @@ export default function Dashboard() {
     .filter((b) => proFilter === "todos" || b.proId === proFilter)
     .sort((a, b) => a.time.localeCompare(b.time));
 
+  const nextBooking = dayBookings.find(booking => (booking.status === "confirmada" || booking.status === "pendiente") && (booking.date > today || (booking.date === today && booking.time >= new Date().toTimeString().slice(0, 5))));
+  const pendingBookings = data.bookings.filter(booking => booking.status === "pendiente").length;
   const dayIncome = dayBookings
     .filter((b) => b.status === "confirmada" || b.status === "atendida")
     .reduce((acc, b) => acc + (data.services.find((s) => s.id === b.serviceId)?.price ?? 0), 0);
@@ -397,10 +411,10 @@ export default function Dashboard() {
   const sectionOf = (v: View) => SECTIONS.find((s) => s.items.some((i) => i.id === v))?.label ?? "";
 
   return (
-    <div className="app-bg flex min-h-screen flex-col">
+    <div className="workspace-app app-bg flex min-h-screen flex-col">
       {!store.isCloudSyncActive && (
-        <div className="sticky top-0 z-50 flex w-full items-center justify-center gap-3 bg-amber-400 px-4 py-2 text-center text-ink">
-          <p className="text-sm font-bold">⚠️ Estás en modo local (nube no conectada: {getSupabaseStatus().reason}). Lo que cargues acá NO se ve en el celu. Hacé Redeploy en Vercel después de agregar las variables.</p>
+        <div className="workspace-local-notice sticky top-0 z-50 flex w-full items-center justify-center gap-3 bg-amber-400 px-4 py-2 text-center text-ink">
+          <p className="text-sm font-bold">Modo local: los cambios se guardan sólo en este dispositivo. Para usar la agenda desde otros equipos, contactá a hola@cupito.app.</p>
         </div>
       )}
       {impersonating && (
@@ -443,7 +457,8 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+          <button type="button" className="workspace-nav-search mx-4 mt-4" onClick={() => setSearchOpen(true)}><span>Buscar en el panel</span><kbd>Ctrl K</kbd></button>
+          <nav aria-label="Navegación del panel" className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
             {SECTIONS.map((sec) => (
               <div key={sec.label}>
                 <p className="px-3 pb-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
@@ -456,6 +471,7 @@ export default function Dashboard() {
                     return (
                       <button
                         key={n.id}
+                        aria-current={active ? "page" : undefined}
                         onClick={() => setView(n.id)}
                         className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold transition-all duration-150 ${
                           active
@@ -606,6 +622,7 @@ export default function Dashboard() {
               mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
             }`}
             aria-hidden={!mobileMenuOpen}
+            style={{ visibility: mobileMenuOpen ? "visible" : "hidden" }}
           >
             {/* Backdrop con blur */}
             <div
@@ -716,8 +733,8 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <main className="mx-auto max-w-5xl px-5 py-8 pb-28 sm:px-8">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-6">
+          <main className="workspace-content mx-auto max-w-5xl px-5 py-8 pb-28 sm:px-8">
+            <div className="workspace-page-heading flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-6">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
@@ -736,7 +753,7 @@ export default function Dashboard() {
                   </div>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-xs">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    En vivo
+                    {store.isCloudSyncActive ? "Nube conectada" : "Este dispositivo"}
                   </span>
                   <CopyButton
                     text={`https://cupito.app/${user.slug}`}
@@ -749,6 +766,7 @@ export default function Dashboard() {
                 <p className="mt-1 text-sm text-slate-500">{viewTitle[1]}</p>
               </div>
               <div className="flex items-center gap-2.5">
+                <button type="button" className="workspace-nav-search" onClick={() => setSearchOpen(true)} aria-label="Buscar acciones">Buscar <span aria-hidden="true">⌕</span></button>
                 <button
                   type="button"
                   onClick={() => setShowCalendarModal(true)}
@@ -868,42 +886,7 @@ export default function Dashboard() {
 
             {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} onOpenOnboarding={() => setShowOnboarding(true)} />}
 
-            {view === "hoy" && (
-              <div className="welcome mt-6 flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-xs border border-emerald-100">
-                    <Sun className="h-6 w-6" />
-                  </span>
-                  <div>
-                    <h2 className="font-display text-lg font-bold text-emerald-950">
-                      ¡Hola, {user.name.split(" ")[0]}! Tu día, bajo control.
-                    </h2>
-                    <p className="text-sm text-emerald-800/90 mt-0.5">
-                      Tenés <b>{data.bookings.filter((b) => b.date === today && b.status !== "cancelada").length} turnos</b> para hoy
-                      {data.bookings.filter((b) => b.date === today && b.status === "pendiente").length > 0
-                        ? ` y ${data.bookings.filter((b) => b.date === today && b.status === "pendiente").length} pendiente${data.bookings.filter((b) => b.date === today && b.status === "pendiente").length === 1 ? "" : "s"} de confirmar`
-                        : " · Todo listo para recibir a tus clientes"}.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setPrefill(null); setShowNew(true); }}
-                    className="btn primary flex items-center gap-1.5"
-                  >
-                    <IconPlus className="h-4 w-4" /> Nuevo turno
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setView("reservas")}
-                    className="btn flex items-center gap-1.5 bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-50"
-                  >
-                    Ver agenda completa →
-                  </button>
-                </div>
-              </div>
-            )}
+            {view === "hoy" && <div className="workspace-greeting"><Sun size={21} aria-hidden="true" /><p>Hola, {user.name.split(" ")[0]}. <span>Tenés {data.bookings.filter(booking => booking.date === today && booking.status !== "cancelada").length} turnos para hoy.</span></p></div>}
 
             {pendingClaims > 0 && (
               <div className="pop-in mt-6 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 shadow-xs">
@@ -918,6 +901,20 @@ export default function Dashboard() {
             {/* ============ HOY ============ */}
             {view === "hoy" && (
               <div className="pop-in mt-8">
+                <div className="workspace-overview">
+                  <section className="workspace-next" aria-label="Próximo turno">
+                    <span className="workspace-next-label"><IconClock className="h-4 w-4" /> {nextBooking ? "Lo próximo en tu agenda" : "Tu agenda, al día"}</span>
+                    <h2>{nextBooking ? nextBooking.time + " · " + nextBooking.client : "Todo listo para tu próximo cliente."}</h2>
+                    <p>{nextBooking ? (data.services.find(service => service.id === nextBooking.serviceId)?.name || "Turno") + " · " + fmtLong(selDate) : "No quedan turnos por atender en la fecha seleccionada. Podés agendar uno o compartir tu enlace."}</p>
+                    <button type="button" onClick={() => { if (nextBooking) setDetailBooking(nextBooking); else { setPrefill(null); setShowNew(true); } }}>{nextBooking ? "Ver detalle del turno" : "Agendar un turno"}<IconArrow className="h-4 w-4" /></button>
+                  </section>
+                  <section className="workspace-attention" aria-label="Acciones pendientes">
+                    <h2>A un paso de resolverlo</h2>
+                    <button type="button" onClick={() => { setFilter("pendiente"); setSearchQuery(""); setProFilter("todos"); setView("reservas"); }}><span>Turnos por confirmar</span><strong>{pendingBookings}</strong></button>
+                    <button type="button" onClick={() => setView("lista")}><span>Personas en lista de espera</span><strong>{data.waitlist.length}</strong></button>
+                    <button type="button" onClick={() => setView("pagina")}><span>Compartir mi página de reservas</span><IconArrow className="h-4 w-4" /></button>
+                  </section>
+                </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setWeekStart((w) => w - 7)} aria-label="Semana anterior" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4 rotate-180" /></button>
                   <div className="no-scrollbar flex flex-1 gap-2 overflow-x-auto py-1">
@@ -987,7 +984,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                      <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} badge="Hoy" trend="En tu grilla" />
+                      <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} badge={selDate === today ? "Hoy" : "Día elegido"} trend="En tu grilla" />
                       <StatCard label="Ingresos estimados" value={fmtMoney(dayIncome)} icon={<IconWallet className="h-5 w-5" />} accent badge="Estimado" trend="Según servicios" />
                       <StatCard label="Ocupación" value={`${occupancy}%`} icon={<IconChart className="h-5 w-5" />} badge="Capacidad" trend="Del horario de atención" />
                     </div>
@@ -1489,12 +1486,12 @@ export default function Dashboard() {
 
             {/* ============ AJUSTES ============ */}
             {view === "ajustes" && (
-              <SettingsView user={user} settings={data.settings} onSaveProfile={(b, n) => { saveProfile(b, n); toast("Perfil actualizado ✓"); }} onSelectPlan={(p) => setCheckoutPlan(p)} />
+              <SettingsView initialTab={settingsTab} onTabChange={setSettingsTab} user={user} settings={data.settings} onSaveProfile={(b, n) => { saveProfile(b, n); toast("Perfil actualizado ✓"); }} onSelectPlan={(p) => setCheckoutPlan(p)} />
             )}
           </main>
 
           {/* Mobile Bottom Navigation Bar */}
-          <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-slate-200 bg-white/95 backdrop-blur-md px-2 shadow-lg lg:hidden" aria-label="Navegación móvil">
+          <nav className="workspace-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-slate-200 bg-white/95 backdrop-blur-md px-2 shadow-lg lg:hidden" aria-label="Navegación móvil">
             <button
               type="button"
               onClick={() => setView("hoy")}
@@ -1583,6 +1580,12 @@ export default function Dashboard() {
       )}
       {notifyWl && <WaitlistNotifyModal info={notifyWl} businessName={user.business} onClose={() => setNotifyWl(null)} />}
       {serviceModal.open && <ServiceModal service={serviceModal.id ? data.services.find((s) => s.id === serviceModal.id) : undefined} onClose={() => setServiceModal({ open: false })} />}
+      {searchOpen && <WorkspaceSearch
+        items={[...SECTIONS.flatMap(section => section.items.map(item => ({ id: item.id, label: item.label, group: section.label }))), { id: "settings:horarios", label: "Horarios de atención", group: "Ajustes" }, { id: "settings:pagos", label: "Datos de cobro y señas", group: "Ajustes" }]}
+        onSelect={id => { if (id.startsWith("settings:")) { setSettingsTab(id.slice(9) as SettingsTab); setView("ajustes"); } else setView(id as View); }}
+        onNew={() => { setPrefill(null); setShowNew(true); }}
+        onClose={() => setSearchOpen(false)}
+      />}
       {checkoutPlan && <PlanCheckout plan={checkoutPlan} onClose={() => {
         setCheckoutPlan(null);
         // El onboarding que habíamos diferido aparece recién ahora.
@@ -1687,17 +1690,6 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Botón flotante móvil para agendar turno rápido */}
-      <div className="fixed bottom-5 right-5 z-40 sm:hidden pop-in">
-        <button
-          onClick={() => { setPrefill(null); setShowNew(true); sound.playPop(); }}
-          className="btn-press flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 px-4 py-3 font-display text-xs font-black text-white shadow-xl shadow-emerald-900/30 border-2 border-white/20 active:scale-95"
-          aria-label="Nuevo turno rápido"
-        >
-          <IconPlus className="h-4 w-4" />
-          <span>Turno</span>
-        </button>
-      </div>
     </div>
   );
 }
@@ -5351,8 +5343,9 @@ function LockedFeature({ icon, title, desc, onUpgrade }: { icon: ReactNode; titl
 /* ============ AJUSTES ============ */
 type SettingsTab = "negocio" | "pagina" | "pagos" | "horarios" | "plan" | "cuenta";
 
-function SettingsView({ user, settings, onSaveProfile, onSelectPlan }: { user: NonNullable<ReturnType<typeof useStore>["user"]>; settings: BizSettings; onSaveProfile: (b: string, n: string) => void; onSelectPlan: (p: Plan) => void }) {
-  const [tab, setTab] = useState<SettingsTab>("negocio");
+function SettingsView({ user, settings, onSaveProfile, onSelectPlan, initialTab = "negocio", onTabChange }: { initialTab?: SettingsTab; onTabChange: (tab: SettingsTab) => void; user: NonNullable<ReturnType<typeof useStore>["user"]>; settings: BizSettings; onSaveProfile: (b: string, n: string) => void; onSelectPlan: (p: Plan) => void }) {
+  const tab = initialTab;
+  const setTab = onTabChange;
   const { updateSettings } = useStore();
 
   const tabs: { id: SettingsTab; label: string; icon: ReactNode }[] = [

@@ -40,6 +40,7 @@ import { LegalModal, TERMS_DOC, PRIVACY_DOC } from "./components/kit";
 import "./styles/landing.css";
 import "./styles/landing-light.css";
 import "./styles/landing-refinement.css";
+import "./styles/landing-polish.css";
 
 const names = [
   "Lucía Fernández",
@@ -235,13 +236,12 @@ export default function Landing() {
               MENOS IDAS Y VUELTAS. MÁS CUPITO. <ChevronRight size={13} />
             </a>
             <h1>
-              Tu negocio, en orden.
+              Menos mensajes.
               <br />
-              <span>Tu tiempo, de vuelta.</span>
+              <span>Más turnos.</span>
             </h1>
             <p>
-              Tus clientes reservan. Tu agenda se organiza. Y vos volvés a enfocarte en lo que más
-              te gusta de tu negocio.
+              Tu página de reservas, agenda y clientes en un solo lugar. Compartí un enlace y dejá que elijan su horario.
             </p>
             <div className="lp-hero-buttons">
               <a
@@ -265,7 +265,7 @@ export default function Landing() {
                 <Check size={13} /> Sin tarjeta
               </span>
               <span>
-                <Check size={13} /> A tu ritmo
+                <Check size={13} /> 25 reservas gratis
               </span>
               <span>
                 <Check size={13} /> Hecho en Argentina
