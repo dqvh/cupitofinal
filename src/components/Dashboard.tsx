@@ -2,7 +2,7 @@ import WorkspaceSearch from "./WorkspaceSearch";
 import "../styles/workspace-ui.css";
 import { validateHours, validateTransfer } from "../lib/scheduling";
 import { PLAN_FEATURES } from "../lib/plans";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useRef, type FormEvent, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
   useStore,
@@ -13,6 +13,8 @@ import {
   fmtMoney,
   fmtLong,
   fmtDateHuman,
+  fmtDateNatural,
+  getDayHours,
   isPaid,
   getSubscriptionStatus,
   PLAN_META,
@@ -90,12 +92,101 @@ import {
 import "../styles/dashboard.css";
 import { AgendaWeek } from "./AgendaWeek";
 import { CustomerHistoryModal, type CustomerStats } from "./CustomerCRM";
-import { Sun, Download, MoreHorizontal, Smartphone, List, Calendar, Ban, Zap, Phone, ArrowUpRight, Star } from "lucide-react";
+import { Sun, Download, MoreHorizontal, Smartphone, List, Calendar, Ban, Zap, Phone, ArrowUpRight, Star, Share2 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import BookingRow from "./BookingRow";
 import SetupGuide from "./SetupGuide";
 import EmptyState from "./EmptyState";
-import Modal from "./Modal";
+
+function ItemActionMenu({
+  onEdit,
+  onDelete,
+  deleteLabel = "Eliminar",
+  editLabel = "Editar",
+  ariaLabel = "Opciones",
+}: {
+  onEdit?: () => void;
+  onDelete?: () => void;
+  deleteLabel?: string;
+  editLabel?: string;
+  ariaLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative inline-block" ref={menuRef}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(!open);
+        }}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-xs transition-colors hover:bg-slate-50 hover:text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+      >
+        <MoreHorizontal className="h-5 w-5" />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-30 mt-1 min-w-[140px] overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5"
+        >
+          {onEdit && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onEdit();
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <IconPencil className="h-3.5 w-3.5 text-slate-500" />
+              <span>{editLabel}</span>
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onDelete();
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+            >
+              <IconTrash className="h-3.5 w-3.5 text-rose-500" />
+              <span>{deleteLabel}</span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type View = "hoy" | "reservas" | "clientes" | "lista" | "stats" | "servicios" | "equipo" | "tienda" | "promos" | "pagina" | "suscripcion" | "ajustes";
 
@@ -178,7 +269,7 @@ export default function Dashboard() {
   const [showNew, setShowNew] = useState(false);
   const [rescheduling, setRescheduling] = useState<Booking | null>(null);
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
-  const [prefill, setPrefill] = useState<{ client: string; phone: string; serviceId?: string; waitlistId?: string; time?: string; proId?: string } | null>(null);
+  const [prefill, setPrefill] = useState<{ date?: string; client?: string; phone?: string; serviceId?: string; waitlistId?: string; time?: string; proId?: string } | null>(null);
   const [serviceModal, setServiceModal] = useState<{ open: boolean; id?: string }>({ open: false });
   const [filter, setFilter] = useState<"todas" | BookingStatus>("todas");
   const [proFilter, setProFilter] = useState<string>("todos");
@@ -205,19 +296,10 @@ export default function Dashboard() {
   const [showPreviewAccordion, setShowPreviewAccordion] = useState(false);
 
   const handleDeleteBookingWithUndo = (id: string) => {
-    const bookingToDelete = data.bookings.find((b) => b.id === id);
+    const bookingToDelete = data?.bookings.find((b) => b.id === id);
     if (!bookingToDelete) return;
     removeBooking(id);
-    toast("Reserva eliminada.", {
-      action: {
-        label: "Deshacer",
-        onClick: () => {
-          store.restoreBooking(bookingToDelete);
-          toast("Reserva restaurada ✓");
-        },
-      },
-      duration: 8000,
-    });
+    toast("Reserva eliminada.");
   };
 
   useEffect(() => {
@@ -390,7 +472,20 @@ export default function Dashboard() {
     .filter((b) => b.status === "confirmada" || b.status === "atendida")
     .reduce((acc, b) => acc + (data.services.find((s) => s.id === b.serviceId)?.price ?? 0), 0);
 
-  const daySlots = slotsForDay(data.settings.hours[dayOfWeek(selDate)]);
+  const daySlots = slotsForDay(getDayHours(data.settings, selDate));
+  const freeSlots = useMemo(() => {
+    return daySlots.filter((slotTime) => {
+      const sMin = toMinutes(slotTime);
+      return !dayBookings.some((b) => {
+        if (b.status === "cancelada") return false;
+        if (proFilter !== "todos" && b.proId && b.proId !== proFilter) return false;
+        const dur = serviceDurationOf(data.services, b.serviceId, data.professionals.find((p) => p.id === b.proId));
+        const bStart = toMinutes(b.time);
+        const bEnd = bStart + dur;
+        return sMin >= bStart && sMin < bEnd;
+      });
+    });
+  }, [daySlots, dayBookings, proFilter, data.services, data.professionals]);
   const occupancy = Math.min(100, Math.round((dayBookings.filter((b) => b.status !== "cancelada").length / Math.max(1, daySlots.length)) * 100));
 
   const upcoming = data.bookings
@@ -798,7 +893,7 @@ export default function Dashboard() {
               return null;
             })()}
 
-            {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} onOpenOnboarding={() => setShowOnboarding(true)} />}
+            {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} />}
 
             {view === "hoy" && <div className="workspace-greeting"><Sun size={21} aria-hidden="true" /><p>Hola, {user.name.split(" ")[0]}. <span>Tenés {data.bookings.filter(booking => booking.date === today && booking.status !== "cancelada").length} turnos para hoy.</span></p></div>}
 
@@ -814,35 +909,58 @@ export default function Dashboard() {
 
             {/* ============ HOY ============ */}
             {view === "hoy" && (
-              <div className="pop-in mt-8">
-                <div className="workspace-overview">
-                  <section className="workspace-next" aria-label="Próximo turno">
-                    <span className="workspace-next-label"><IconClock className="h-4 w-4 text-[#16A34A]" /> {nextBooking ? "Lo próximo en tu agenda" : "Tu agenda, al día"}</span>
-                    <h2>{nextBooking ? `Próximo: ${nextBooking.time} · ${nextBooking.client} (${data.services.find(service => service.id === nextBooking.serviceId)?.name || "Turno"})` : "Todo listo para tu próximo cliente."}</h2>
-                    <p>{nextBooking ? `${fmtLong(selDate)} · ${data.services.find(service => service.id === nextBooking.serviceId)?.duration || 30} min` : "No quedan turnos por atender en la fecha seleccionada. Podés agendar uno o compartir tu enlace."}</p>
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <button type="button" onClick={() => { if (nextBooking) setDetailBooking(nextBooking); else { setPrefill(null); setShowNew(true); } }}>
-                        {nextBooking ? "Ver detalle" : "Nueva reserva"}<IconArrow className="h-4 w-4" />
-                      </button>
-                      {nextBooking?.phone && (
-                        <a
-                          href={createWhatsAppUrl(nextBooking.phone, `Hola ${nextBooking.client.split(" ")[0]}! Te escribo desde ${user.business} por tu turno.`)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-xs font-bold text-[#1D1D1F] hover:bg-[#F5F5F7] transition-colors"
-                        >
-                          <IconWhatsApp className="h-3.5 w-3.5 text-[#16A34A]" /> WhatsApp
-                        </a>
-                      )}
+              <div className="pop-in mt-6">
+                {/* Badges compactos de acciones pendientes y bloqueo rápido */}
+                <section className="workspace-attention" aria-label="Acciones pendientes">
+                  <h2 className="sr-only">Acciones pendientes</h2>
+                  <button
+                    type="button"
+                    onClick={() => { setFilter("pendiente"); setSearchQuery(""); setProFilter("todos"); setView("reservas"); }}
+                    className="workspace-badge"
+                  >
+                    <span>Turnos por confirmar</span>
+                    <strong>{pendingBookings}</strong>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setView("lista")}
+                    className="workspace-badge"
+                  >
+                    <span>Lista de espera</span>
+                    <strong>{data.waitlist.length}</strong>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBlockPrefillTime("12:00");
+                      setShowBlockModal(true);
+                    }}
+                    className="workspace-badge-cta"
+                  >
+                    <IconLock className="h-3.5 w-3.5" />
+                    <span>Bloquear horario</span>
+                  </button>
+                </section>
+
+                {nextBooking && (
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-2.5 text-xs text-emerald-950 shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <IconClock className="h-3 w-3" />
+                      </span>
+                      <span>
+                        <strong>Próximo turno:</strong> {nextBooking.time} hs · {nextBooking.client} ({data.services.find(s => s.id === nextBooking.serviceId)?.name || "Turno"})
+                      </span>
                     </div>
-                  </section>
-                  <section className="workspace-attention" aria-label="Acciones pendientes">
-                    <h2>A un paso de resolverlo</h2>
-                    <button type="button" onClick={() => { setFilter("pendiente"); setSearchQuery(""); setProFilter("todos"); setView("reservas"); }}><span>Turnos por confirmar</span><strong>{pendingBookings}</strong></button>
-                    <button type="button" onClick={() => setView("lista")}><span>Personas en lista de espera</span><strong>{data.waitlist.length}</strong></button>
-                    <button type="button" onClick={() => setView("pagina")}><span>Compartir mi página de reservas</span><IconArrow className="h-4 w-4" /></button>
-                  </section>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setDetailBooking(nextBooking)}
+                      className="font-bold text-emerald-800 underline hover:text-emerald-950"
+                    >
+                      Ver detalle →
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <button onClick={() => setWeekStart((w) => w - 7)} aria-label="Semana anterior" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4 rotate-180" /></button>
                   <div className="no-scrollbar flex flex-1 gap-2 overflow-x-auto py-1">
@@ -906,6 +1024,10 @@ export default function Dashboard() {
                         setSelDate(k);
                         setAgendaView("day");
                       }}
+                      onSlotClick={(date, time) => {
+                        setPrefill({ date, time, proId: proFilter !== "todos" ? proFilter : undefined });
+                        setShowNew(true);
+                      }}
                       onOpen={(b) => setRescheduling(b)}
                     />
                   </div>
@@ -923,14 +1045,97 @@ export default function Dashboard() {
                       </div>
                     )}
 
-                    <p className="mt-8 font-display text-lg font-bold text-ink">
-                      {fmtLong(selDate)}
-                      <span className="ml-2 text-sm font-semibold text-inkmute">{dayBookings.length === 0 ? "· sin turnos todavía" : `· ${dayBookings.length} reserva${dayBookings.length === 1 ? "" : "s"}`}</span>
-                    </p>
+                    <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-display text-lg sm:text-xl font-extrabold text-slate-900 capitalize">
+                          {fmtDateNatural(selDate)}
+                        </h3>
+                        <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                          {dayBookings.length === 0 ? "Sin turnos agendados todavía" : `${dayBookings.length} reserva${dayBookings.length === 1 ? "" : "s"}`}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrefill({ date: selDate, proId: proFilter !== "todos" ? proFilter : undefined });
+                          setShowNew(true);
+                        }}
+                        className="btn-press inline-flex items-center gap-1.5 rounded-full bg-[#245442] hover:bg-[#1C4335] text-white px-3.5 py-1.5 text-xs font-bold shadow-xs"
+                      >
+                        <IconPlus className="h-3.5 w-3.5 text-white" /> Nuevo turno
+                      </button>
+                    </div>
+
+                    {/* Huecos libres interactivos para crear turno con 1 toque */}
+                    {freeSlots.length > 0 && (
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200/70 bg-slate-50/70 p-3">
+                        <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1">
+                          <IconClock className="h-3.5 w-3.5 text-slate-400" /> Huecos libres:
+                        </span>
+                        {freeSlots.slice(0, 8).map((slotTime) => (
+                          <button
+                            key={slotTime}
+                            type="button"
+                            onClick={() => {
+                              setPrefill({
+                                date: selDate,
+                                time: slotTime,
+                                proId: proFilter !== "todos" ? proFilter : undefined,
+                              });
+                              setShowNew(true);
+                            }}
+                            className="agenda-free-slot"
+                            title="Tocar para agendar turno en este horario"
+                          >
+                            <IconPlus className="h-3 w-3" />
+                            <span>{slotTime} hs</span>
+                          </button>
+                        ))}
+                        {freeSlots.length > 8 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPrefill({
+                                date: selDate,
+                                time: freeSlots[8],
+                                proId: proFilter !== "todos" ? proFilter : undefined,
+                              });
+                              setShowNew(true);
+                            }}
+                            className="text-xs font-bold text-emerald-700 hover:underline px-1.5"
+                          >
+                            +{freeSlots.length - 8} más
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {dayBookings.length === 0 ? (
-                      <EmptyState text="Nadie reservó este día… todavía." sub="Creá una reserva manual o compartí tu link para que lleguen solas."
-                        action={<button onClick={() => { setPrefill(null); setShowNew(true); }} className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 font-display text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition-all hover:-translate-y-0.5"><IconPlus className="h-4 w-4" /> Crear reserva</button>} />
+                      <EmptyState
+                        text="Nadie reservó este día… todavía."
+                        sub="Creá una reserva manual o compartí tu enlace para que lleguen solas."
+                        action={
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPrefill({ date: selDate, proId: proFilter !== "todos" ? proFilter : undefined });
+                                setShowNew(true);
+                              }}
+                              className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 font-display text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition-all hover:-translate-y-0.5"
+                            >
+                              <IconPlus className="h-4 w-4" /> Crear turno
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowShareModal(true)}
+                              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 font-display text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 transition-all hover:-translate-y-0.5"
+                            >
+                              <Share2 className="h-4 w-4 text-emerald-600" /> Compartir enlace
+                            </button>
+                          </div>
+                        }
+                      />
                     ) : (
                       <div className="mt-4 space-y-3">
                         {dayBookings.map((b) => (
@@ -1075,28 +1280,14 @@ export default function Dashboard() {
                     </div>
 
                     <div className="mt-4">
-                      <AgendaGrid
-                        date={gridDate}
-                        bookings={data.bookings}
+                      <AgendaWeek
+                        dates={[gridDate]}
+                        records={data.bookings}
                         services={data.services}
                         professionals={data.professionals}
-                        hours={data.settings.hours}
-                        blockedSlots={data.blockedSlots || []}
-                        onSelectSlot={(time, proId) => {
-                          setPrefill({ client: "", phone: "", time, proId });
-                          setShowNew(true);
-                        }}
-                        onSelectBooking={(b) => setDetailBooking(b)}
-                        onBlockSlot={(time) => {
-                          setBlockPrefillTime(time);
-                          setShowBlockModal(true);
-                        }}
-                        onUnblockSlot={(id) => {
-                          removeBlockedSlot(id);
-                          toast("Horario desbloqueado ✓");
-                        }}
-                        onReschedule={(b) => setRescheduling(b)}
-                        businessName={user.business}
+                        todayKey={today}
+                        onDay={(d) => setGridDate(d)}
+                        onOpen={(b) => setDetailBooking(b)}
                       />
                     </div>
                   </div>
@@ -1339,10 +1530,11 @@ export default function Dashboard() {
                     <div key={s.id} className="group card card-hover p-6">
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="font-display text-xl font-extrabold text-ink">{s.name}</h3>
-                        <div className="flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                          <button onClick={() => setServiceModal({ open: true, id: s.id })} aria-label={`Editar ${s.name}`} className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-evergreen hover:text-evergreen"><IconPencil className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => { store.removeService(s.id); toast(`"${s.name}" eliminado.`, "warn"); }} aria-label={`Eliminar ${s.name}`} className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral"><IconTrash className="h-3.5 w-3.5" /></button>
-                        </div>
+                        <ItemActionMenu
+                          ariaLabel={`Opciones de ${s.name}`}
+                          onEdit={() => setServiceModal({ open: true, id: s.id })}
+                          onDelete={() => { store.removeService(s.id); toast(`"${s.name}" eliminado.`, "warn"); }}
+                        />
                       </div>
                       <p className="mt-3 font-display text-3xl font-extrabold text-fern">{fmtMoney(s.price)}</p>
                       <p className="mt-1 text-sm text-inkmute">{s.duration} minutos · anticipo sugerido {fmtMoney(Math.round(s.price * 0.2))}</p>
@@ -1493,7 +1685,7 @@ export default function Dashboard() {
 
       {showNew && (
         <BookingModal
-          initialDate={selDate}
+          initialDate={prefill?.date || selDate}
           initialClient={prefill?.client}
           initialPhone={prefill?.phone}
           initialServiceId={prefill?.serviceId}
@@ -1561,12 +1753,14 @@ export default function Dashboard() {
         <BookingDetailModal
           b={detailBooking}
           service={serviceOf(detailBooking.serviceId)}
+          allServices={data.services}
           pro={data.professionals.find((p) => p.id === detailBooking.proId)}
           products={data.products}
           businessName={user.business}
           businessAddress={data.settings.address}
           onClose={() => setDetailBooking(null)}
           onStatus={(id, s) => {
+            const prevStatus = detailBooking.status;
             setStatus(id, s);
             if (s === "atendida") {
               const r = requestReview(id);
@@ -1574,21 +1768,24 @@ export default function Dashboard() {
                 r === "sent"
                   ? "Turno atendido · link de reseña enviado por email"
                   : "Turno atendido · sin email del cliente: pedile la reseña por WhatsApp",
-                r === "sent" ? "ok" : "warn"
+                r === "sent" ? "ok" : "warn",
+                { label: "Deshacer", onClick: () => setStatus(id, prevStatus) },
+                7000
               );
             } else if (s === "ausente") {
-              toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn");
+              toast("Marcado como no vino. Cuenta en tu tasa de ausencias.", "warn", { label: "Deshacer", onClick: () => setStatus(id, prevStatus) }, 7000);
             } else if (s === "cancelada") {
-              toast("Turno cancelado. El hueco quedó libre.");
+              toast("Turno cancelado. El hueco quedó libre.", "ok", { label: "Deshacer", onClick: () => setStatus(id, prevStatus) }, 7000);
             } else {
-              toast("Turno confirmado.");
+              toast("Turno confirmado.", "ok", { label: "Deshacer", onClick: () => setStatus(id, prevStatus) }, 7000);
             }
             setDetailBooking((prev) => (prev && prev.id === id ? { ...prev, status: s } : prev));
           }}
           onDelete={(id) => {
+            const target = data.bookings.find((x) => x.id === id);
             removeBooking(id);
             setDetailBooking(null);
-            toast("Reserva eliminada.", "warn");
+            toast("Reserva eliminada.", "warn", target ? { label: "Deshacer", onClick: () => store.restoreBooking(target) } : undefined, 7000);
           }}
           onVerify={(id) => {
             store.markDepositPaid(id, "transferencia");
@@ -1604,6 +1801,11 @@ export default function Dashboard() {
           onReschedule={(b) => {
             setRescheduling(b);
             setDetailBooking(null);
+          }}
+          onPay={(id, method, amount) => {
+            store.markBookingPaid(id, method, amount);
+            toast("Cobro registrado ✓");
+            setDetailBooking((prev) => (prev && prev.id === id ? { ...prev, paymentStatus: "total_pagado", paidAmount: amount } : prev));
           }}
         />
       )}
@@ -2082,6 +2284,7 @@ function downloadBookingCalendar(
 function BookingDetailModal({
   b,
   service,
+  allServices = [],
   pro,
   products,
   businessName,
@@ -2092,9 +2295,11 @@ function BookingDetailModal({
   onVerify,
   onReject,
   onReschedule,
+  onPay,
 }: {
   b: Booking;
   service?: Service;
+  allServices?: Service[];
   pro?: { id: string; name: string; color: string };
   products: Product[];
   businessName?: string;
@@ -2105,10 +2310,29 @@ function BookingDetailModal({
   onVerify: (id: string) => void;
   onReject: (id: string) => void;
   onReschedule: (b: Booking) => void;
+  onPay?: (id: string, method: "efectivo" | "tarjeta" | "transferencia", amount?: number) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const claimPending = !!b.depositClaim && !b.paidDeposit && b.status !== "cancelada";
   const cancelled = b.status === "cancelada";
+
+  const extraServicesList = (b.extraServiceIds || [])
+    .map((id) => allServices.find((s) => s.id === id))
+    .filter(Boolean) as Service[];
+  const mainServicePrice = service?.price || 0;
+  const extraServicesPrice = extraServicesList.reduce((acc, s) => acc + s.price, 0);
+  const totalServicesPrice = mainServicePrice + extraServicesPrice;
+
+  const productsTotal = (b.items || []).reduce((acc, it) => {
+    const p = products.find((x) => x.id === it.productId);
+    return acc + (p?.price || 0) * it.qty;
+  }, 0);
+
+  const totalAmount = totalServicesPrice + productsTotal;
+  const isFullyPaid = b.paymentStatus === "total_pagado";
+  const depositPaidAmount = b.paidDeposit ? Math.round(totalServicesPrice * 0.2) : 0;
+  const paidSoFar = isFullyPaid ? totalAmount : (b.paidAmount || depositPaidAmount);
+  const balancePending = isFullyPaid ? 0 : Math.max(0, totalAmount - paidSoFar);
 
   const statusConfig: Record<BookingStatus, { label: string; bg: string; text: string }> = {
     pendiente: { label: "Por confirmar", bg: "bg-amber-50 border-amber-200", text: "text-amber-800" },
@@ -2129,13 +2353,15 @@ function BookingDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-[85] flex items-end justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-xs sm:items-center"
+      className="cupito-modal-overlay"
       onClick={onClose}
     >
       <div
-        className="pop-in max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl"
+        className="cupito-modal w-full max-w-lg p-5 sm:p-6 shadow-2xl relative"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile bottom-sheet drag handle */}
+        <div className="mx-auto -mt-1 mb-3 h-1.5 w-12 rounded-full bg-slate-300 sm:hidden" />
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
@@ -2268,29 +2494,95 @@ function BookingDetailModal({
             </div>
           )}
 
-          {b.paidDeposit && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-900">✓ Seña cobrada y acreditada</span>
-              <span className="text-xs font-bold text-emerald-700">Pago registrado</span>
+          {/* Resumen de cobro y saldo */}
+          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/80 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                Resumen de cobro
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                  isFullyPaid
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    : b.paidDeposit
+                    ? "bg-amber-100 text-amber-800 border border-amber-200"
+                    : "bg-slate-200/70 text-slate-700"
+                }`}
+              >
+                {isFullyPaid ? "Total cobrado ✓" : b.paidDeposit ? "Seña acreditada" : "Pago pendiente"}
+              </span>
             </div>
-          )}
 
-          {b.items && b.items.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-1.5">
-              <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Productos comprados</span>
-              <div className="space-y-1">
-                {b.items.map((it) => {
-                  const p = products.find((x) => x.id === it.productId);
-                  return (
-                    <div key={it.productId} className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-800">{it.qty}× {p?.name ?? "Producto"}</span>
-                      <span className="font-bold text-slate-600">{p ? fmtMoney(p.price * it.qty) : "-"}</span>
-                    </div>
-                  );
-                })}
+            <div className="space-y-1.5 text-xs text-slate-700">
+              <div className="flex items-center justify-between">
+                <span>{service?.name || "Servicio"}</span>
+                <span className="font-semibold text-slate-900">{fmtMoney(mainServicePrice)}</span>
+              </div>
+              {extraServicesList.map((es) => (
+                <div key={es.id} className="flex items-center justify-between text-slate-600 pl-2 border-l-2 border-slate-300">
+                  <span>+ {es.name}</span>
+                  <span className="font-semibold text-slate-900">{fmtMoney(es.price)}</span>
+                </div>
+              ))}
+              {b.items && b.items.length > 0 && b.items.map((it) => {
+                const p = products.find((x) => x.id === it.productId);
+                return (
+                  <div key={it.productId} className="flex items-center justify-between text-slate-600 pl-2 border-l-2 border-slate-300">
+                    <span>+ {it.qty}× {p?.name ?? "Producto"}</span>
+                    <span className="font-semibold text-slate-900">{p ? fmtMoney(p.price * it.qty) : "-"}</span>
+                  </div>
+                );
+              })}
+
+              <div className="pt-2 border-t border-slate-200 flex items-center justify-between font-bold text-slate-900">
+                <span>Total</span>
+                <span>{fmtMoney(totalAmount)}</span>
+              </div>
+
+              {b.paidDeposit && (
+                <div className="flex items-center justify-between text-emerald-700 font-medium">
+                  <span>Seña acreditada</span>
+                  <span>- {fmtMoney(depositPaidAmount)}</span>
+                </div>
+              )}
+
+              <div className="pt-1 flex items-center justify-between text-sm font-extrabold text-slate-900">
+                <span>Saldo pendiente</span>
+                <span className={balancePending > 0 ? "text-emerald-800 font-black" : "text-slate-500"}>
+                  {fmtMoney(balancePending)}
+                </span>
               </div>
             </div>
-          )}
+
+            {!isFullyPaid && balancePending > 0 && onPay && (
+              <div className="pt-2.5 border-t border-slate-200">
+                <span className="block text-[11px] font-bold text-slate-600 mb-2">Registrar cobro:</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onPay(b.id, "efectivo", totalAmount)}
+                    className="btn-press rounded-xl border border-slate-200 bg-white py-2 px-2 text-xs font-bold text-slate-800 hover:bg-slate-100 hover:border-slate-300 shadow-xs text-center"
+                  >
+                    Efectivo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onPay(b.id, "transferencia", totalAmount)}
+                    className="btn-press rounded-xl border border-slate-200 bg-white py-2 px-2 text-xs font-bold text-slate-800 hover:bg-slate-100 hover:border-slate-300 shadow-xs text-center"
+                  >
+                    Transferencia
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onPay(b.id, "tarjeta", totalAmount)}
+                    className="btn-press rounded-xl border border-slate-200 bg-white py-2 px-2 text-xs font-bold text-slate-800 hover:bg-slate-100 hover:border-slate-300 shadow-xs text-center"
+                  >
+                    Tarjeta
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Action buttons: Calendar & Tools */}
@@ -4258,18 +4550,15 @@ function StatsView({ db }: { db: BizData }) {
               <div key={r.id} className="relative group rounded-xl border-2 border-ink/8 bg-white/60 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/20">
                 <div className="flex items-center justify-between">
                   <div className="flex gap-0.5 text-limedeep">{[...Array(5)].map((_, i) => <IconStar key={i} className={`h-3.5 w-3.5 ${i < r.rating ? "" : "opacity-20"}`} />)}</div>
-                  <button
-                    type="button"
-                    onClick={() => {
+                  <ItemActionMenu
+                    ariaLabel={`Opciones de reseña de ${r.client}`}
+                    onDelete={() => {
                       if (confirm(`¿Eliminar la reseña de ${r.client}?`)) {
                         removeReview(r.id);
                         toast("Reseña eliminada");
                       }
                     }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-coral hover:underline"
-                  >
-                    Eliminar
-                  </button>
+                  />
                 </div>
                 <p className="mt-2 text-sm leading-snug text-ink">“{r.text}”</p>
                 <p className="mt-2 font-display text-xs font-bold text-inkmute">{r.client} · {fmtLong(r.date)}</p>
@@ -4588,10 +4877,11 @@ function ShopAdmin() {
         <div key={p.id} className="group card card-hover p-6">
           <div className="flex items-start justify-between gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-lime/40 text-fern"><IconBag className="h-5 w-5" /></span>
-            <div className="flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              <button onClick={() => setModal({ open: true, id: p.id })} aria-label="Editar" className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-evergreen hover:text-evergreen"><IconPencil className="h-3.5 w-3.5" /></button>
-              <button onClick={() => { removeProduct(p.id); toast(`"${p.name}" eliminado de la tienda.`, "warn"); }} aria-label="Eliminar" className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral"><IconTrash className="h-3.5 w-3.5" /></button>
-            </div>
+            <ItemActionMenu
+              ariaLabel={`Opciones de ${p.name}`}
+              onEdit={() => setModal({ open: true, id: p.id })}
+              onDelete={() => { removeProduct(p.id); toast(`"${p.name}" eliminado de la tienda.`, "warn"); }}
+            />
           </div>
           <h3 className="mt-3 font-display text-xl font-extrabold text-ink">{p.name}</h3>
           <p className="mt-0.5 text-sm text-inkmute">{p.desc}</p>
@@ -4676,8 +4966,10 @@ function PromosView({ slug }: { slug: string }) {
               aria-label="Pausar/activar" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ${c.active ? "bg-fern" : "bg-ink/20"}`}>
               <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all duration-200 ${c.active ? "left-6" : "left-1"}`} />
             </button>
-            <button onClick={() => { removeCoupon(c.id); toast(`Cupón ${c.code} eliminado.`, "warn"); }} aria-label="Eliminar"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute opacity-0 transition-all hover:border-coral hover:text-coral group-hover:opacity-100"><IconTrash className="h-4 w-4" /></button>
+            <ItemActionMenu
+              ariaLabel={`Opciones de cupón ${c.code}`}
+              onDelete={() => { removeCoupon(c.id); toast(`Cupón ${c.code} eliminado.`, "warn"); }}
+            />
           </div>
         ))}
         <button onClick={() => setModal(true)} className="flex min-h-28 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-ink/25 text-inkmute transition-all duration-200 hover:-translate-y-1 hover:border-evergreen hover:text-evergreen">

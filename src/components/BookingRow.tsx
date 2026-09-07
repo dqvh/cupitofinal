@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode } from "react";
-import { MoreHorizontal, Check, CheckCircle2, XCircle, UserX, MessageCircle, Trash2, Eye } from "lucide-react";
+import { MoreHorizontal, Check, CheckCircle2, XCircle, UserX, MessageCircle, Trash2, Eye, Clock, UserCheck } from "lucide-react";
 import type { Booking, BookingStatus, Service, Product, Professional } from "../lib/store";
 import { fmtMoney, fmtLong } from "../lib/store";
 import { createWhatsAppUrl } from "../lib/phone";
@@ -119,10 +119,14 @@ export default function BookingRow({
               {b.client}
             </span>
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold ${sc.bg} ${sc.text}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${sc.bg} ${sc.text}`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${sc.dot}`} />
-              {sc.label}
+              {b.status === "pendiente" && <Clock size={11} className="shrink-0 text-amber-700" />}
+              {b.status === "confirmada" && <CheckCircle2 size={11} className="shrink-0 text-emerald-700" />}
+              {b.status === "atendida" && <UserCheck size={11} className="shrink-0 text-neutral-600" />}
+              {b.status === "cancelada" && <XCircle size={11} className="shrink-0 text-rose-600" />}
+              {b.status === "ausente" && <UserX size={11} className="shrink-0 text-neutral-500" />}
+              <span>{sc.label}</span>
             </span>
           </div>
 

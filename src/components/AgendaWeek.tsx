@@ -16,6 +16,7 @@ export function AgendaWeek({
   professionals,
   onDay,
   onOpen,
+  onSlotClick,
   todayKey,
 }: {
   dates: string[];
@@ -24,6 +25,7 @@ export function AgendaWeek({
   professionals?: Professional[];
   onDay: (date: string) => void;
   onOpen: (booking: Booking) => void;
+  onSlotClick?: (date: string, time?: string) => void;
   todayKey: string;
 }) {
   return (
@@ -87,10 +89,21 @@ export function AgendaWeek({
                 })
               ) : (
                 <div className="week-empty">
-                  Sin turnos
-                  <button type="button" onClick={() => onDay(date)}>
-                    Ver día <ChevronRight size={13} />
-                  </button>
+                  <span>Sin turnos</span>
+                  <div className="flex flex-col gap-1 mt-1">
+                    {onSlotClick && (
+                      <button
+                        type="button"
+                        onClick={() => onSlotClick(date)}
+                        className="text-xs font-bold text-emerald-800 hover:text-emerald-950 py-1"
+                      >
+                        + Agendar turno
+                      </button>
+                    )}
+                    <button type="button" onClick={() => onDay(date)}>
+                      Ver día <ChevronRight size={13} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -86,7 +86,24 @@
   .lp-tour { padding-top: 50px; }
   .lp-section-heading h2, .lp-how h2, .lp-pricing h2 { font-size: 32px; }
   .lp-price-card { padding: 27px; }
-  .lp-trust { margin-inline: 20px; padding: 23px; }
   .lp-final { margin-inline: 16px; padding: 48px 24px; }
   .lp-final h2 { font-size: 32px; }
+  .lp-benefits-grid { grid-template-columns: 1fr; gap: 14px; }
+  .lp-benefit-card { padding: 22px 20px; }
+  .lp-benefits-quantifiable { padding: 40px 20px; }
 }
+
+/* Beneficios cuantificables */
+.lp-benefits-quantifiable { max-width: 1240px; margin: 0 auto; padding: 60px 25px; }
+.lp-benefits-heading { text-align: center; margin-bottom: 38px; }
+.lp-benefits-heading h2 { font-size: clamp(26px, 3.8vw, 38px); letter-spacing: -1.5px; font-weight: 650; color: #173e2c; margin-top: 8px; }
+.lp-benefits-heading p { font-size: 15px; color: #516859; max-width: 520px; margin: 8px auto 0; }
+.lp-benefits-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.lp-benefit-card { border: 1px solid #dce7da; border-radius: 18px; background: #ffffff; padding: 32px 26px; display: flex; flex-direction: column; align-items: flex-start; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.lp-benefit-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px #284e240a; }
+.lp-benefit-icon { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: #f0f7ec; color: #15803d; margin-bottom: 18px; }
+.lp-benefit-metric { font-size: clamp(32px, 3.5vw, 42px); font-weight: 700; letter-spacing: -1.5px; line-height: 1.1; color: #173e2c; }
+.lp-benefit-kicker { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #15803d; margin-top: 4px; margin-bottom: 10px; }
+.lp-benefit-desc { font-size: 14px; line-height: 1.6; color: #516859; }
+.lp-plan-profile { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 100px; background: #edf6ec; color: #15803d; font-size: 12px; font-weight: 600; margin: 10px 0 6px; }
+

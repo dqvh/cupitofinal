@@ -52,8 +52,16 @@ const names = [
   "Sofía Martínez",
 ];
 
+const PLAN_PROFILES: Record<Plan, string> = {
+  semilla: "Trabajás solo",
+  crece: "Equipo de hasta 3",
+  escala: "Equipo grande y reportes",
+};
+
 const plans = (["semilla", "crece", "escala"] as Plan[]).map((key) => ({
-  key, name: PLAN_META[key].name,
+  key,
+  name: PLAN_META[key].name,
+  profile: PLAN_PROFILES[key],
   price: key === "semilla" ? "0" : PLAN_AMOUNTS[key].mensual.toLocaleString("es-AR"),
   intro: key === "semilla" ? "Para dar el primer paso." : key === "crece" ? "Para organizar tu día a día." : "Para conocer mejor tu negocio.",
   cta: key === "semilla" ? "Empezar gratis" : "Elegir " + PLAN_META[key].name,
@@ -160,17 +168,20 @@ export default function Landing() {
           className={mobile ? "lp-nav open" : "lp-nav"}
           aria-label="Navegación principal"
         >
-          <a href="#producto" onClick={() => setMobile(false)}>
-            Producto
-          </a>
-          <a href="#tu-marca" onClick={() => setMobile(false)}>
-            Tu marca
+          <a href="#beneficios" onClick={() => setMobile(false)}>
+            Beneficios
           </a>
           <a href="#como-funciona" onClick={() => setMobile(false)}>
             Cómo funciona
           </a>
           <a href="#precios" onClick={() => setMobile(false)}>
             Precios
+          </a>
+          <a href="#tu-marca" onClick={() => setMobile(false)}>
+            Tu marca
+          </a>
+          <a href="#faq" onClick={() => setMobile(false)}>
+            Preguntas
           </a>
           {user && (
             <a
@@ -443,142 +454,45 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* SELECTOR DE INDUSTRIAS */}
-        <section className="lp-industries">
-          <p>
-            SI TU NEGOCIO TIENE TURNOS,
-            <br />
-            <b>TIENE LUGAR EN CUPITO.</b>
-          </p>
-          <div>
-            {sectors.map(([name, Icon], i) => (
-              <button
-                type="button"
-                className={industry === i ? "active" : ""}
-                key={name}
-                aria-pressed={industry === i}
-                onClick={() => setIndustry(i)}
-              >
-                <Icon size={19} />
-                {name}
-              </button>
-            ))}
+        {/* 3 BENEFICIOS CUANTIFICABLES */}
+        <section id="beneficios" className="lp-benefits-quantifiable lp-reveal">
+          <div className="lp-benefits-heading">
+            <span className="lp-kicker">VALOR REAL PARA TU DÍA A DÍA</span>
+            <h2>Resultados concretos desde la primera semana</h2>
+            <p>Pensado para profesionales y locales que quieren recuperar tiempo y ordenar su atención.</p>
           </div>
-        </section>
+          <div className="lp-benefits-grid">
+            <article className="lp-benefit-card">
+              <div className="lp-benefit-icon">
+                <Clock size={22} />
+              </div>
+              <span className="lp-benefit-metric">+15 hs</span>
+              <span className="lp-benefit-kicker">Semanales recuperadas</span>
+              <p className="lp-benefit-desc">
+                Menos idas y vueltas por WhatsApp preguntando "¿a qué hora tenés?". Tu disponibilidad se actualiza en tiempo real y tus clientes reservan solos.
+              </p>
+            </article>
 
-        {/* TOUR INTERACTIVO DE MARCA */}
-        <LandingTour />
+            <article className="lp-benefit-card">
+              <div className="lp-benefit-icon">
+                <Bell size={22} />
+              </div>
+              <span className="lp-benefit-metric">0</span>
+              <span className="lp-benefit-kicker">Mensajes perdidos</span>
+              <p className="lp-benefit-desc">
+                Tus clientes eligen horario en cualquier momento, incluso mientras atendés o fuera del horario comercial, sin esperas ni chats sin responder.
+              </p>
+            </article>
 
-        {/* BENTO FEATURES */}
-        <section id="producto" className="lp-features lp-reveal">
-          <div className="lp-section-heading">
-            <div>
-              <span className="lp-kicker">TODO CONECTADO. TODO MÁS SIMPLE.</span>
-              <h2>
-                Una herramienta menos.
-                <br />
-                <span>Un montón de cosas resueltas.</span>
-              </h2>
-            </div>
-            <p>
-              Desde el primer turno hasta el cierre del día.
-              <br />
-              Cupito acompaña la forma en que trabajás.
-            </p>
-          </div>
-          <div className="lp-feature-grid">
-            <article className="lp-feature-card feature-wide">
-              <span className="lp-feature-icon">
-                <CalendarDays />
-              </span>
-              <h3>Tu agenda respira.</h3>
-              <p>
-                Disponibilidad actualizada para todos. Cuando entra un turno, ese espacio deja de
-                estar libre.
-              </p>
-              <div className="lp-feature-schedule">
-                <div>
-                  <span>09:00</span>
-                  <b>
-                    <i /> Lucía · Corte
-                  </b>
-                  <Check size={13} />
-                </div>
-                <div>
-                  <span>10:00</span>
-                  <em>Este espacio puede ser tuyo</em>
-                  <Plus size={13} />
-                </div>
-                <div>
-                  <span>11:00</span>
-                  <b>
-                    <i /> Tomás · Perfilado
-                  </b>
-                  <Check size={13} />
-                </div>
+            <article className="lp-benefit-card">
+              <div className="lp-benefit-icon">
+                <CheckCheck size={22} />
               </div>
-            </article>
-            <article className="lp-feature-card">
-              <span className="lp-feature-icon">
-                <Palette />
-              </span>
-              <h3>Se ve como vos.</h3>
-              <p>
-                Tus colores, tus servicios y tu forma de contar lo que hacés. Una página que se siente tuya.
+              <span className="lp-benefit-metric">100%</span>
+              <span className="lp-benefit-kicker">Turnos organizados</span>
+              <p className="lp-benefit-desc">
+                Recordatorios directos, cobro de seña opcional por transferencia y políticas de cancelación claras para que tu agenda respire sin ausencias.
               </p>
-              <div className="lp-color-preview">
-                <i />
-                <i />
-                <i />
-                <span>
-                  Tu marca acá <MousePointer2 size={19} />
-                </span>
-              </div>
-            </article>
-            <article className="lp-feature-card">
-              <span className="lp-feature-icon">
-                <Store />
-              </span>
-              <h3>Un turno. Algo más.</h3>
-              <p>
-                Sumá tus productos a la reserva. El cliente elige y los retira cuando te visita.
-              </p>
-              <span className="lp-feature-tag">EN PLANES PAGOS</span>
-            </article>
-            <article className="lp-feature-card">
-              <span className="lp-feature-icon">
-                <Wallet />
-              </span>
-              <h3>Cobrá a tu manera.</h3>
-              <p>
-                Pedí una seña por transferencia. Tu cliente recibe los datos y vos verificás el ingreso desde el panel.
-              </p>
-              <span className="lp-feature-tag">VERIFICACIÓN POR EL LOCAL</span>
-            </article>
-            <article className="lp-feature-card">
-              <span className="lp-feature-icon">
-                <ChartNoAxesCombined />
-              </span>
-              <h3>Números que se entienden.</h3>
-              <p>
-                Qué servicios eligen más, cómo viene la semana y cuánto generás. Sin planillas
-                complicadas.
-              </p>
-              <div className="lp-feature-chart">
-                {[26, 40, 33, 54, 46, 72, 89].map((n, i) => (
-                  <i key={i} style={{ height: n / 2 }} />
-                ))}
-              </div>
-            </article>
-            <article className="lp-feature-card">
-              <span className="lp-feature-icon">
-                <Bell />
-              </span>
-              <h3>Que no se les pase.</h3>
-              <p>
-                Confirmaciones por email y acceso a WhatsApp para contactar a tus clientes. Los mensajes de WhatsApp los enviás vos.
-              </p>
-              <span className="lp-feature-tag upcoming">INCLUIDO EN TU PLAN</span>
             </article>
           </div>
         </section>
@@ -651,6 +565,10 @@ export default function Landing() {
                     {i === 0 ? <Globe size={20} /> : i === 1 ? <Store size={20} /> : <Users size={20} />}
                   </span>
                 </div>
+                <div className="lp-plan-profile">
+                  <Users size={12} />
+                  <span>{p.profile}</span>
+                </div>
                 <p>{p.intro}</p>
                 <div className="lp-price">
                   $ {p.price}
@@ -678,6 +596,35 @@ export default function Landing() {
             Precios en pesos argentinos. Podés cambiar de plan o cancelar en cualquier momento desde
             tu panel.
           </p>
+        </section>
+
+        {/* PERSONALIZADOR INTERACTIVO */}
+        <section className="lp-reveal" id="tu-marca">
+          {/* SELECTOR DE INDUSTRIAS */}
+          <section className="lp-industries">
+            <p>
+              SI TU NEGOCIO TIENE TURNOS,
+              <br />
+              <b>TIENE LUGAR EN CUPITO.</b>
+            </p>
+            <div>
+              {sectors.map(([name, Icon], i) => (
+                <button
+                  type="button"
+                  className={industry === i ? "active" : ""}
+                  key={name}
+                  aria-pressed={industry === i}
+                  onClick={() => setIndustry(i)}
+                >
+                  <Icon size={19} />
+                  {name}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* TOUR INTERACTIVO DE MARCA */}
+          <LandingTour />
         </section>
 
         {/* MERCADO PAGO / CONFIANZA */}
@@ -777,9 +724,10 @@ export default function Landing() {
             <p>Más tiempo para lo que hacés bien.</p>
           </div>
           <div className="lp-footer-links">
-            <a href="#producto">Producto</a>
-            <a href="#precios">Precios</a>
+            <a href="#beneficios">Beneficios</a>
             <a href="#como-funciona">Cómo funciona</a>
+            <a href="#precios">Precios</a>
+            <a href="#tu-marca">Tu marca</a>
             {user ? (
               <a
                 href="#/app"

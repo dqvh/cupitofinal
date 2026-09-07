@@ -9,7 +9,8 @@ import {
   useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
   findOverlap, isSlotBlocked,
   getProHours, isProAvailable, getAvailablePros, toMinutes,
-  type User, type BizData,
+  totalDurationOf, getDayHours,
+  type User, type BizData, type Service,
 } from "../lib/store";
 import { CopyButton } from "./kit";
 import CustomSelect from "./ui/CustomSelect";
@@ -100,6 +101,8 @@ function BookingForm({
   // Estados del asistente de reserva
   const [step, setStep] = useState(0); // 0: Servicio | 1: Horario y Profesional | 2: Contacto
   const [serviceId, setServiceId] = useState<string | null>(null);
+  const [extraServiceIds, setExtraServiceIds] = useState<string[]>([]);
+  const [conflictSuggestions, setConflictSuggestions] = useState<string[]>([]);
   const [proId, setProId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(() => dateKey(new Date()));
   const [time, setTime] = useState<string | null>(null);
@@ -126,6 +129,16 @@ function BookingForm({
 
   // Filtro de servicios
   const [serviceSearch, setServiceSearch] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+
+  // Acordeón de información del local en mobile
+  const [infoOpen, setInfoOpen] = useState(false);
+
+  // Lista de espera pública
+  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [waitlistClient, setWaitlistClient] = useState("");
+  const [waitlistPhone, setWaitlistPhone] = useState("");
+  const [waitlistSent, setWaitlistSent] = useState(false);
 
   const submittingRef = useRef(false);
 
@@ -145,6 +158,7 @@ function BookingForm({
   const paid = isPaid(user);
 
   const accentColor = useMemo(() => {
+    if (settings.brandColor) return settings.brandColor;
     switch (settings.theme) {
       case "coral": return "#ff7a59";
       case "midnight": return "#38bdf8";
@@ -153,7 +167,7 @@ function BookingForm({
       case "ocean": return "#34d399";
       default: return "#16845f";
     }
-  }, [settings.theme]);
+  }, [settings.theme, settings.brandColor]);
 
   const service = biz.services.find((s) => s.id === serviceId);
   const pro = biz.professionals.find((p) => p.id === proId);
@@ -165,7 +179,50 @@ function BookingForm({
   const maxDateKey = maxAdvanceDays > 0 ? dateKey(addDays(now, maxAdvanceDays)) : "9999-99-99";
   const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-  const dur = service?.duration ?? 45;
+  // Selección de múltiples servicios combinados
+  const selectedServiceIds = useMemo(() => {
+    if (!serviceId) return [];
+    return [serviceId, ...extraServiceIds];
+  }, [serviceId, extraServiceIds]);
+
+  const selectedServices = useMemo(() => {
+    return selectedServiceIds
+      .map((id) => biz.services.find((s) => s.id === id))
+      .filter(Boolean) as Service[];
+  }, [selectedServiceIds, biz.services]);
+
+  const totalServicesPrice = useMemo(() => {
+    return selectedServices.reduce((acc, s) => acc + s.price, 0);
+  }, [selectedServices]);
+
+  const dur = useMemo(() => {
+    if (selectedServiceIds.length === 0) return service?.duration ?? 45;
+    return totalDurationOf(biz.services, selectedServiceIds, pro) || 45;
+  }, [biz.services, selectedServiceIds, pro, service?.duration]);
+
+  const toggleService = (id: string) => {
+    setError(null);
+    setTime(null);
+    setConflictSuggestions([]);
+    if (!serviceId) {
+      setServiceId(id);
+      return;
+    }
+    if (serviceId === id) {
+      if (extraServiceIds.length > 0) {
+        setServiceId(extraServiceIds[0]);
+        setExtraServiceIds(extraServiceIds.slice(1));
+      } else {
+        setServiceId(null);
+      }
+      return;
+    }
+    if (extraServiceIds.includes(id)) {
+      setExtraServiceIds(extraServiceIds.filter((x) => x !== id));
+    } else {
+      setExtraServiceIds([...extraServiceIds, id]);
+    }
+  };
 
   // Filtro de servicios
   const filteredServices = useMemo(() => {
@@ -174,10 +231,12 @@ function BookingForm({
     return biz.services.filter((s) => s.name.toLowerCase().includes(q));
   }, [biz.services, serviceSearch]);
 
-  // Chequeo de día abierto
+  // Chequeo de día abierto (respetando horarios especiales)
   const isDayOpen = (key: string) => {
     const dIdx = dayOfWeek(key);
     if ((settings.closedDates || []).includes(key)) return false;
+    const dayH = getDayHours(settings, key);
+    if (!dayH || !dayH.open) return false;
     if (pro) {
       const proH = getProHours(pro, settings.hours)[dIdx];
       return !!proH?.open;
@@ -188,13 +247,15 @@ function BookingForm({
         return !!proH?.open;
       });
     }
-    return !!settings.hours[dIdx]?.open;
+    return true;
   };
 
   // Turnos brutos para el día seleccionado
   const rawSlots = useMemo(() => {
     if (!selectedDate) return [];
     const dIdx = dayOfWeek(selectedDate);
+    const dayH = getDayHours(settings, selectedDate);
+    if (!dayH || !dayH.open) return [];
     if (pro) {
       const proH = getProHours(pro, settings.hours)[dIdx];
       return proH?.open ? slotsForDay(proH) : [];
@@ -209,32 +270,125 @@ function BookingForm({
       });
       return Array.from(set).sort((a, b) => toMinutes(a) - toMinutes(b));
     }
-    const h = settings.hours[dIdx];
-    return h?.open ? slotsForDay(h) : [];
-  }, [selectedDate, pro, hasPros, biz.professionals, settings.hours]);
+    return slotsForDay(dayH);
+  }, [selectedDate, pro, hasPros, biz.professionals, settings]);
 
   // Verificar si un slot específico está tomado o pasado
   const isSlotDisabled = (t: string) => {
-    if (selectedDate === todayKey && t <= currentHHMM) return true;
+    if (!isDemo && user.id !== "test-owner" && selectedDate === todayKey && t <= currentHHMM) return true;
+    const dayH = getDayHours(settings, selectedDate);
+    if (!dayH || !dayH.open) return true;
     if (pro) {
       return !isProAvailable(pro, selectedDate, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services);
     }
     if (hasPros) {
       return getAvailablePros(biz.professionals, selectedDate, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services).length === 0;
     }
-    if (!fitsWorkingDay(settings.hours[dayOfWeek(selectedDate)], t, dur)) return true;
+    if (!fitsWorkingDay(dayH, t, dur)) return true;
     if (isSlotBlocked(biz.blockedSlots || [], selectedDate, t)) return true;
     return !!findOverlap({ date: selectedDate, time: t, dur }, biz.bookings, biz.services);
   };
 
+  // Sugerencias de horarios más cercanos en caso de conflicto
+  const findClosestSlots = (date: string, targetTime: string, count = 3) => {
+    const dayH = getDayHours(settings, date);
+    if (!dayH || !dayH.open) return [];
+    const targetMin = toMinutes(targetTime);
+    const available = rawSlots.filter((s) => !isSlotDisabled(s) && s !== targetTime);
+    available.sort((a, b) => Math.abs(toMinutes(a) - targetMin) - Math.abs(toMinutes(b) - targetMin));
+    return available.slice(0, count);
+  };
+
+  // Franjas horarias agrupadas por Mañana y Tarde
+  const morningSlots = useMemo(() => {
+    return rawSlots.filter((t) => {
+      const [h] = t.split(":").map(Number);
+      return h < 13;
+    });
+  }, [rawSlots]);
+
+  const afternoonSlots = useMemo(() => {
+    return rawSlots.filter((t) => {
+      const [h] = t.split(":").map(Number);
+      return h >= 13;
+    });
+  }, [rawSlots]);
+
+  // Encontrar próximo día disponible automáticamente
+  const findNextAvailableDate = () => {
+    const [y, m, d] = selectedDate.split("-").map(Number);
+    const base = new Date(y, m - 1, d);
+    for (let i = 1; i <= 14; i++) {
+      const nextDate = addDays(base, i);
+      const k = dateKey(nextDate);
+      if (k > maxDateKey) break;
+      if ((settings.closedDates || []).includes(k)) continue;
+      const dIdx = dayOfWeek(k);
+      const daySlots = (() => {
+        if (pro) {
+          const proH = getProHours(pro, settings.hours)[dIdx];
+          return proH?.open ? slotsForDay(proH) : [];
+        }
+        if (hasPros) {
+          const set = new Set<string>();
+          biz.professionals.forEach((p) => {
+            const proH = getProHours(p, settings.hours)[dIdx];
+            if (proH?.open) slotsForDay(proH).forEach((s) => set.add(s));
+          });
+          return Array.from(set).sort((a, b) => toMinutes(a) - toMinutes(b));
+        }
+        const h = settings.hours[dIdx];
+        return h?.open ? slotsForDay(h) : [];
+      })();
+      const free = daySlots.some((t) => {
+        if (pro) return isProAvailable(pro, k, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services);
+        if (hasPros) return getAvailablePros(biz.professionals, k, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services).length > 0;
+        if (!fitsWorkingDay(settings.hours[dIdx], t, dur)) return false;
+        if (isSlotBlocked(biz.blockedSlots || [], k, t)) return false;
+        return !findOverlap({ date: k, time: t, dur }, biz.bookings, biz.services);
+      });
+      if (free) {
+        setSelectedDate(k);
+        setTime(null);
+        setError(null);
+        return;
+      }
+    }
+  };
+
+  // Anotarse en lista de espera
+  const handleJoinWaitlist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waitlistClient.trim() || !waitlistPhone.trim()) return;
+    const err = await store.addWaitlist(
+      {
+        date: selectedDate,
+        serviceId: serviceId || biz.services[0]?.id || "service",
+        client: waitlistClient.trim(),
+        phone: waitlistPhone.trim(),
+      },
+      user.id
+    );
+    if (!err) {
+      setWaitlistSent(true);
+      setTimeout(() => {
+        setShowWaitlistModal(false);
+        setWaitlistSent(false);
+      }, 2000);
+    }
+  };
+
   // Seña configurada
   const depositOn = paid && settings.depositEnabled && settings.depositPct > 0;
-  const depositAmount = depositOn && service ? Math.round((service.price * settings.depositPct) / 100) : 0;
+  const depositAmount = depositOn ? Math.round((totalServicesPrice * settings.depositPct) / 100) : 0;
 
   // Carrito de productos
   const productsTotal = useMemo(() => {
     return (biz.products || []).reduce((acc, p) => acc + (cart[p.id] || 0) * p.price, 0);
   }, [biz.products, cart]);
+
+  const totalAmount = totalServicesPrice + productsTotal;
+  const payAtVenue = Math.max(0, totalAmount - depositAmount);
 
   const productsCount = useMemo(
     () => Object.values(cart).reduce((total, quantity) => total + quantity, 0),
@@ -284,9 +438,15 @@ function BookingForm({
     }
 
     if (selectedDate < todayKey || selectedDate > maxDateKey || (settings.closedDates || []).includes(selectedDate) || isSlotDisabled(time)) {
-      setError("Ese horario ya no está disponible. Elegí otro antes de confirmar.");
-      setStep(1);
-      setTime(null);
+      const suggestions = findClosestSlots(selectedDate, time, 3);
+      if (suggestions.length > 0) {
+        setConflictSuggestions(suggestions);
+        setError(`El horario de las ${time} hs ya no está disponible. Elegí uno de estos horarios sugeridos para confirmar sin perder tus datos:`);
+      } else {
+        setError("Ese horario ya no está disponible. Por favor elegí otro antes de confirmar.");
+        setStep(1);
+        setTime(null);
+      }
       return;
     }
     submittingRef.current = true;
@@ -305,6 +465,7 @@ function BookingForm({
       email: email.trim() || undefined,
       notes: notes.trim() || undefined,
       serviceId,
+      extraServiceIds: extraServiceIds.length > 0 ? extraServiceIds : undefined,
       date: selectedDate,
       time,
       source: "online",
@@ -362,6 +523,8 @@ function BookingForm({
   const reset = () => {
     setStep(0);
     setServiceId(null);
+    setExtraServiceIds([]);
+    setConflictSuggestions([]);
     setProId(null);
     setTime(null);
     setClient("");
@@ -437,7 +600,7 @@ function BookingForm({
       {/* Header Mobile Compacto Sticky (56px) */}
       <div className="sticky top-0 z-30 col-span-full flex h-14 w-full items-center justify-between border-b border-black/[0.08] bg-white/95 px-4 backdrop-blur-md md:hidden">
         <div className="flex items-center gap-2.5 min-w-0">
-          <img src="/cupito-logo.png" width="28" height="28" alt="" className="h-7 w-7 rounded-lg shrink-0 object-cover" />
+          <img src={settings.logoUrl || "/cupito-logo.png"} width="28" height="28" alt="" className="h-7 w-7 rounded-lg shrink-0 object-cover" />
           <div className="min-w-0 flex-1">
             <span className="block truncate font-display text-xs font-bold text-[#1D1D1F] leading-none">
               {user.business}
@@ -461,12 +624,67 @@ function BookingForm({
         )}
       </div>
 
+      {/* Información del local desplegable en mobile */}
+      <div className="col-span-full border-b border-black/[0.08] bg-white md:hidden">
+        <button
+          type="button"
+          onClick={() => setInfoOpen(!infoOpen)}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-left font-semibold text-xs text-[#1D1D1F] hover:bg-[#F5F5F7] transition-colors"
+          aria-expanded={infoOpen}
+        >
+          <span className="flex items-center gap-2">
+            <MapPin size={14} className="text-[#16A34A]" />
+            <span>Información del local</span>
+          </span>
+          <ChevronDown size={15} className={`text-[#6E6E73] transition-transform duration-200 ${infoOpen ? "rotate-180" : ""}`} />
+        </button>
+        {infoOpen && (
+          <div className="px-4 pb-3.5 pt-1 space-y-2.5 text-xs text-[#334155] border-t border-black/[0.04] bg-[#F8FAFC]">
+            {settings.description && <p className="leading-relaxed">{settings.description}</p>}
+            <div className="flex items-start gap-2">
+              <MapPin size={14} className="text-[#16A34A] shrink-0 mt-0.5" />
+              <div>
+                <span>{settings.address || "Consultá la dirección con el local"}</span>
+                {settings.mapsUrl && (
+                  <a href={settings.mapsUrl} target="_blank" rel="noreferrer" className="ml-1.5 font-bold text-[#16A34A] underline inline-flex items-center gap-0.5">
+                    Ver mapa <ExternalLink size={10} />
+                  </a>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock size={14} className="text-[#16A34A] shrink-0" />
+              <span>{openDaysCount} días de atención por semana · Hora Bs.As.</span>
+            </div>
+            {settings.whatsapp && (
+              <div className="flex items-center gap-2">
+                <MessageCircle size={14} className="text-[#16A34A] shrink-0" />
+                <a href={whatsAppGeneralUrl || "#"} target="_blank" rel="noreferrer" className="font-bold text-[#16A34A] underline">
+                  Escribir al WhatsApp
+                </a>
+              </div>
+            )}
+            {avgRating !== null && (
+              <button
+                type="button"
+                onClick={() => setShowReviewsModal(true)}
+                className="flex items-center gap-1.5 text-[#1D1D1F] font-semibold pt-1"
+              >
+                <Star size={13} fill="currentColor" className="text-amber-500" />
+                <span>{avgRating}</span>
+                <span className="text-[#6E6E73] font-normal">({biz.reviews.length} reseña{biz.reviews.length === 1 ? "" : "s"})</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Columna Izquierda: Tarjeta del Negocio */}
-      <aside className="business-card">
+      <aside className="business-card hidden md:flex">
         <div className="large-logo">
           <picture>
-            <source srcSet="/cupito-logo.webp" type="image/webp" />
-            <img src="/cupito-logo.png" width="64" height="64" alt="Logo de Cupito" decoding="async" />
+            <source srcSet={settings.logoUrl || "/cupito-logo.webp"} type="image/webp" />
+            <img src={settings.logoUrl || "/cupito-logo.png"} width="64" height="64" alt="Logo de Cupito" decoding="async" />
           </picture>
         </div>
 
@@ -641,6 +859,28 @@ function BookingForm({
               </div>
             )}
 
+            {/* Cómo llegar */}
+            {settings.address && (
+              <div style={{ margin: "16px 0", padding: "14px 16px", background: "#f8fafc", borderRadius: 12, border: "1.5px solid #e2e8f0", textAlign: "left" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <MapPin size={16} className="text-[#16A34A]" />
+                  <strong style={{ fontSize: 13, color: "#0f172a" }}>Cómo llegar</strong>
+                </div>
+                <p style={{ margin: "0 0 10px", fontSize: 13, color: "#475569" }}>{settings.address}</p>
+                {settings.mapsUrl && (
+                  <a
+                    href={settings.mapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn small"
+                    style={{ display: "inline-flex", fontSize: 12, padding: "6px 12px", gap: 5 }}
+                  >
+                    Abrir en Google Maps <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+            )}
+
             {/* Acciones de calendario */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, margin: "20px 0" }}>
               <a href={gcalHref} target="_blank" rel="noreferrer" className="btn">
@@ -652,7 +892,19 @@ function BookingForm({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 24 }}>
-              <button type="button" className="btn primary" onClick={reset}>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => {
+                  setTime(null);
+                  setCart({});
+                  setDone(false);
+                  setStep(1);
+                }}
+              >
+                Reservar lo mismo otra vez
+              </button>
+              <button type="button" className="btn" onClick={reset}>
                 Reservar otro turno
               </button>
               <button type="button" className="text-link" onClick={() => setShowLookupModal(true)}>
@@ -703,63 +955,73 @@ function BookingForm({
                   </div>
                 )}
 
-                <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "grid", gap: 10 }}>
                   {filteredServices.map((v) => {
-                    const isSelected = serviceId === v.id;
+                    const isSelected = selectedServiceIds.includes(v.id);
                     return (
                       <button
                         type="button"
                         key={v.id}
                         className={"choice " + (isSelected ? "selected" : "")}
-                        onClick={() => {
-                          setServiceId(v.id);
-                          setTime(null);
-                          setError(null);
-                        }}
+                        onClick={() => toggleService(v.id)}
+                        aria-pressed={isSelected}
                       >
-                        <div>
-                          <b>{v.name}</b>
-                          <small>
-                            {v.duration} min · {fmtMoney(v.price)}
-                          </small>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 14 }}>
+                          <div style={{ textAlign: "left", minWidth: 0, flex: 1 }}>
+                            <b style={{ display: "block", fontSize: 15, color: "#0f172a" }}>{v.name}</b>
+                            <small style={{ display: "block", color: "#64748b", marginTop: 2, fontSize: 13 }}>
+                              {v.duration} min
+                            </small>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                            <b style={{ fontSize: 15, color: "var(--business-accent, #16845f)" }}>
+                              {fmtMoney(v.price)}
+                            </b>
+                            {isSelected ? (
+                              <span
+                                style={{
+                                  width: 22,
+                                  height: 22,
+                                  minWidth: 22,
+                                  minHeight: 22,
+                                  flexShrink: 0,
+                                  borderRadius: "50%",
+                                  background: "var(--business-accent, #16845f)",
+                                  color: "white",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <Check size={14} strokeWidth={3} />
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  width: 22,
+                                  height: 22,
+                                  minWidth: 22,
+                                  minHeight: 22,
+                                  flexShrink: 0,
+                                  border: "2px solid #cbd5e1",
+                                  borderRadius: "50%",
+                                  background: "white",
+                                  display: "inline-block",
+                                }}
+                              />
+                            )}
+                          </div>
                         </div>
-                        {isSelected ? (
-                          <span
-                            style={{
-                              width: 22,
-                              height: 22,
-                              minWidth: 22,
-                              minHeight: 22,
-                              flexShrink: 0,
-                              borderRadius: "50%",
-                              background: "var(--business-accent, #16845f)",
-                              color: "white",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <Check size={14} strokeWidth={3} />
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              width: 22,
-                              height: 22,
-                              minWidth: 22,
-                              minHeight: 22,
-                              flexShrink: 0,
-                              border: "2px solid #cbd5e1",
-                              borderRadius: "50%",
-                              background: "white",
-                              display: "inline-block",
-                            }}
-                          />
-                        )}
                       </button>
                     );
                   })}
                 </div>
+
+                {selectedServiceIds.length > 1 && (
+                  <div style={{ marginTop: 12, padding: "10px 14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 12, fontSize: 13, color: "#166534" }}>
+                    <b>Servicios combinados ({selectedServiceIds.length}):</b> {selectedServices.map((s) => s.name).join(" + ")} · {dur} min · {fmtMoney(totalServicesPrice)}
+                  </div>
+                )}
 
                 {filteredServices.length === 0 && (
                   <p className="notice">No se encontraron servicios con ese nombre.</p>
@@ -768,7 +1030,7 @@ function BookingForm({
                 <div className="booking-controls">
                   <button
                     type="button"
-                    disabled={!serviceId}
+                    disabled={selectedServiceIds.length === 0}
                     className="btn primary"
                     onClick={() => setStep(1)}
                   >
@@ -860,31 +1122,82 @@ function BookingForm({
                   <span>Disponibilidad en vivo · se actualiza automáticamente</span>
                 </div>
 
-                {/* Grilla de turnos */}
-                <div className="slots">
-                  {rawSlots.map((t) => {
-                    const disabled = isSlotDisabled(t);
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        disabled={disabled}
-                        className={"slot " + (t === time ? "selected" : "")}
-                        onClick={() => {
-                          setTime(t);
-                          setError(null);
-                        }}
-                      >
-                        {t}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* Grilla de turnos agrupados por Mañana y Tarde */}
+                {morningSlots.length > 0 && (
+                  <div className="slot-group">
+                    <h4 className="slot-group-title">Mañana</h4>
+                    <div className="slots">
+                      {morningSlots.map((t) => {
+                        const disabled = isSlotDisabled(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            disabled={disabled}
+                            className={"slot " + (t === time ? "selected" : "")}
+                            onClick={() => {
+                              setTime(t);
+                              setError(null);
+                            }}
+                          >
+                            {t}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-                {rawSlots.length === 0 && (
-                  <p className="notice">
-                    El local no atiende en este día o no quedan horarios con la duración necesaria ({dur} min). Elegí otra fecha.
-                  </p>
+                {afternoonSlots.length > 0 && (
+                  <div className="slot-group">
+                    <h4 className="slot-group-title">Tarde</h4>
+                    <div className="slots">
+                      {afternoonSlots.map((t) => {
+                        const disabled = isSlotDisabled(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            disabled={disabled}
+                            className={"slot " + (t === time ? "selected" : "")}
+                            onClick={() => {
+                              setTime(t);
+                              setError(null);
+                            }}
+                          >
+                            {t}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Si no hay turnos disponibles o todos están ocupados */}
+                {(rawSlots.length === 0 || rawSlots.every((t) => isSlotDisabled(t))) && (
+                  <div className="no-slots-notice" style={{ textAlign: "center", padding: "20px 14px", background: "#f8fafc", borderRadius: 14, border: "1px dashed #cbd5e1", margin: "16px 0" }}>
+                    <p style={{ margin: "0 0 14px", fontSize: 14, color: "#475569" }}>
+                      No quedan horarios disponibles para este día. Podés buscar el próximo día libre o anotarte en lista de espera.
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" }}>
+                      <button
+                        type="button"
+                        onClick={findNextAvailableDate}
+                        className="btn primary"
+                        style={{ fontSize: 13 }}
+                      >
+                        <Calendar size={14} /> Próximo día disponible
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowWaitlistModal(true)}
+                        className="btn"
+                        style={{ fontSize: 13 }}
+                      >
+                        <Clock size={14} /> Anotarme en lista de espera
+                      </button>
+                    </div>
+                  </div>
                 )}
 
                 {/* Productos opcionales de tienda */}
@@ -916,9 +1229,6 @@ function BookingForm({
                           const count = cart[p.id] || 0;
                           return (
                             <article key={p.id} className="booking-product">
-                              <span className="product-thumb">
-                                <Package size={20} />
-                              </span>
                               <div className="booking-product-copy">
                                 <h3>{p.name}</h3>
                                 <p>{fmtMoney(p.price)}</p>
@@ -930,7 +1240,7 @@ function BookingForm({
                                   disabled={count === 0}
                                   onClick={() => setCart({ ...cart, [p.id]: Math.max(0, count - 1) })}
                                 >
-                                  <Minus size={12} />
+                                  <Minus size={14} />
                                 </button>
                                 <span aria-live="polite">{count}</span>
                                 <button
@@ -939,7 +1249,7 @@ function BookingForm({
                                   disabled={count >= 5}
                                   onClick={() => setCart({ ...cart, [p.id]: count + 1 })}
                                 >
-                                  <Plus size={12} />
+                                  <Plus size={14} />
                                 </button>
                               </div>
                             </article>
@@ -954,7 +1264,7 @@ function BookingForm({
                   </section>
                 )}
 
-                <div className="booking-controls">
+                <div className="booking-controls" style={{ marginTop: 20 }}>
                   <button
                     type="button"
                     className="btn"
@@ -963,10 +1273,24 @@ function BookingForm({
                   >
                     <ArrowLeft size={15} /> Volver
                   </button>
+                </div>
+
+                {/* Barra inferior sticky con horario, precio y Continuar */}
+                <div className="booking-bottom-bar">
+                  <div className="booking-bottom-bar-info">
+                    <span className="booking-bottom-bar-time">
+                      {time ? `${time} hs` : "Elegí tu horario"}
+                    </span>
+                    <span className="booking-bottom-bar-price">
+                      {depositOn && depositAmount > 0
+                        ? `Total ${fmtMoney(totalAmount)} · Reservás con ${fmtMoney(depositAmount)} · Pagás ${fmtMoney(payAtVenue)} en el local`
+                        : `Total: ${fmtMoney(totalAmount)}`}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     disabled={!time || !selectedDate}
-                    className="btn primary"
+                    className="btn primary booking-bottom-bar-cta"
                     onClick={() => setStep(2)}
                   >
                     Continuar <ArrowRight size={15} />
@@ -979,17 +1303,44 @@ function BookingForm({
             {step === 2 && (
               <form className="form-grid" onSubmit={handleReserve}>
                 {/* Resumen del turno */}
-                <div className="choice selected">
-                  <div>
-                    <b>{service?.name}</b>
-                    <small>
-                      {shownDate} · {time} hs
-                      <br />
-                      con {pro ? pro.name : "el primer profesional libre"}
-                    </small>
+                <div className="choice selected" style={{ display: "block" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <b>{selectedServices.map((s) => s.name).join(" + ") || service?.name}</b>
+                    <b style={{ color: "var(--business-accent, #16845f)" }}>{fmtMoney(totalServicesPrice)}</b>
                   </div>
-                  <b>{fmtMoney(service?.price || 0)}</b>
+                  <small style={{ display: "block", marginTop: 4 }}>
+                    {shownDate} · {time} hs ({dur} min)
+                    <br />
+                    con {pro ? pro.name : "el primer profesional libre"}
+                  </small>
                 </div>
+
+                {/* Sugerencias ante conflictos sin perder el formulario */}
+                {conflictSuggestions.length > 0 && (
+                  <div className="notice" style={{ background: "#fef3c7", border: "1.5px solid #fcd34d", color: "#92400e" }}>
+                    <b>Horarios alternativos disponibles:</b>
+                    <p style={{ margin: "4px 0 10px", fontSize: 13 }}>
+                      Tocá uno para asignarlo a tu turno y confirmar:
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {conflictSuggestions.map((sug) => (
+                        <button
+                          key={sug}
+                          type="button"
+                          onClick={() => {
+                            setTime(sug);
+                            setConflictSuggestions([]);
+                            setError(null);
+                          }}
+                          className="btn small primary"
+                          style={{ fontSize: 13, padding: "6px 14px", borderRadius: 8 }}
+                        >
+                          {sug} hs
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {productsTotal > 0 && (
                   <div style={{ background: "#f8fbf9", padding: "10px 14px", borderRadius: 10, border: "1px solid #dcebe2" }}>
@@ -999,17 +1350,20 @@ function BookingForm({
                     </div>
                     <div className="booking-summary-line" style={{ borderTop: "1px dashed #dcebe2", paddingTop: 8, marginTop: 6 }}>
                       <span>Total estimado</span>
-                      <b>{fmtMoney((service?.price || 0) + productsTotal)}</b>
+                      <b>{fmtMoney(totalAmount)}</b>
                     </div>
                   </div>
                 )}
 
-                {/* Aviso de seña */}
+                {/* Desglose transparente de seña */}
                 {depositOn && depositAmount > 0 && (
-                  <div className="notice">
-                    <b>Seña requerida por transferencia: {fmtMoney(depositAmount)}</b>
-                    <p style={{ marginTop: 6, fontSize: 13 }}>
-                      Al confirmar verás el Alias / CBU. El turno queda pendiente hasta que el local verifique tu transferencia.
+                  <div className="notice" style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0" }}>
+                    <b style={{ color: "#0f172a" }}>Desglose de pago y seña:</b>
+                    <p style={{ margin: "6px 0 0", fontSize: 13, color: "#475569" }}>
+                      Total {fmtMoney(totalAmount)} · Reservás con {fmtMoney(depositAmount)} ({settings.depositPct}%) · Pagás {fmtMoney(payAtVenue)} en el local
+                    </p>
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "#64748b" }}>
+                      Al confirmar verás el Alias / CBU para transferir. El turno queda pendiente hasta verificar la seña.
                     </p>
                   </div>
                 )}
@@ -1068,6 +1422,17 @@ function BookingForm({
                   />
                 </label>
 
+                <div style={{ margin: "16px 0", padding: "14px 16px", background: "#f8fafc", borderRadius: 12, border: "1.5px solid #e2e8f0", fontSize: 13, color: "#334155" }}>
+                  <p style={{ margin: "0 0 6px", fontWeight: 700, color: "#0f172a" }}>Condiciones del turno:</p>
+                  <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
+                    <li>Cancelación gratuita hasta 24 horas antes.</li>
+                    {depositOn && depositAmount > 0 && (
+                      <li>Seña requerida de {fmtMoney(depositAmount)} ({settings.depositPct}%) para confirmar.</li>
+                    )}
+                    <li>Tolerancia de espera: 10 minutos de puntualidad.</li>
+                  </ul>
+                </div>
+
                 <p className="small muted">
                   Para modificar o cancelar, podés hacerlo desde "Mis turnos" o avisando a {user.business}.
                 </p>
@@ -1095,39 +1460,6 @@ function BookingForm({
             )}
           </>
         )}
-
-        {/* Información del local al pie del formulario en mobile */}
-        <div className="mt-8 border-t border-black/[0.08] pt-5 md:hidden space-y-2.5 text-xs text-[#6E6E73]">
-          <div className="flex items-start gap-2">
-            <MapPin size={15} className="text-[#1D1D1F] shrink-0 mt-0.5" />
-            <div>
-              <span>{settings.address || "Consultá la dirección con el local"}</span>
-              {settings.mapsUrl && (
-                <a
-                  href={settings.mapsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ml-2 font-bold text-[#16A34A] underline inline-flex items-center gap-0.5"
-                >
-                  Ver mapa <ExternalLink size={10} />
-                </a>
-              )}
-            </div>
-          </div>
-          {settings.whatsapp && (
-            <div className="flex items-center gap-2">
-              <MessageCircle size={15} className="text-[#16A34A] shrink-0" />
-              <a
-                href={whatsAppGeneralUrl || "#"}
-                target="_blank"
-                rel="noreferrer"
-                className="font-bold text-[#16A34A] underline"
-              >
-                Escribir al WhatsApp del local
-              </a>
-            </div>
-          )}
-        </div>
       </section>
     </div>
   );
@@ -1264,26 +1596,63 @@ function BookingForm({
                       </span>
                     </div>
 
-                    {!isCancelled && (
-                      <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
-                        <button
-                          type="button"
-                          className="btn small"
-                          style={{ color: "#dc2626", borderColor: "#fecaca" }}
-                          onClick={async () => {
-                            if (!window.confirm("¿Seguro que querés cancelar este turno?")) return;
-                            const r = await cancelBookingByClient(user.id, b.id, "Cancelado por el cliente", lookupPhone);
-                            if (r.ok) {
-                              setLookupFeedback("Turno cancelado correctamente.");
-                            } else {
-                              setLookupFeedback(r.error || "No se pudo cancelar el turno.");
-                            }
-                          }}
-                        >
-                          Cancelar este turno
-                        </button>
-                      </div>
-                    )}
+                    <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="btn small"
+                        onClick={() => {
+                          setServiceId(b.serviceId);
+                          setProId(b.proId || null);
+                          setClient(b.client);
+                          setPhone(b.phone);
+                          setNotes(b.notes || "");
+                          setCart({});
+                          setDone(false);
+                          setShowLookupModal(false);
+                          setStep(1);
+                        }}
+                      >
+                        Reservar lo mismo otra vez
+                      </button>
+
+                      {!isCancelled && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn small"
+                            onClick={() => {
+                              setServiceId(b.serviceId);
+                              setProId(b.proId || null);
+                              setClient(b.client);
+                              setPhone(b.phone);
+                              setNotes(b.notes || "");
+                              setCart({});
+                              setDone(false);
+                              setShowLookupModal(false);
+                              setStep(1);
+                            }}
+                          >
+                            Reprogramar horario
+                          </button>
+                          <button
+                            type="button"
+                            className="btn small"
+                            style={{ color: "#dc2626", borderColor: "#fecaca" }}
+                            onClick={async () => {
+                              if (!window.confirm("¿Seguro que querés cancelar este turno?")) return;
+                              const r = await cancelBookingByClient(user.id, b.id, "Cancelado por el cliente", lookupPhone);
+                              if (r.ok) {
+                                setLookupFeedback("Turno cancelado correctamente.");
+                              } else {
+                                setLookupFeedback(r.error || "No se pudo cancelar el turno.");
+                              }
+                            }}
+                          >
+                            Cancelar este turno
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1390,6 +1759,60 @@ function BookingForm({
                 </div>
               )}
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Lista de Espera */}
+      {showWaitlistModal && (
+        <div className="booking-modal-overlay" onClick={() => setShowWaitlistModal(false)}>
+          <div className="booking-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="booking-modal-header">
+              <h3>Anotarme en lista de espera</h3>
+              <button
+                type="button"
+                onClick={() => setShowWaitlistModal(false)}
+                className="btn"
+                style={{ padding: 6, border: 0 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {waitlistSent ? (
+              <div className="notice" style={{ background: "#ecfdf5", color: "#065f46", textAlign: "center", padding: "20px" }}>
+                <CheckCircle2 size={32} className="text-emerald-600 mx-auto mb-2" />
+                <p className="font-bold">¡Anotado con éxito!</p>
+                <p className="text-sm mt-1">Si se libera un turno para el {shownDate}, te avisaremos por WhatsApp.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleJoinWaitlist} className="form-grid">
+                <p className="text-sm text-slate-600">
+                  Dejanos tus datos para el día <b>{shownDate}</b>. Te avisaremos de inmediato si se libera un turno.
+                </p>
+                <label>
+                  Tu nombre y apellido *
+                  <input
+                    required
+                    placeholder="Ej. Martín Gómez"
+                    value={waitlistClient}
+                    onChange={(e) => setWaitlistClient(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Teléfono celular (WhatsApp) *
+                  <input
+                    required
+                    type="tel"
+                    placeholder="Ej. 11 1234 5678"
+                    value={waitlistPhone}
+                    onChange={(e) => setWaitlistPhone(e.target.value)}
+                  />
+                </label>
+                <button type="submit" className="btn primary" style={{ width: "100%", marginTop: 10 }}>
+                  Confirmar y avisarme
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}
