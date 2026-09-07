@@ -363,7 +363,7 @@ function Console() {
       </header>
 
       <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
-        {/* Hero simple: qué es la Central, en criollo */}
+        {/* Hero Central */}
         <section className="overflow-hidden rounded-3xl border-2 border-ink bg-evergreen text-paper shadow-block">
           <div className="flex flex-wrap items-start justify-between gap-5 p-6 sm:p-8">
             <div className="min-w-0 max-w-2xl">
@@ -392,7 +392,7 @@ function Console() {
               <div className="rounded-2xl bg-paper/10 p-4 text-center ring-1 ring-paper/15">
                 <p className="font-display text-2xl font-extrabold text-lime">{stats.conversion}%</p>
                 <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-paper/60">Pagan</p>
-                <p className="mt-1 text-[10px] text-paper/50">En criollo: de cada 100, pagan {stats.conversion}</p>
+                <p className="mt-1 text-[10px] text-paper/50">De cada 100, pagan {stats.conversion}</p>
               </div>
               <div className="rounded-2xl bg-paper/10 p-4 text-center ring-1 ring-paper/15">
                 <p className="font-display text-2xl font-extrabold text-paper">{stats.todayCount}</p>
@@ -437,18 +437,18 @@ function Console() {
 
         {tab === "resumen" && (
           <div className="pop-in mt-6 space-y-6">
-            {/* KPIs con explicación en criollo */}
+            {/* KPIs */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <SaasKpi emoji="🏪" value={String(stats.locales)} title="Negocios registrados" criollo={`Semilla ${stats.semilla} · Crece ${stats.crece} · Escala ${stats.escala}`} accent={false} />
-              <SaasKpi emoji="💳" value={String(stats.paid)} title={`Pagan (${stats.conversion}%)`} criollo="Cuántos dejan plata todos los meses." accent={stats.conversion < 20} />
-              <SaasKpi emoji="💰" value={fmtMoney(stats.estimatedMonthly)} title="Plata / mes (MRR)" criollo={`Por año: ${fmtMoney(stats.arr)}. Ticket: ${fmtMoney(stats.avgTicket)}.`} accent money />
-              <SaasKpi emoji="📅" value={String(stats.bookings)} title={`Turnos totales (${stats.todayCount} hoy)`} criollo={`Últimos 7 días: ${stats.last7Bookings}. Servicios: ${stats.servicesTotal}.`} accent={false} />
+              <SaasKpi emoji="🏪" value={String(stats.locales)} title="Negocios registrados" sub={`Semilla ${stats.semilla} · Crece ${stats.crece} · Escala ${stats.escala}`} accent={false} />
+              <SaasKpi emoji="💳" value={String(stats.paid)} title={`Pagan (${stats.conversion}%)`} sub="Cuántos dejan plata todos los meses." accent={stats.conversion < 20} />
+              <SaasKpi emoji="💰" value={fmtMoney(stats.estimatedMonthly)} title="Plata / mes (MRR)" sub={`Por año: ${fmtMoney(stats.arr)}. Ticket: ${fmtMoney(stats.avgTicket)}.`} accent money />
+              <SaasKpi emoji="📅" value={String(stats.bookings)} title={`Turnos totales (${stats.todayCount} hoy)`} sub={`Últimos 7 días: ${stats.last7Bookings}. Servicios: ${stats.servicesTotal}.`} accent={false} />
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <SaasKpi emoji="🆕" value={`+${stats.new30}`} title={`Nuevos 30 días (${stats.new7} en 7d)`} criollo="Si este número crece, tu publicidad funciona." small />
-              <SaasKpi emoji="⚠️" value={String(stats.expiring7)} title="Vencen en 7 días" criollo="Escribiles hoy: son plata casi segura." small alert={stats.expiring7 > 0} />
-              <SaasKpi emoji="🔴" value={String(stats.expired)} title={`Vencidos (${stats.grace} en gracia)`} criollo="Pasaron su fecha y siguen en básico. +30 días los salva." small alert={stats.expired > 0} />
-              <SaasKpi emoji="😴" value={String(stats.inactive7)} title="Sin movimiento 7 días" criollo="Sin turnos nuevos. Quizás necesitan ayuda." small alert={stats.inactive7 > 0} />
+              <SaasKpi emoji="🆕" value={`+${stats.new30}`} title={`Nuevos 30 días (${stats.new7} en 7d)`} sub="Si este número crece, tu publicidad funciona." small />
+              <SaasKpi emoji="⚠️" value={String(stats.expiring7)} title="Vencen en 7 días" sub="Escribiles hoy: son plata casi segura." small alert={stats.expiring7 > 0} />
+              <SaasKpi emoji="🔴" value={String(stats.expired)} title={`Vencidos (${stats.grace} en gracia)`} sub="Pasaron su fecha y siguen en básico. +30 días los salva." small alert={stats.expired > 0} />
+              <SaasKpi emoji="😴" value={String(stats.inactive7)} title="Sin movimiento 7 días" sub="Sin turnos nuevos. Quizás necesitan ayuda." small alert={stats.inactive7 > 0} />
             </div>
 
             <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -456,7 +456,7 @@ function Console() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="font-display text-lg font-extrabold text-ink">📈 Turnos · últimos 14 días</h3>
-                    <p className="text-xs text-inkmute">En criollo: si sube, tus locales trabajan. Si baja, hay que ayudarlos.</p>
+                    <p className="text-xs text-inkmute">Actividad total de la plataforma.</p>
                   </div>
                   <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-800">{stats.perDay.reduce((a, d) => a + d.count, 0)} turnos</span>
                 </div>
@@ -476,7 +476,7 @@ function Console() {
               <div className="space-y-6">
                 <div className="card p-6">
                   <h3 className="font-display text-lg font-extrabold text-ink">🍰 Cómo se reparten los planes</h3>
-                  <p className="text-xs text-inkmute">En criollo: quién usa gratis y quién paga.</p>
+                  <p className="text-xs text-inkmute">Distribución por plan.</p>
                   <div className="mx-auto mt-4 h-24 w-24 rounded-full border-4 border-white shadow-sm" style={{ background: `conic-gradient(#10b981 0 ${(stats.crece / Math.max(1, stats.locales)) * 100}%, #0f766e ${(stats.crece / Math.max(1, stats.locales)) * 100}% ${((stats.crece + stats.escala) / Math.max(1, stats.locales)) * 100}%, #e2e8f0 ${((stats.crece + stats.escala) / Math.max(1, stats.locales)) * 100}% 100%)` }} aria-hidden="true" />
                   <div className="mt-4 space-y-2.5">
                     {([
@@ -805,15 +805,15 @@ function Console() {
               <p className="mt-0.5 text-xs text-emerald-900/80">MRR = lo que entra todos los meses si nadie se va. Tocá “+30 días” para cobrar un pago manual al instante.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <SaasKpi emoji="💰" value={fmtMoney(stats.estimatedMonthly)} title="Entra / mes (MRR)" criollo={`Por año: ${fmtMoney(stats.arr)}.`} money />
-              <SaasKpi emoji="🎫" value={fmtMoney(stats.avgTicket)} title="Ticket promedio" criollo="Lo que paga en promedio cada que sí paga." />
-              <SaasKpi emoji="🌿" value={`${stats.crece} × $9.500`} title={`Crece = ${fmtMoney(stats.crece * 9500)}`} criollo="Tu plan más popular. El que usa casi todo el mundo." />
-              <SaasKpi emoji="🚀" value={`${stats.escala} × $22.000`} title={`Escala = ${fmtMoney(stats.escala * 22000)}`} criollo="Tus clientes más grandes. Cuidalos mucho." />
+              <SaasKpi emoji="💰" value={fmtMoney(stats.estimatedMonthly)} title="Entra / mes (MRR)" sub={`Por año: ${fmtMoney(stats.arr)}.`} money />
+              <SaasKpi emoji="🎫" value={fmtMoney(stats.avgTicket)} title="Ticket promedio" sub="Lo que paga en promedio cada que sí paga." />
+              <SaasKpi emoji="🌿" value={`${stats.crece} × $9.500`} title={`Crece = ${fmtMoney(stats.crece * 9500)}`} sub="Tu plan más popular. El que usa casi todo el mundo." />
+              <SaasKpi emoji="🚀" value={`${stats.escala} × $22.000`} title={`Escala = ${fmtMoney(stats.escala * 22000)}`} sub="Tus clientes más grandes. Cuidalos mucho." />
             </div>
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="card p-6">
                 <h3 className="font-display text-lg font-extrabold text-ink">📅 Quién vence pronto (7 días)</h3>
-                <p className="text-xs text-inkmute">En criollo: plata casi segura. Escribiles hoy por WhatsApp.</p>
+                <p className="text-xs text-inkmute">Contactalos hoy para renovar sin fricción.</p>
                 <div className="mt-4 space-y-2.5">
                   {users.filter((u) => u.subscription?.nextRenewal && u.subscription.nextRenewal - Date.now() < 7 * 24 * 3600 * 1000 && u.subscription.nextRenewal >= Date.now()).length === 0 && (
                     <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">🎉 Nadie vence esta semana. Todo al día.</p>
@@ -1034,14 +1034,14 @@ function Console() {
   );
 }
 
-/* ============ HELPERS SaaS (tarjetas simples y exportación) ============ */
-function SaasKpi({ emoji, value, title, criollo, money = false, small = false, alert = false, accent = false }: { emoji: string; value: string; title: string; criollo: string; money?: boolean; small?: boolean; alert?: boolean; accent?: boolean }) {
+/* ============ HELPERS SaaS (tarjetas y exportación) ============ */
+function SaasKpi({ emoji, value, title, sub, money = false, small = false, alert = false, accent = false }: { emoji: string; value: string; title: string; sub: string; money?: boolean; small?: boolean; alert?: boolean; accent?: boolean }) {
   return (
     <div className={`card p-5 shadow-sm ${alert ? "!border-rose-300 !bg-rose-50/50" : accent ? "!border-amber-300 !bg-amber-50/60" : money ? "!border-emerald-300 !bg-emerald-50/50" : ""}`}>
       <span className="text-2xl" aria-hidden="true">{emoji}</span>
       <p className={`mt-2 font-display font-extrabold text-ink ${small ? "text-2xl" : "text-3xl"} ${money ? "!text-emerald-800" : ""}`}>{value}</p>
       <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-inkmute">{title}</p>
-      <p className="mt-1.5 rounded-lg bg-ink/5 px-2 py-1 text-[11px] font-medium leading-snug text-ink/70">💡 {criollo}</p>
+      <p className="mt-1 text-[11px] leading-snug text-inkmute">{sub}</p>
     </div>
   );
 }

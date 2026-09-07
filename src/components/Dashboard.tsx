@@ -127,21 +127,6 @@ const SECTIONS: { label: string; items: { id: View; label: string; icon: (p: { c
   },
 ];
 
-const NAV_HELP: Record<View, string> = {
-  hoy: "Quién viene hoy, hora por hora",
-  reservas: "Todos los turnos para confirmar o cambiar",
-  clientes: "Tu gente: quién vino y qué le gusta",
-  lista: "Los que esperan un lugar libre",
-  stats: "Tus números en fácil",
-  servicios: "Tu carta de precios",
-  equipo: "Quiénes atienden con vos",
-  tienda: "Lo que vendés además del turno",
-  promos: "Descuentos para llenar huecos",
-  pagina: "Tu link para compartir",
-  suscripcion: "Qué pagás y cuándo",
-  ajustes: "Horarios, pagos y tu cuenta",
-};
-
 const STATUS: Record<BookingStatus, { label: string; cls: string }> = {
   pendiente: { label: "Pendiente", cls: "border-2 border-coral/40 bg-coral/10 text-coral" },
   confirmada: { label: "Confirmada", cls: "border-2 border-limedeep/60 bg-lime/25 text-fern" },
@@ -488,7 +473,6 @@ export default function Dashboard() {
                         key={n.id}
                         aria-current={active ? "page" : undefined}
                         onClick={() => setView(n.id)}
-                        title={NAV_HELP[n.id]}
                         className={`group flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold transition-all duration-150 ${
                           active
                             ? "bg-emerald-50/90 text-emerald-900 font-extrabold shadow-xs border border-emerald-200/70"
@@ -524,12 +508,6 @@ export default function Dashboard() {
           </nav>
 
           <div className="border-t border-slate-200/80 p-3.5 space-y-2.5 bg-slate-50/40">
-            <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/70 px-3 py-2.5">
-              <p className="text-[11px] font-extrabold text-emerald-900">🧭 ¿Te perdiste?</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-emerald-800">
-                Empezá siempre por <button type="button" onClick={() => setView("hoy")} className="font-extrabold underline underline-offset-2 hover:text-emerald-600">Agenda del día</button>. Todo se guarda solo, nada se rompe.
-              </p>
-            </div>
             <a
               href={`/${user.slug}`}
               target="_blank"
@@ -910,17 +888,6 @@ export default function Dashboard() {
 
             {view === "hoy" && <div className="workspace-greeting"><Sun size={21} aria-hidden="true" /><p>Hola, {user.name.split(" ")[0]}. <span>Tenés {data.bookings.filter(booking => booking.date === today && booking.status !== "cancelada").length} turnos para hoy.</span></p></div>}
 
-            {view === "hoy" && (
-              <SimpleTodayGuide
-                dayCount={data.bookings.filter(booking => booking.date === today && booking.status !== "cancelada").length}
-                pending={pendingBookings}
-                waitlist={data.waitlist.length}
-                onNew={() => { setPrefill(null); setShowNew(true); }}
-                onGoReservas={() => { setFilter("pendiente"); setSearchQuery(""); setProFilter("todos"); setView("reservas"); }}
-                onGoPagina={() => setView("pagina")}
-              />
-            )}
-
             {pendingClaims > 0 && (
               <div className="pop-in mt-6 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 shadow-xs">
                 <IconBell className="h-5 w-5 shrink-0 text-rose-600" />
@@ -1017,9 +984,9 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                      <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} badge={selDate === today ? "Hoy" : "Día elegido"} trend="Cuánta gente viene este día" simple="cuánta gente viene el día que elegiste arriba." />
-                      <StatCard label="Plata estimada del día" value={fmtMoney(dayIncome)} icon={<IconWallet className="h-5 w-5" />} accent badge="Estimado" trend="Si vienen todos" simple="cuánto cobrarías hoy si vienen todos los confirmados." />
-                      <StatCard label="Qué tan lleno estás" value={`${occupancy}%`} icon={<IconChart className="h-5 w-5" />} badge="Capacidad" trend="De tus horarios abiertos" simple="100% = día completo, 0% = día vacío para llenar." />
+                      <StatCard label="Turnos del día" value={String(dayBookings.filter((b) => b.status !== "cancelada").length)} icon={<IconClock className="h-5 w-5" />} badge={selDate === today ? "Hoy" : "Día elegido"} trend="En tu grilla" />
+                      <StatCard label="Ingresos estimados" value={fmtMoney(dayIncome)} icon={<IconWallet className="h-5 w-5" />} accent badge="Estimado" trend="Según servicios" />
+                      <StatCard label="Ocupación" value={`${occupancy}%`} icon={<IconChart className="h-5 w-5" />} badge="Capacidad" trend="Del horario de atención" />
                     </div>
 
                     {data.professionals.length > 0 && (
@@ -1086,12 +1053,6 @@ export default function Dashboard() {
             {/* ============ RESERVAS ============ */}
             {view === "reservas" && (
               <div className="pop-in mt-8 space-y-6">
-                <SimpleExplain
-                  emoji="📖"
-                  title="¿Qué es esto? Tu cuaderno de turnos, pero automático."
-                  text="Lista = todos los turnos uno abajo del otro. Grilla = el día dibujado por horarios. Naranja = te está esperando para confirmar. Verde = ya confirmado. Tocá cualquier turno para cambiarlo, moverlo o avisar por WhatsApp."
-                  tip="Empezá por los naranjas: son los que esperan tu sí."
-                />
                 {/* Barra de herramientas operativa */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 pb-4">
                   <div className="flex items-center gap-2">
@@ -1330,12 +1291,6 @@ export default function Dashboard() {
             {/* ============ CLIENTES (CRM) ============ */}
             {view === "clientes" && (
               <>
-                <SimpleExplain
-                  emoji="💛"
-                  title="¿Qué es esto? Tu libreta de clientes, sola se llena."
-                  text="Acá aparece toda la gente que ya reservó: cuántas veces vino, cuándo fue la última y tu nota privada (ej: “prefiere de mañana”). Tocá un nombre para ver su historial y mandarle WhatsApp."
-                  tip="Anotá gustos y detalles: el cliente vuelve donde lo conocen."
-                />
                 <ClientsCRMView
                   bookings={data.bookings}
                   services={data.services}
@@ -1372,14 +1327,8 @@ export default function Dashboard() {
             {/* ============ LISTA DE ESPERA ============ */}
             {view === "lista" && (
               <div className="pop-in mt-8">
-                <SimpleExplain
-                  emoji="⏳"
-                  title="¿Qué es esto? Los que se quedaron sin lugar."
-                  text="Cuando tu día está lleno, el cliente se anota acá solito con su celu. Cuando se libera un hueco, tocá “Darle turno” y listo. No tenés que llamar a nadie uno por uno."
-                  tip="Se libera un turno = vení acá primero antes de publicar el hueco."
-                />
                 {data.waitlist.length === 0 ? (
-                  <EmptyState text="Nadie en espera. ¡Buena señal!" sub="Cuando un cliente no encuentre horario, se anota acá solito y te aparece el numerito en el menú." />
+                  <EmptyState text="No hay nadie en lista de espera." sub="Cuando un cliente no encuentre horario, se va a anotar acá y te aparece con el número en el menú." />
                 ) : (
                   <div className="space-y-6">
                     {isPaid(user) && user.plan === "escala" ? (
@@ -1425,27 +1374,11 @@ export default function Dashboard() {
             )}
 
             {/* ============ STATS ============ */}
-            {view === "stats" && (
-              <>
-                <SimpleExplain
-                  emoji="📊"
-                  title="¿Qué es esto? Tus números sin tecnicismos."
-                  text="Cuánta plata entró este mes, cuántos turnos hiciste y qué servicio piden más. Si algo está en rojo, abajo te digo qué hacer. Miralo una vez por semana y listo."
-                  tip="Lo único importante: que la barrita de 14 días vaya para arriba."
-                />
-                <StatsView db={data} />
-              </>
-            )}
+            {view === "stats" && <StatsView db={data} />}
 
             {/* ============ SERVICIOS ============ */}
             {view === "servicios" && (
               <div className="pop-in mt-8">
-                <SimpleExplain
-                  emoji="✂️"
-                  title="¿Qué es esto? Tu carta de precios."
-                  text="Cada servicio es lo que hacés, cuánto dura y cuánto cobrás. Esto es exactamente lo que elige tu cliente cuando reserva. Si cambiás un precio acá, cambia al instante en tu link."
-                  tip="Pasá el mouse por una tarjeta para editar o borrar. Tranqui, se puede deshacer."
-                />
                 <div className="grid gap-4 sm:grid-cols-2">
                   {data.services.map((s) => (
                     <div key={s.id} className="group card card-hover p-6">
@@ -1471,31 +1404,17 @@ export default function Dashboard() {
 
             {/* ============ EQUIPO ============ */}
             {view === "equipo" && (
-              <>
-                <SimpleExplain
-                  emoji="👥"
-                  title="¿Qué es esto? La gente que atiende con vos."
-                  text="Agregá a cada profesional para que tenga sus propios turnos y horarios. Si trabajan todos el mismo horario, no toques nada: usan el del local."
-                  tip="Tocá el lápiz para cambiar horarios de una persona."
-                />
-                <TeamView
-                  onSyncCalendar={(proId) => {
-                    setCalendarProId(proId);
-                    setShowCalendarModal(true);
-                  }}
-                />
-              </>
+              <TeamView
+                onSyncCalendar={(proId) => {
+                  setCalendarProId(proId);
+                  setShowCalendarModal(true);
+                }}
+              />
             )}
 
             {/* ============ TIENDA ============ */}
             {view === "tienda" && (
               <div className="pop-in mt-8">
-                <SimpleExplain
-                  emoji="🛍️"
-                  title="¿Qué es esto? Plata extra sin esfuerzo."
-                  text="Cargá cremas, aceites o lo que vendas. El cliente lo tilda al reservar y lo paga cuando viene. No tenés que hacer nada más."
-                  tip="Empezá con 2 o 3 productos, los que más te piden."
-                />
                 {!isPaid(user) ? (
                   <LockedFeature icon={<IconBag className="h-7 w-7" />} title="La tienda es parte del plan Crece"
                     desc="Ofrecé tus productos al reservar. El cliente elige lo que necesita y lo retira cuando visita el local."
@@ -1507,27 +1426,11 @@ export default function Dashboard() {
             )}
 
             {/* ============ CUPONES ============ */}
-            {view === "promos" && (
-              <>
-                <SimpleExplain
-                  emoji="🎟️"
-                  title="¿Qué es esto? Descuentos para llenar huecos."
-                  text="Creá un código (ej: MARTES20) y compartilo. El cliente lo escribe al reservar y paga menos. Úsalo solo en horarios flojos, no siempre."
-                  tip="Un cupón simple vende más que 10 complicados."
-                />
-                <PromosView slug={user.slug} />
-              </>
-            )}
+            {view === "promos" && <PromosView slug={user.slug} />}
 
             {/* ============ MI PÁGINA ============ */}
             {view === "pagina" && (
               <div className="pop-in mt-8">
-                <SimpleExplain
-                  emoji="🔗"
-                  title="¿Qué es esto? Tu local en internet, en un link."
-                  text="Este link es tu secretaria 24 horas: el cliente elige servicio, día y hora solito. Copialo y pegalo en tu WhatsApp, Instagram o estados. Abajo lo ves igual que lo ve tu cliente."
-                  tip="Paso 1: Copiar link. Paso 2: pegarlo en tu bio. Listo."
-                />
                 <div className="mb-8 grid gap-3 sm:grid-cols-3">
                   <StatusPill on={isPaid(user) && data.settings.depositEnabled} label={isPaid(user) && data.settings.depositEnabled ? `Seña del ${data.settings.depositPct}%` : "Sin seña"} sub={isPaid(user) ? "al reservar" : "activá en Ajustes"} />
                   <StatusPill on={isPaid(user) && data.products.length > 0} label={isPaid(user) && data.products.length > 0 ? `${data.products.length} productos` : "Tienda vacía"} sub={isPaid(user) ? "en tu tienda" : "plan Crece"} />
@@ -1578,28 +1481,12 @@ export default function Dashboard() {
 
             {/* ============ SUSCRIPCIÓN ============ */}
             {view === "suscripcion" && (
-              <>
-                <SimpleExplain
-                  emoji="💳"
-                  title="¿Qué es esto? Lo que pagás y por qué."
-                  text="Acá ves tu plan actual, cuánto sale y cuándo se renueva. Si querés más turnos o funciones, subí de plan. Se paga con Mercado Pago y lo cancelás cuando quieras."
-                  tip="Semilla = gratis. Crece = lo que usa casi todo el mundo."
-                />
-                <SubscriptionView current={user.plan} user={user} onSelect={(p) => setCheckoutPlan(p)} />
-              </>
+              <SubscriptionView current={user.plan} user={user} onSelect={(p) => setCheckoutPlan(p)} />
             )}
 
             {/* ============ AJUSTES ============ */}
             {view === "ajustes" && (
-              <>
-                <SimpleExplain
-                  emoji="⚙️"
-                  title="¿Qué es esto? Los botones importantes, todos juntos."
-                  text="Negocio = tu nombre. Horarios = cuándo abrís (¡súper importante!). Pagos y seña = cómo cobrás por adelantado. Tocá cada pestaña, cambiá y apretá Guardar. Nada se rompe."
-                  tip="Si algo no anda, revisá primero Horarios: 9 de 10 veces es eso."
-                />
-                <SettingsView initialTab={settingsTab} onTabChange={setSettingsTab} user={user} settings={data.settings} onSaveProfile={(b, n) => { saveProfile(b, n); toast("Perfil actualizado ✓"); }} onSelectPlan={(p) => setCheckoutPlan(p)} />
-              </>
+              <SettingsView initialTab={settingsTab} onTabChange={setSettingsTab} user={user} settings={data.settings} onSaveProfile={(b, n) => { saveProfile(b, n); toast("Perfil actualizado ✓"); }} onSelectPlan={(p) => setCheckoutPlan(p)} />
             )}
           </main>
 
@@ -1816,7 +1703,6 @@ function StatCard({
   accent = false,
   badge,
   trend,
-  simple,
 }: {
   label: string;
   value: string;
@@ -1824,7 +1710,6 @@ function StatCard({
   accent?: boolean;
   badge?: string;
   trend?: string;
-  simple?: string;
 }) {
   return (
     <div
@@ -1870,122 +1755,20 @@ function StatCard({
         <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
         <span>{trend || "Actualizado en tiempo real"}</span>
       </div>
-      {simple && (
-        <p className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-slate-500">
-          💡 En criollo: {simple}
-        </p>
-      )}
     </div>
   );
 }
 
-function EmptyState({ text, sub, action }: { text: string; sub?: string; action?: ReactNode }) {
+function EmptyState({ text, sub, action }: { text: string; sub: string; action?: ReactNode }) {
   return (
-    <div className="mt-5 flex flex-col items-center rounded-2xl border-2 border-dashed border-slate-200 bg-white/80 px-6 py-12 text-center shadow-xs">
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-2xl" aria-hidden="true">
-        📅
+    <div className="mt-5 flex flex-col items-center rounded-2xl border border-dashed border-slate-200 bg-white/80 px-6 py-12 text-center shadow-xs">
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <IconCalendar className="h-6 w-6" />
       </span>
-      <p className="mt-4 max-w-md font-display text-xl font-extrabold text-slate-900">{text}</p>
-      {sub && <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500">{sub}</p>}
+      <p className="mt-4 font-display text-lg font-bold text-slate-900">{text}</p>
+      <p className="mt-1 max-w-sm text-sm text-slate-500">{sub}</p>
       {action && <div className="mt-5">{action}</div>}
-      <p className="mt-4 text-xs font-semibold text-slate-400">Tranqui, esto se arregla en 2 toques 👆 Todo se guarda solo.</p>
     </div>
-  );
-}
-
-/* Explicación ultra-simple por sección: que la entienda hasta un abuelo.
-   Mantiene el estilo (card blanca, borde suave) y no esconde ninguna función. */
-function SimpleExplain({ emoji, title, text, tip }: { emoji: string; title: string; text: string; tip?: string }) {
-  return (
-    <div className="mt-6 flex items-start gap-3.5 rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 via-white to-white p-4 shadow-xs sm:p-5">
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-xl text-white shadow-sm" aria-hidden="true">
-        {emoji}
-      </span>
-      <div className="min-w-0">
-        <p className="font-display text-[15px] font-extrabold text-slate-900">{title}</p>
-        <p className="mt-0.5 text-[13px] leading-relaxed text-slate-600">{text}</p>
-        {tip && (
-          <p className="mt-2 inline-block rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-emerald-300">
-            👉 {tip}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* Guía gigante de hoy: 3 pasos numerados, botones enormes, lenguaje de todos los días. */
-function SimpleTodayGuide({
-  dayCount,
-  pending,
-  waitlist,
-  onNew,
-  onGoReservas,
-  onGoPagina,
-}: {
-  dayCount: number;
-  pending: number;
-  waitlist: number;
-  onNew: () => void;
-  onGoReservas: () => void;
-  onGoPagina: () => void;
-}) {
-  return (
-    <section aria-label="Guía simple de hoy" className="mt-6 rounded-3xl border-2 border-slate-900 bg-slate-900 p-5 text-white shadow-md sm:p-6">
-      <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-emerald-300">
-        🧭 Empezá por acá · 3 pasos
-      </p>
-      <h2 className="mt-1 font-display text-xl font-extrabold sm:text-2xl">
-        {dayCount === 0 ? "Hoy no tenés turnos todavía. Te guío." : `Hoy tenés ${dayCount} turno${dayCount === 1 ? "" : "s"}. Vamos paso a paso.`}
-      </h2>
-      <p className="mt-1 text-sm text-slate-300">
-        Si recién arrancás, hacelo en este orden. Cada botón te lleva directo, sin perderte.
-      </p>
-      <ol className="mt-4 grid gap-3 sm:grid-cols-3">
-        <li>
-          <button
-            type="button"
-            onClick={onGoReservas}
-            className="flex h-full w-full flex-col items-start gap-2 rounded-2xl bg-white p-4 text-left text-slate-900 transition-all hover:-translate-y-0.5 hover:shadow-lg"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 font-display text-base font-extrabold text-white">1</span>
-            <span className="font-display text-sm font-extrabold">👀 Mirá quién viene</span>
-            <span className="text-xs leading-relaxed text-slate-500">
-              {pending > 0 ? `Tenés ${pending} por confirmar. Tocá y confirmalos.` : "Revisá la lista de hoy, hora por hora."}
-            </span>
-            <span className="mt-auto text-xs font-extrabold text-emerald-700">Ver turnos →</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            onClick={onNew}
-            className="flex h-full w-full flex-col items-start gap-2 rounded-2xl bg-emerald-400 p-4 text-left text-slate-950 transition-all hover:-translate-y-0.5 hover:shadow-lg"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 font-display text-base font-extrabold text-emerald-300">2</span>
-            <span className="font-display text-sm font-extrabold">➕ Anotá un turno nuevo</span>
-            <span className="text-xs leading-relaxed text-slate-800">
-              Llamó un cliente o vino al local? Anotalo acá en 30 segundos.
-            </span>
-            <span className="mt-auto text-xs font-extrabold text-slate-900">Crear reserva →</span>
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            onClick={onGoPagina}
-            className="flex h-full w-full flex-col items-start gap-2 rounded-2xl bg-white/10 p-4 text-left text-white ring-1 ring-white/20 transition-all hover:-translate-y-0.5 hover:bg-white/15"
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white font-display text-base font-extrabold text-slate-900">3</span>
-            <span className="font-display text-sm font-extrabold">📲 Llená los huecos solos</span>
-            <span className="text-xs leading-relaxed text-slate-300">
-              {waitlist > 0 ? `${waitlist} en espera. Compartí tu link y se anotan solos.` : "Compartí tu link por WhatsApp y caen reservas solas."}
-            </span>
-            <span className="mt-auto text-xs font-extrabold text-emerald-300">Compartir mi link →</span>
-          </button>
-        </li>
-      </ol>
-    </section>
   );
 }
 
