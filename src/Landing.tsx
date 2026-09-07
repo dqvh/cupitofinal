@@ -29,7 +29,7 @@ import {
   Pause,
 } from "lucide-react";
 import LandingTour from "./components/LandingTour";
-import { useStore } from "./lib/store";
+import { PLAN_META, PLAN_AMOUNTS, PLAN_FEATURES, type Plan } from "./lib/plans";
 import {
   Accordion,
   AccordionItem,
@@ -50,55 +50,22 @@ const names = [
   "Sofía Martínez",
 ];
 
-const plans = [
-  {
-    name: "Gratis",
-    price: "0",
-    intro: "Para dar el primer paso.",
-    cta: "Empezar gratis",
-    key: "semilla",
-    features: [
-      "Hasta 30 turnos por mes",
-      "Tu página de reservas",
-      "1 local y 1 profesional",
-      "Agenda y clientes en un lugar",
-      "Personalización básica",
-    ],
-  },
-  {
-    name: "Crecer",
-    price: "9.990",
-    intro: "Para hacer de esto tu día a día.",
-    cta: "Quiero Crecer",
-    key: "crece",
-    features: [
-      "Hasta 500 turnos por mes",
-      "Tu logo, colores y textos",
-      "Tienda de productos integrada",
-      "Señas por transferencia",
-      "Estadísticas de tu negocio",
-      "Hasta 3 profesionales",
-    ],
-  },
-  {
-    name: "Expandir",
-    price: "19.990",
-    intro: "Para un negocio que va por más.",
-    cta: "Conocer Expandir",
-    key: "escala",
-    features: [
-      "Hasta 2.000 turnos por mes",
-      "Todo lo del plan Crecer",
-      "Hasta 5 sucursales",
-      "Hasta 15 profesionales por local",
-      "Estadísticas por sucursal",
-      "Canal de soporte prioritario",
-    ],
-  },
-];
+const plans = (["semilla", "crece", "escala"] as Plan[]).map((key) => ({
+  key, name: PLAN_META[key].name,
+  price: key === "semilla" ? "0" : PLAN_AMOUNTS[key].mensual.toLocaleString("es-AR"),
+  intro: key === "semilla" ? "Para dar el primer paso." : key === "crece" ? "Para organizar tu día a día." : "Para conocer mejor tu negocio.",
+  cta: key === "semilla" ? "Empezar gratis" : "Elegir " + PLAN_META[key].name,
+  features: PLAN_FEATURES[key],
+}));
 
 export default function Landing() {
-  const { user } = useStore();
+  const [user, setUser] = useState(false);
+  useEffect(() => {
+    const sync = () => { try { setUser(!!localStorage.getItem("cupito_session")); } catch { /* navegación pública sin almacenamiento */ } };
+    sync();
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
   const [mobile, setMobile] = useState(false);
   const [tick, setTick] = useState(0);
   const [running, setRunning] = useState(true);
@@ -165,7 +132,7 @@ export default function Landing() {
 
   const goToDemo = (e: React.MouseEvent) => {
     e.preventDefault();
-    window.location.hash = "#/felipeprueba";
+    window.location.hash = "#/cupito-demo";
   };
 
   return (
@@ -180,7 +147,7 @@ export default function Landing() {
         <a className="lp-logo" href="#/" aria-label="Cupito, inicio">
           <picture>
             <source srcSet="/cupito-logo.webp" type="image/webp" />
-            <img src="/cupito-logo.png" width="39" height="39" alt="Cupito Logo" fetchPriority="high" decoding="async" />
+            <img src="/cupito-logo.png" width="39" height="39" alt="Cupito Logo" decoding="async" />
           </picture>
           <span>
             cupito<span className="lp-logo-dot">.</span>
@@ -286,7 +253,7 @@ export default function Landing() {
               </a>
               <a
                 className="lp-button ghost"
-                href="#/felipeprueba"
+                href="#/cupito-demo"
                 onClick={goToDemo}
               >
                 <Play size={14} fill="currentColor" />
@@ -550,8 +517,7 @@ export default function Landing() {
               </span>
               <h3>Se ve como vos.</h3>
               <p>
-                Tu logo, tus colores y tu forma de contar lo que hacés. Una página que se siente
-                tuya.
+                Tus colores, tus servicios y tu forma de contar lo que hacés. Una página que se siente tuya.
               </p>
               <div className="lp-color-preview">
                 <i />
@@ -578,10 +544,9 @@ export default function Landing() {
               </span>
               <h3>Cobrá a tu manera.</h3>
               <p>
-                Señas por transferencia y productos con Mercado Pago al conectar la cuenta de tu
-                negocio.
+                Pedí una seña por transferencia. Tu cliente recibe los datos y vos verificás el ingreso desde el panel.
               </p>
-              <span className="lp-feature-tag">CONEXIÓN CON MERCADO PAGO</span>
+              <span className="lp-feature-tag">VERIFICACIÓN POR EL LOCAL</span>
             </article>
             <article className="lp-feature-card">
               <span className="lp-feature-icon">
@@ -604,8 +569,7 @@ export default function Landing() {
               </span>
               <h3>Que no se les pase.</h3>
               <p>
-                Recordatorios y avisos inteligentes por WhatsApp para reducir ausencias y clientes que
-                se olvidan.
+                Confirmaciones por email y acceso a WhatsApp para contactar a tus clientes. Los mensajes de WhatsApp los enviás vos.
               </p>
               <span className="lp-feature-tag upcoming">INCLUIDO EN TU PLAN</span>
             </article>
@@ -651,7 +615,7 @@ export default function Landing() {
               </article>
             ))}
           </div>
-          <a className="lp-inline-link" href="#/felipeprueba" onClick={goToDemo}>
+          <a className="lp-inline-link" href="#/cupito-demo" onClick={goToDemo}>
             Probalo como si fueras tu cliente <ArrowRight size={16} />
           </a>
         </section>
@@ -713,11 +677,10 @@ export default function Landing() {
         <section className="lp-trust lp-reveal">
           <span>
             <ShieldCheck size={25} />
-            <b>Tus cobros, por Mercado Pago.</b>
+            <b>Tu suscripción, por Mercado Pago.</b>
           </span>
           <p>
-            Al conectar tu cuenta, el pago de productos y señas se gestiona de forma segura con
-            Mercado Pago.
+            Pagás tu plan de Cupito con Mercado Pago. Las señas de tus clientes se transfieren directamente a la cuenta de tu negocio.
             <br />
             Cupito no recibe ni guarda los datos de las tarjetas.
           </p>
@@ -757,11 +720,11 @@ export default function Landing() {
               ],
               [
                 "¿El plan gratis tiene vencimiento?",
-                "El plan Gratis (Semilla) está pensado para empezar sin pagar, con hasta 30 turnos al mes. No se te pide tarjeta de crédito para crear tu cuenta.",
+                "El plan Gratis (Semilla) está pensado para empezar sin pagar, con hasta 25 reservas activas por mes. No se te pide tarjeta de crédito para crear tu cuenta.",
               ],
               [
                 "¿Puedo cobrar una seña o vender productos?",
-                "Sí. Los planes Crece y Escala permiten solicitar señas por transferencia bancaria (con alias/CBU) o cobrar con Mercado Pago de forma automática.",
+                "Sí. Con Crece y Escala podés pedir señas por transferencia y ofrecer productos al reservar. El local verifica la transferencia. Mercado Pago se usa para pagar tu suscripción a Cupito.",
               ],
             ].map(([q, a], i) => (
               <AccordionItem value={String(i)} key={q}>

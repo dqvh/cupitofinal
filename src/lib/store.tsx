@@ -1,3 +1,4 @@
+import { fitsWorkingDay } from "./scheduling";
 import {
   createContext,
   useCallback,
@@ -35,7 +36,8 @@ import { sendReviewRequestEmail } from "./email";
 
 /* ================= tipos ================= */
 
-export type Plan = "semilla" | "crece" | "escala";
+import { PLAN_META, SEMILLA_MONTHLY_LIMIT, PRO_LIMIT, type Plan } from "./plans";
+export { PLAN_META, SEMILLA_MONTHLY_LIMIT, PRO_LIMIT, type Plan } from "./plans";
 export type PaymentMethod = "tarjeta" | "transferencia" | "billetera";
 
 export interface Service { id: string; name: string; price: number; duration: number }
@@ -53,6 +55,7 @@ export interface Booking {
   time: string; // HH:MM
   client: string;
   phone: string;
+  notes?: string; // Aclaraciones del cliente para este turno
   email?: string; // para confirmación y recordatorio 24 h antes
   status: BookingStatus;
   source: "online" | "manual";
@@ -285,13 +288,6 @@ export interface User {
   deleted?: boolean;
 }
 
-export const PLAN_META: Record<Plan, { name: string; price: string }> = {
-  semilla: { name: "Semilla", price: "$0" },
-  crece: { name: "Crece", price: "$9.500/mes" },
-  escala: { name: "Escala", price: "$22.000/mes" },
-};
-/* Límite del plan gratuito: reservas activas por mes calendario */
-export const SEMILLA_MONTHLY_LIMIT = 25;
 export function monthBookingCount(data: Pick<BizData, "bookings">, ref = new Date()): number {
   const prefix = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}`;
   return (data.bookings || []).filter((b) => b.date.startsWith(prefix) && b.status !== "cancelada").length;
@@ -415,7 +411,6 @@ export const isPaid = (u: User) => {
 export const DEMO_EMAIL = "demo@cupito.app";
 export const DEMO_SLUG = "cupito-demo";
 export const isDemoUser = (u: Pick<User, "email"> | undefined | null) => !!u && u.email === DEMO_EMAIL;
-export const PRO_LIMIT: Record<Plan, number> = { semilla: 1, crece: 3, escala: 99 };
 export const PRO_COLORS = ["#cdf463", "#ff7a59", "#93e6c3", "#b7e33f", "#f4b863"];
 
 /* ============ storage seguro ============ */
@@ -1372,7 +1367,7 @@ interface StoreApi {
   removeWaitlist(id: string): void;  createBookingFromWaitlist(waitlistId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   requestReview(bookingId: string): "sent" | "noemail";
   addBooking(b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
-  addBookingFor(ownerId: string, b: { client: string; phone: string; email?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  addBookingFor(ownerId: string, b: { client: string; phone: string; email?: string; notes?: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
   rescheduleBooking(id: string, newDate: string, newTime: string, newProId?: string): { ok: boolean; error?: string };
   setStatus(id: string, status: BookingStatus): void;
   removeBooking(id: string): void;
@@ -2264,7 +2259,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         }
         return r.ok ? null : r.error;
       }
-      // sin red: vía local
+      return "No pudimos guardar tu lugar en la lista. Revisá tu conexión y volvé a intentar.";
     }
     const data = loadData(targetId);
     if (client.trim().length < 2) return "Poné tu nombre completo.";
@@ -2390,7 +2385,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     emit();
     return { ok: true, id };
   },
-  async addBookingFor(ownerId, { client, phone, email, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
+  async addBookingFor(ownerId, { client, phone, email, notes, serviceId, date, time, source, items, proId, paidDeposit, paymentMethod, status, depositClaim }) {
     const bookingOwner = users.find((u) => u.id === ownerId);
     const bookingIsDemo = isDemoUser(bookingOwner);
     // Con nube: el servidor valida y guarda (los invitados no pueden escribir directo con RLS+Auth).
@@ -2398,7 +2393,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     if (!bookingIsDemo && isSupabaseConfigured) {
       const r = await callPublicApi({
         action: "book", ownerId,
-        booking: { client, phone, email, serviceId, date, time, items, proId, paidDeposit, paymentMethod, status, depositClaim },
+        booking: { client, phone, email, notes, serviceId, date, time, items, proId, paidDeposit, paymentMethod, status, depositClaim },
       });
       if (r) {
         if (r.ok && r.data) {
@@ -2407,12 +2402,19 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         }
         return r.ok ? { ok: true, id: r.id! } : { ok: false, error: r.error };
       }
-      // sin red: vía local
+      return { ok: false, error: "No pudimos confirmar la reserva con el local. Revisá tu conexión y consultá Mis turnos antes de volver a intentar." };
     }
     const data = loadData(ownerId);
     const owner = users.find((u) => u.id === ownerId);
     if (semillaLimitReached(owner, data))
       return { ok: false, error: "Este negocio alcanzó el límite de reservas online de este mes. Anotate en la lista de espera y te avisamos si se libera un lugar." };
+    const bookingService = data.services.find((service) => service.id === serviceId);
+    if (!bookingService) return { ok: false, error: "Este servicio ya no está disponible." };
+    const now = new Date();
+    const today = dateKey(now);
+    if (date < today || (date === today && time <= now.toTimeString().slice(0, 5))) return { ok: false, error: "Elegí un horario futuro." };
+    if (data.settings.maxAdvanceDays && date > dateKey(addDays(now, data.settings.maxAdvanceDays))) return { ok: false, error: "La fecha supera la anticipación permitida por el local." };
+    if (!data.professionals.length && !fitsWorkingDay(data.settings.hours[dayOfWeek(date)], time, bookingService.duration)) return { ok: false, error: "El servicio debe terminar dentro del horario de atención." };
     const isClosedDate = (data.settings.closedDates || []).includes(date);
     if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
     const dur = serviceDurationOf(data.services, serviceId);
@@ -2440,7 +2442,8 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       pro = available[0].id;
     } else if (pro && data.professionals.length > 0) {
       const targetPro = data.professionals.find((p) => p.id === pro);
-      if (targetPro && !isProAvailable(targetPro, date, time, dur, data.settings.hours, data.blockedSlots || [], data.bookings, data.services)) {
+      if (!targetPro) return { ok: false, error: "Este profesional ya no está disponible." };
+      if (!isProAvailable(targetPro, date, time, dur, data.settings.hours, data.blockedSlots || [], data.bookings, data.services)) {
         return { ok: false, error: `${targetPro.name} ya no está disponible en ese horario.` };
       }
     } else {
@@ -2450,7 +2453,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     }
     const id = uid();
     const cleanEmail = (email || "").trim();
-    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim, createdAt: Date.now() };
+    const newBooking: Booking = { id, notes: notes?.trim().slice(0, 300) || undefined, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, serviceId, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim, createdAt: Date.now() };
     data.bookings = [...data.bookings, newBooking];
     saveData(ownerId, data);
     if (!bookingIsDemo) saveRemoteBooking(ownerId, newBooking).catch(() => {});

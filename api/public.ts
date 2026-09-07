@@ -1,3 +1,5 @@
+import { SEMILLA_MONTHLY_LIMIT } from "../src/lib/plans";
+import { fitsWorkingDay } from "../src/lib/scheduling";
 /**
  * POST /api/public
  * Escrituras de INVITADOS (sin login) con service role + validación en servidor.
@@ -15,7 +17,7 @@
 export const config = { runtime: "edge" };
 
 const DAY_MS = 24 * 3600 * 1000;
-const SEMILLA_LIMIT = 25;
+const SEMILLA_LIMIT = SEMILLA_MONTHLY_LIMIT;
 
 function json(o: unknown, status = 200) {
   return new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
@@ -106,6 +108,16 @@ export default async function handler(req: Request): Promise<Response> {
       if ((data.settings?.closedDates || []).includes(date)) {
         return json({ error: "El negocio está cerrado en esa fecha." }, 400);
       }
+      const service = (data.services || []).find((item: any) => item.id === serviceId);
+      if (!service) return json({ error: "Este servicio ya no está disponible." }, 400);
+      const appointment = new Date(date + "T" + time + ":00-03:00");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || !Number.isFinite(appointment.getTime()) || appointment.getTime() <= Date.now()) return json({ error: "Elegí una fecha y un horario futuros válidos." }, 400);
+      const advance = data.settings?.maxAdvanceDays ?? 30;
+      const maxDay = new Date(Date.now() - 3 * 3600000 + advance * DAY_MS).toISOString().slice(0, 10);
+      if (advance > 0 && date > maxDay) return json({ error: "La fecha supera la anticipación permitida por el local." }, 400);
+      const dayIndex = new Date(date + "T12:00:00Z").getUTCDay();
+      if (b.proId && !(data.professionals || []).some((p: any) => p.id === b.proId)) return json({ error: "Este profesional ya no está disponible." }, 400);
+      if (!(data.professionals || []).length && !fitsWorkingDay(data.settings?.hours?.[dayIndex], time, service.duration)) return json({ error: "El servicio debe terminar dentro del horario de atención." }, 400);
       let pro = b.proId ? String(b.proId) : undefined;
       const dur = durOf(data.services || [], serviceId);
       const s = toMin(time);
@@ -212,14 +224,14 @@ export default async function handler(req: Request): Promise<Response> {
         }
       }
       const id = uid();
-      const status = b.status === "pendiente" ? "pendiente" : "confirmada";
+      const status = owner.plan !== "semilla" && data.settings?.depositEnabled && data.settings?.depositPct > 0 && service.price > 0 ? "pendiente" : "confirmada";
       const claimTx = b.depositClaim && typeof b.depositClaim.txId === "string" ? b.depositClaim.txId.slice(0, 60) : "";
       const booking = {
-        id, client, phone, email: email || undefined, serviceId, date, time,
+        id, client, phone, email: email || undefined, notes: String(b.notes || "").trim().slice(0, 300) || undefined, serviceId, date, time,
         status, source: b.source === "manual" ? "manual" : "online",
         items: Array.isArray(b.items) ? b.items.slice(0, 10) : undefined,
         proId: pro, createdAt: Date.now(),
-        paidDeposit: b.paidDeposit === true ? true : undefined,
+        paidDeposit: false,
         paymentMethod: ["tarjeta", "transferencia", "billetera"].includes(b.paymentMethod) ? b.paymentMethod : undefined,
         depositClaim: claimTx ? { txId: claimTx, sentAt: Date.now() } : undefined,
       };

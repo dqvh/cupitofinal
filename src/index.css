@@ -1,4 +1,21 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+@source "./Landing.tsx";
+@source "./App.tsx";
+@source "./components/kit.tsx";
+@source "./components/Accordion.tsx";
+@source "./components/LandingTour.tsx";
+
+/* Foco consistente y controles legibles al reservar desde el celular. */
+:where(button, a, input, select, textarea):focus-visible { outline: 3px solid #047857; outline-offset: 3px; }
+button:disabled { cursor: not-allowed; }
+@media (max-width: 640px) {
+  input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto !important; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .reveal { opacity: 1; transform: none; }
+}
 
 @theme {
   --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;

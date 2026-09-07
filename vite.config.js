@@ -1,12 +1,16 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = { ...loadEnv(mode, process.cwd(), ""), ...process.env };
+  return {
   plugins: [react(), tailwindcss()],
-  // Vite expone a import.meta.env todas las vars con estos prefijos.
-  // No usar `define` para inyectarlas: pisaba los valores y dejaba "" quemado en el build.
-  envPrefix: ["VITE_", "NEXT_PUBLIC_", "SUPABASE_"],
+  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
+  // SUPABASE_ también incluye secretos del servidor: exponer sólo valores públicos.
+  define: Object.fromEntries(["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY"]
+    .filter((key) => env[key])
+    .map((key) => [`import.meta.env.${key}`, JSON.stringify(env[key])])),
   build: {
     rollupOptions: {
       output: {
@@ -25,4 +29,5 @@ export default defineConfig({
       port: 3000,
     },
   },
+  };
 });

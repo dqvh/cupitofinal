@@ -1,3 +1,5 @@
+import { validateHours, validateTransfer } from "../lib/scheduling";
+import { PLAN_FEATURES } from "../lib/plans";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import QRCode from "qrcode";
 import {
@@ -795,7 +797,7 @@ export default function Dashboard() {
                           Tu período del Plan {PLAN_META[user.plan].name} ha finalizado
                         </p>
                         <p className="text-xs text-rose-800">
-                          Tu cuenta pasó a modo básico (Semilla). Activá el débito automático con Mercado Pago para reactivar profesionales ilimitados y reservas sin tope.
+                          Tu cuenta pasó a modo básico (Semilla). Activá el débito automático con Mercado Pago para reactivar las funciones de tu plan y las reservas sin tope.
                         </p>
                       </div>
                     </div>
@@ -1418,7 +1420,7 @@ export default function Dashboard() {
               <div className="pop-in mt-8">
                 {!isPaid(user) ? (
                   <LockedFeature icon={<IconBag className="h-7 w-7" />} title="La tienda es parte del plan Crece"
-                    desc="Tus clientes ven tus productos justo cuando reservan: el momento de mayor intención de compra. En promedio, un 20% agrega algo al turno."
+                    desc="Ofrecé tus productos al reservar. El cliente elige lo que necesita y lo retira cuando visita el local."
                     onUpgrade={() => setCheckoutPlan("crece")} />
                 ) : (
                   <ShopAdmin />
@@ -2514,6 +2516,10 @@ function BookingDetailModal({
             </div>
           </div>
 
+          {b.notes && <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+            <p className="text-xs font-bold text-emerald-900">Aclaraciones del cliente</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{b.notes}</p>
+          </div>}
           {/* Contact details */}
           <div className="rounded-xl border border-slate-200/80 bg-white p-3 space-y-2">
             <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Contacto del cliente</span>
@@ -4619,7 +4625,7 @@ function TeamView({ onSyncCalendar }: { onSyncCalendar?: (proId: string) => void
   return (
     <div className="pop-in mt-8">
       <p className="mb-4 text-sm text-inkmute">
-        Tu plan <strong className="text-fern">{PLAN_META[user.plan].name}</strong> permite hasta <strong className="text-fern">{limit >= 99 ? "profesionales ilimitados" : `${limit} profesional${limit === 1 ? "" : "es"}`}</strong>. Usás {data.professionals.length}.
+        Tu plan <strong className="text-fern">{PLAN_META[user.plan].name}</strong> permite hasta <strong className="text-fern">{`${limit} profesional${limit === 1 ? "" : "es"}`}</strong>. Usás {data.professionals.length}.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         {data.professionals.map((p) => {
@@ -5053,11 +5059,7 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
   const monthPct = Math.min(100, Math.round((monthUsed / SEMILLA_MONTHLY_LIMIT) * 100));
 
   const plans: Plan[] = ["semilla", "crece", "escala"];
-  const desc: Record<Plan, string[]> = {
-    semilla: ["1 profesional", "25 reservas al mes", "Link web propio", "Recordatorios por email", "Horarios configurables"],
-    crece: ["Reservas ilimitadas", "Hasta 3 profesionales", "Cobro de seña (Mercado Pago / Transferencia)", "Tienda de productos y cupones", "Página con los colores de tu marca", "Horarios por día con corte"],
-    escala: ["Todo lo de Crece", "Profesionales y equipos ilimitados", "Estadísticas avanzadas y exportación", "Lista de espera con prioridad (recurrentes primero)", "Soporte prioritario"],
-  };
+  const desc = PLAN_FEATURES;
 
   const nextDateStr = fmtDateHuman(sub?.nextRenewal || new Date(Date.now() + 30 * 86400000).toISOString());
 
@@ -5173,7 +5175,7 @@ function SubscriptionView({ current, user, onSelect }: { current: Plan; user: No
                 </div>
                 <div className="flex items-center gap-2">
                   <a
-                    href={`https://wa.me/5491100000000?text=${encodeURIComponent(`Hola! Quiero renovar mi plan ${PLAN_META[current].name} de ${user.business} por transferencia.`)}`}
+                    href={`mailto:hola@cupito.app?subject=${encodeURIComponent(`Hola! Quiero renovar mi plan ${PLAN_META[current].name} de ${user.business} por transferencia.`)}`}
                     target="_blank"
                     rel="noreferrer"
                     className="btn-press rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
@@ -5591,12 +5593,14 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
   if (!paid) {
     return (
       <LockedFeature icon={<IconTicket className="h-7 w-7" />} title="La seña es parte del plan Crece"
-        desc="Cobrá un anticipo al reservar y bajá las ausencias hasta 68%. Vos elegís el porcentaje y tus datos de transferencia."
+        desc="Pedí un anticipo al reservar. Elegís el porcentaje y verificás la transferencia desde tu panel."
         onUpgrade={() => requestCheckout("crece")} />
     );
   }
 
   const handleSave = () => {
+    const error = validateTransfer(f.alias, f.cbu, f.holder);
+    if (error) { toast(error, "warn"); return; }
     onChange({
       transferAlias: f.alias.trim(),
       transferCBU: f.cbu.replace(/\D/g, ""),
@@ -5610,29 +5614,33 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="font-display text-lg font-extrabold text-ink">Seña al reservar</h3>
-          <p className="text-sm text-inkmute">El cliente transfiere a tus datos y carga el comprobante. Vos lo verificás.</p>
+          <p className="text-sm text-inkmute">El cliente transfiere a tus datos y te envía el comprobante. Vos verificás el ingreso y confirmás el turno.</p>
         </div>
-        <Toggle on={settings.depositEnabled} onChange={(v) => { onChange({ depositEnabled: v }); toast(v ? "Seña activada ✓" : "Seña desactivada."); }} label="Activar seña" />
+        <Toggle on={settings.depositEnabled} onChange={(v) => { if (v) {
+            const error = validateTransfer(f.alias, f.cbu, f.holder);
+            if (error) { toast(error, "warn"); return; }
+          }
+          onChange({ depositEnabled: v, transferAlias: f.alias.trim(), transferCBU: f.cbu.replace(/\s/g, ""), transferHolder: f.holder.trim() }); toast(v ? "Seña activada ✓" : "Seña desactivada."); }} label="Activar seña" />
       </div>
-      {settings.depositEnabled && (
+      {(
         <div className="pop-in mt-5 space-y-5">
           <div>
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Porcentaje de seña: <strong className="text-fern">{settings.depositPct}%</strong></label>
-            <input type="range" min={10} max={50} step={5} value={settings.depositPct} onChange={(e) => onChange({ depositPct: Number(e.target.value) })} className="w-full accent-[#1e5c49]" />
+            <input aria-label="Porcentaje de seña" type="range" min={10} max={50} step={5} value={settings.depositPct} onChange={(e) => onChange({ depositPct: Number(e.target.value) })} className="w-full accent-[#1e5c49]" />
             <div className="flex justify-between text-xs font-bold text-ink/40"><span>10%</span><span>50%</span></div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Alias</label>
-              <input className="field" placeholder="TU.NEGOCIO" value={f.alias} onChange={(e) => setF({ ...f, alias: e.target.value })} />
+              <input className="field" aria-label="Alias de transferencia" placeholder="TU.NEGOCIO" value={f.alias} onChange={(e) => setF({ ...f, alias: e.target.value })} />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">CBU / CVU</label>
-              <input className="field" placeholder="0000003100012345678901" value={f.cbu} onChange={(e) => setF({ ...f, cbu: e.target.value })} />
+              <input className="field" aria-label="CBU o CVU" inputMode="numeric" maxLength={22} placeholder="0000003100012345678901" value={f.cbu} onChange={(e) => setF({ ...f, cbu: e.target.value })} />
             </div>
             <div className="sm:col-span-2">
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Titular de la cuenta</label>
-              <input className="field" placeholder="Nombre y apellido" value={f.holder} onChange={(e) => setF({ ...f, holder: e.target.value })} />
+              <input className="field" aria-label="Titular de la cuenta" placeholder="Nombre y apellido" value={f.holder} onChange={(e) => setF({ ...f, holder: e.target.value })} />
             </div>
           </div>
           <button
@@ -5649,7 +5657,7 @@ function DepositCard({ settings, paid, onChange }: { settings: BizSettings; paid
 }
 
 function HoursCard({
-  hours,
+  hours: savedHours,
   settings,
   onChange,
   onUpdateSettings,
@@ -5659,17 +5667,39 @@ function HoursCard({
   onChange: (hours: DayHours[]) => void;
   onUpdateSettings: (patch: Partial<BizSettings>) => void;
 }) {
-  const { toast } = useStore();
+  const { toast, user } = useStore();
+  const draftKey = "cupito_hours_draft_" + user?.id;
+  const [hours, setHours] = useState<DayHours[]>(() => {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem(draftKey) || "null");
+      if (Array.isArray(draft) && draft.length === 7 && draft.every(day => day && typeof day.open === "boolean" && typeof day.from === "string" && typeof day.to === "string")) return draft;
+    } catch { /* borrador no disponible */ }
+    return savedHours.map((day) => ({ ...day }));
+  });
+  const [error, setError] = useState<string | null>(null);
+  const dirty = JSON.stringify(hours) !== JSON.stringify(savedHours);
+  useEffect(() => {
+    try {
+      if (dirty) sessionStorage.setItem(draftKey, JSON.stringify(hours));
+      else sessionStorage.removeItem(draftKey);
+    } catch { /* el formulario sigue disponible sin almacenamiento */ }
+  }, [hours, dirty, draftKey]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const set = (i: number, patch: Partial<DayHours>) => {
     const next = hours.map((h, idx) => (idx === i ? { ...h, ...patch } : h));
-    onChange(next);
-    toast("Horarios actualizados ✓");
+    setHours(next);
+    setError(null);
   };
   const order = [1, 2, 3, 4, 5, 6, 0];
   return (
     <div className="card p-6">
       <h3 className="font-display text-lg font-extrabold text-ink">Días y horarios de atención</h3>
-      <p className="mt-1 text-sm text-inkmute">Los turnos disponibles se generan solos según esto. Podés agregar un corte al mediodía.</p>
+      <p className="mt-1 text-sm text-inkmute">Definí tus horarios y guardá los cambios juntos. Los turnos deben terminar antes del cierre y respetar el corte al mediodía.</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
@@ -5681,8 +5711,8 @@ function HoursCard({
               }
               return h;
             });
-            onChange(next);
-            toast("Horario del lunes aplicado a días hábiles (Lun-Vie) ✓");
+            setHours(next);
+            toast("Lunes copiado a días hábiles. Guardá para aplicar los cambios.");
           }}
           className="btn-press inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 shadow-xs"
         >
@@ -5699,21 +5729,21 @@ function HoursCard({
                 <span className={`w-24 font-display text-sm font-extrabold ${h.open ? "text-ink" : "text-ink/35"}`}>{DAY_NAMES[i]}</span>
                 {h.open && (
                   <span className="flex items-center gap-2 text-sm">
-                    <input type="time" className="field !w-auto" value={h.from} onChange={(e) => set(i, { from: e.target.value })} />
+                    <input aria-label={DAY_NAMES[i] + ": apertura"} type="time" className="field !w-auto" value={h.from} onChange={(e) => set(i, { from: e.target.value })} />
                     <span className="text-inkmute">a</span>
-                    <input type="time" className="field !w-auto" value={h.to} onChange={(e) => set(i, { to: e.target.value })} />
+                    <input aria-label={DAY_NAMES[i] + ": cierre"} type="time" className="field !w-auto" value={h.to} onChange={(e) => set(i, { to: e.target.value })} />
                   </span>
                 )}
                 {h.open && !h.from2 && (
-                  <button type="button" onClick={() => set(i, { from2: "15:00", to2: "20:00" })} className="ml-auto rounded-full border-2 border-coral/40 px-3 py-1.5 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">+ Corte al mediodía</button>
+                  <button type="button" onClick={() => set(i, { to: "13:00", from2: "15:00", to2: "20:00" })} className="ml-auto rounded-full border-2 border-coral/40 px-3 py-1.5 text-xs font-bold text-coral transition-colors hover:bg-coral hover:text-white">+ Corte al mediodía</button>
                 )}
               </div>
               {h.open && h.from2 && (
                 <div className="pop-in mt-3 flex flex-wrap items-center gap-2 border-t-2 border-dashed border-coral/30 pt-3 text-sm">
                   <span className="text-xs font-extrabold uppercase tracking-wider text-coral">✂ Reabre</span>
-                  <input type="time" className="field !w-auto" value={h.from2} onChange={(e) => set(i, { from2: e.target.value })} />
+                  <input aria-label={DAY_NAMES[i] + ": reapertura"} type="time" className="field !w-auto" value={h.from2} onChange={(e) => set(i, { from2: e.target.value })} />
                   <span className="text-inkmute">a</span>
-                  <input type="time" className="field !w-auto" value={h.to2 ?? "20:00"} onChange={(e) => set(i, { to2: e.target.value })} />
+                  <input aria-label={DAY_NAMES[i] + ": segundo cierre"} type="time" className="field !w-auto" value={h.to2 ?? "20:00"} onChange={(e) => set(i, { to2: e.target.value })} />
                   <button type="button" onClick={() => set(i, { from2: undefined, to2: undefined })} className="ml-auto text-xs font-bold text-inkmute underline-offset-4 hover:text-coral hover:underline">Quitar corte</button>
                 </div>
               )}
@@ -5722,6 +5752,19 @@ function HoursCard({
         })}
       </div>
 
+      <div className="sticky bottom-3 z-10 mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        {error && <p role="alert" className="mb-3 text-sm font-semibold text-red-700">{error}</p>}
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" disabled={!dirty} className="rounded-full bg-emerald-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50" onClick={() => {
+            const issue = validateHours(hours);
+            setError(issue);
+            if (issue) return;
+            onChange(hours);
+            toast("Horarios guardados ✓");
+          }}>Guardar horarios</button>
+          {dirty ? <button type="button" className="rounded-full px-4 py-3 text-sm font-semibold" onClick={() => { setHours(savedHours.map((day) => ({ ...day }))); setError(null); }}>Descartar cambios</button> : <span role="status" className="text-sm text-slate-600">Sin cambios pendientes</span>}
+        </div>
+      </div>
       {/* Anticipación máxima de reservas */}
       <div className="mt-8 border-t-2 border-dashed border-ink/10 pt-6">
         <label className="mb-1 block font-display text-sm font-extrabold text-ink">
@@ -5935,7 +5978,7 @@ function PlanTab({
                   {active && <span className="rounded-full bg-emerald-700 px-2.5 py-0.5 text-[10px] font-extrabold uppercase text-white">Activo</span>}
                 </div>
                 <p className="mt-0.5 text-xs text-inkmute">
-                  {p === "semilla" ? "Gratis para siempre · 1 profesional · 25 reservas/mes" : p === "crece" ? "Reservas ilimitadas · hasta 3 profesionales · seña y cupones" : "Profesionales ilimitados · soporte prioritario"}
+                  {PLAN_FEATURES[p].join(" · ")}
                 </p>
               </div>
               {active ? (

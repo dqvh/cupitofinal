@@ -3,3 +3,8 @@ node_modules/
 dist/
 build/
 *.log
+artifacts/
+test-results/
+playwright-report/
+.env
+.env.*

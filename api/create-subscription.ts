@@ -1,3 +1,4 @@
+import { PLAN_AMOUNTS, checkoutAmount } from "../src/lib/plans";
 /**
  * POST /api/create-subscription
  * Crea una suscripción (preapproval) en MercadoPago y devuelve la URL de checkout.
@@ -11,10 +12,7 @@
 
 export const config = { runtime: "edge" };
 
-const PLANS = {
-  crece: { mensual: 9500, anual: 94800 }, // 7.900/mes × 12 (2 meses gratis)
-  escala: { mensual: 22000, anual: 219600 }, // 18.300/mes × 12 (2 meses gratis)
-} as const;
+const PLANS = PLAN_AMOUNTS;
 
 function json(o: unknown, status = 200) {
   return new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
@@ -32,7 +30,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   const plan = body.plan;
   const billing = body.billing === "anual" ? "anual" : "mensual";
-  if (!plan || !(plan in PLANS)) return json({ error: "Plan inválido" }, 400);
+  if (!plan || !Object.prototype.hasOwnProperty.call(PLANS, plan)) return json({ error: "Plan inválido" }, 400);
 
   const TOKEN = process.env.MP_ACCESS_TOKEN;
   if (!TOKEN) return json({ demo: true, reason: "Falta MP_ACCESS_TOKEN en Vercel → modo demo." });
@@ -47,7 +45,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const PUBLIC_URL = process.env.PUBLIC_URL || origin || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://cupito.app");
-  const amount = PLANS[plan][billing];
+  const amount = checkoutAmount(plan, billing);
 
   const payload: Record<string, unknown> = {
     reason: `Cupito — Plan ${plan === "crece" ? "Crece" : "Escala"} (${billing})`,

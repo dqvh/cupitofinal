@@ -1,10 +1,10 @@
 import { Component, Suspense, lazy, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
-import { StoreProvider, useStore } from "./lib/store";
 import { LogoMark } from "./components/kit";
 
 /* Code splitting por ruta: la landing principal se carga directo para FCP instantáneo,
    mientras que el panel y rutas secundarias se descargan bajo demanda. */
 import Landing from "./Landing";
+const StoreGate = lazy(() => import("./components/StoreGate"));
 const Auth = lazy(() => import("./components/Auth"));
 const Dashboard = lazy(() => import("./components/Dashboard"));
 const PublicPage = lazy(() => import("./components/PublicPage"));
@@ -49,22 +49,6 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
-/* Barra de progreso de scroll */
-function ScrollProgress() {
-  const [p, setP] = useState(0);
-  useEffect(() => {
-    const onScroll = () => {
-      const h = document.documentElement;
-      const max = h.scrollHeight - h.clientHeight;
-      setP(max > 0 ? (h.scrollTop / max) * 100 : 0);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-  return <div className="fixed inset-x-0 top-0 z-[95] h-1 bg-lime transition-[width] duration-150" style={{ width: `${p}%` }} aria-hidden="true" />;
-}
-
 export const RESERVED_PATHS = new Set([
   "",
   "admin",
@@ -91,7 +75,8 @@ export const RESERVED_PATHS = new Set([
   "sitemap.xml",
 ]);
 
-function parseRoute(): { name: "landing" | "auth" | "app" | "b" | "admin"; query: string; slug?: string } {
+export function parseRoute(): { name: "landing" | "auth" | "app" | "b" | "admin"; query: string; slug?: string } {
+  if (typeof window === "undefined") return { name: "landing", query: "" };
   const h = window.location.hash || "";
   const p = window.location.pathname || "/";
 
@@ -172,7 +157,7 @@ function Router() {
       : "registro";
     return (
       <Suspense fallback={<RouteLoader />}>
-        <Auth initialMode={mode} />
+        <StoreGate><Auth initialMode={mode} /></StoreGate>
       </Suspense>
     );
   }
@@ -180,7 +165,7 @@ function Router() {
   if (route.name === "admin") {
     return (
       <Suspense fallback={<RouteLoader />}>
-        <AdminPanel />
+        <StoreGate><AdminPanel /></StoreGate>
       </Suspense>
     );
   }
@@ -188,7 +173,7 @@ function Router() {
   if (route.name === "b") {
     return (
       <Suspense fallback={<RouteLoader />}>
-        <PublicPage slug={route.slug || "studio-nails"} />
+        <StoreGate><PublicPage slug={route.slug || "studio-nails"} /></StoreGate>
       </Suspense>
     );
   }
@@ -196,7 +181,7 @@ function Router() {
   if (route.name === "app") {
     return (
       <Suspense fallback={<RouteLoader />}>
-        <Dashboard />
+        <StoreGate><Dashboard /></StoreGate>
       </Suspense>
     );
   }
@@ -207,13 +192,10 @@ function Router() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <StoreProvider>
         <div className="min-h-screen overflow-x-clip bg-paper font-body text-ink antialiased">
           <div className="noise" aria-hidden="true" />
-          <ScrollProgress />
           <Router />
         </div>
-      </StoreProvider>
     </ErrorBoundary>
   );
 }

@@ -1,3 +1,4 @@
+import { fitsWorkingDay } from "../lib/scheduling";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, MapPin, Sparkles,
@@ -73,7 +74,14 @@ function gcalUrl(o: { title: string; date: string; time: string; duration: numbe
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(o.title)}&dates=${toLocalStamp(start)}/${toLocalStamp(end)}&details=${encodeURIComponent(o.desc || "Turno reservado con Cupito. ¡Te esperamos!")}`;
 }
 
-export default function PublicBooking({
+export default function PublicBooking(props: { owner?: ({ user: User; data: BizData }) | null; isPreview?: boolean; initialLookupOpen?: boolean; initialReviewOpen?: boolean } = {}) {
+  const store = useStore();
+  const owner = props.owner || (store.user && store.data ? { user: store.user, data: store.data } : null);
+  if (!owner) return <p role="status" className="p-8 text-center">Cargando información del local…</p>;
+  return <BookingForm key={owner.user.id} {...props} owner={owner} />;
+}
+
+function BookingForm({
   owner,
   isPreview = false,
   initialLookupOpen = false,
@@ -213,6 +221,7 @@ export default function PublicBooking({
     if (hasPros) {
       return getAvailablePros(biz.professionals, selectedDate, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services).length === 0;
     }
+    if (!fitsWorkingDay(settings.hours[dayOfWeek(selectedDate)], t, dur)) return true;
     if (isSlotBlocked(biz.blockedSlots || [], selectedDate, t)) return true;
     return !!findOverlap({ date: selectedDate, time: t, dur }, biz.bookings, biz.services);
   };
@@ -268,6 +277,12 @@ export default function PublicBooking({
       return;
     }
 
+    if (selectedDate < todayKey || selectedDate > maxDateKey || (settings.closedDates || []).includes(selectedDate) || isSlotDisabled(time)) {
+      setError("Ese horario ya no está disponible. Elegí otro antes de confirmar.");
+      setStep(1);
+      setTime(null);
+      return;
+    }
     submittingRef.current = true;
     setBusy(true);
     setError(null);
@@ -276,10 +291,13 @@ export default function PublicBooking({
       ? cartItemsArray.map(({ id, quantity }) => ({ productId: id, qty: quantity }))
       : undefined;
 
-    const res = await addBookingFor(user.id, {
+    let res: Awaited<ReturnType<typeof addBookingFor>>;
+    try {
+    res = await addBookingFor(user.id, {
       client: client.trim(),
       phone: phone.trim(),
       email: email.trim() || undefined,
+      notes: notes.trim() || undefined,
       serviceId,
       date: selectedDate,
       time,
@@ -289,8 +307,13 @@ export default function PublicBooking({
       status: depositOn && depositAmount > 0 ? "pendiente" : undefined,
     });
 
-    submittingRef.current = false;
-    setBusy(false);
+    } catch {
+      setError("No pudimos confirmar el turno. Revisá tu conexión y consultá Mis turnos antes de volver a intentar.");
+      return;
+    } finally {
+      submittingRef.current = false;
+      setBusy(false);
+    }
 
     if (!res.ok) {
       setError(res.error || "No se pudo realizar la reserva. Por favor elegí otro horario.");
@@ -937,7 +960,7 @@ export default function PublicBooking({
                   <div className="notice">
                     <b>Seña requerida por transferencia: {fmtMoney(depositAmount)}</b>
                     <p style={{ marginTop: 6, fontSize: 13 }}>
-                      Al confirmar verás el Alias / CBU. El turno queda guardado y se confirma definitivamente al enviar el comprobante.
+                      Al confirmar verás el Alias / CBU. El turno queda pendiente hasta que el local verifique tu transferencia.
                     </p>
                   </div>
                 )}
@@ -1003,6 +1026,7 @@ export default function PublicBooking({
                 <div className="booking-controls">
                   <button
                     type="button"
+                    disabled={busy}
                     className="btn"
                     onClick={() => setStep(1)}
                     aria-label="Volver a horarios"

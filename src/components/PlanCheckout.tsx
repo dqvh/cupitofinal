@@ -1,3 +1,4 @@
+import { PLAN_FEATURES, checkoutAmount } from "../lib/plans";
 import { useState } from "react";
 import { PLAN_META, type Plan, useStore } from "../lib/store";
 import { sendSubscriptionWelcomeEmail } from "../lib/email";
@@ -12,10 +13,7 @@ import {
 } from "../lib/billing";
 import { IconArrow, IconCheck } from "./kit";
 
-const FEATURES: Record<PaidPlan, string[]> = {
-  crece: ["Reservas ilimitadas", "Hasta 3 profesionales", "Seña, tienda y cupones", "Página con tu marca"],
-  escala: ["Todo lo de Crece", "Equipo ilimitado", "Lista de espera con prioridad", "Estadísticas avanzadas y exportación", "Soporte prioritario"],
-};
+const FEATURES = PLAN_FEATURES;
 
 export function PlanCheckout({
   plan,
@@ -24,12 +22,19 @@ export function PlanCheckout({
   plan: Plan;
   onClose: () => void;
 }) {
-  const { user, setPlan, toast } = useStore();
+  const { user, setPlan, toast, cancelSubscriptionAsync } = useStore();
   const [billing, setBilling] = useState<BillingCycle>("mensual");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pickFree = () => {
+  const pickFree = async () => {
+    if (processing) return;
+    if (user?.subscription?.mpPreapprovalId && user.subscription.status !== "cancelada") {
+      setProcessing(true);
+      const result = await cancelSubscriptionAsync();
+      setProcessing(false);
+      if (!result.ok) { setError(result.error); return; }
+    }
     setPlan("semilla");
     toast("Quedaste en el plan Semilla, gratis. Podés subir cuando quieras.");
     onClose();
@@ -59,8 +64,10 @@ export function PlanCheckout({
         <div className="pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" onClick={(e) => e.stopPropagation()}>
           <h3 className="font-display text-2xl font-extrabold">Plan Semilla</h3>
           <p className="mt-2 text-sm text-inkmute">Gratis para siempre: 25 reservas al mes, 1 profesional y tu link. Sin tarjeta.</p>
-          <button onClick={pickFree} className="mt-6 w-full rounded-full bg-slate-900 hover:bg-slate-800 py-4 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-sm">
-            Quedarme en Semilla
+          <p className="mt-3 text-sm text-inkmute">Si tenés débito automático, primero cancelamos la suscripción en Mercado Pago para detener los próximos cobros.</p>
+          {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+          <button disabled={processing} onClick={pickFree} className="mt-6 w-full rounded-full bg-slate-900 hover:bg-slate-800 py-4 font-display text-base font-bold text-white transition-all hover:-translate-y-0.5 shadow-sm">
+            {processing ? "Cancelando suscripción…" : "Quedarme en Semilla"}
           </button>
           <button onClick={onClose} className="mt-3 w-full text-center text-sm font-bold text-inkmute hover:text-ink">Cancelar</button>
         </div>
@@ -87,14 +94,14 @@ export function PlanCheckout({
           {(["mensual", "anual"] as const).map((b) => (
             <button key={b} type="button" onClick={() => setBilling(b)}
               className={`relative z-10 flex-1 rounded-full py-2 font-display text-xs font-bold uppercase tracking-wider transition-colors ${billing === b ? "text-white" : "text-ink/60"}`}>
-              {b}{b === "anual" ? " · 2 meses off" : ""}
+              {b}{b === "anual" ? " · ahorro anual" : ""}
             </button>
           ))}
         </div>
 
         <p className="mt-5 font-display text-4xl font-extrabold text-fern">${price.toLocaleString("es-AR")}<span className="text-base font-bold text-inkmute"> ARS / mes</span></p>
         <p className="mt-1 text-xs text-inkmute">
-          {billing === "anual" ? `Facturado anual · ahorrás $${yearlySave.toLocaleString("es-AR")} al año` : "Facturado mes a mes. Cancelás cuando quieras."}
+          {billing === "anual" ? `Se cobran ${checkoutAmount(plan, billing).toLocaleString("es-AR")} ARS en un pago anual. Ahorrás ${yearlySave.toLocaleString("es-AR")} al año.` : "Facturado mes a mes. Cancelás cuando quieras."}
         </p>
 
         <ul className="mt-5 space-y-2">

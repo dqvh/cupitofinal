@@ -1,34 +1,6 @@
-import type { Plan } from "./store";
-
-export type BillingCycle = "mensual" | "anual";
-
-export const PAID_PLANS = ["crece", "escala"] as const;
-export type PaidPlan = (typeof PAID_PLANS)[number];
-export const isPaidPlan = (p: Plan): p is PaidPlan => p === "crece" || p === "escala";
-
-export const PLAN_AMOUNTS: Record<PaidPlan, Record<BillingCycle, number>> = {
-  crece: { mensual: 9500, anual: 7900 },
-  escala: { mensual: 22000, anual: 18300 },
-};
-
-/* Beneficios que se listan en el email de bienvenida al plan */
-export const PLAN_BENEFITS: Record<PaidPlan, string[]> = {
-  crece: [
-    "Reservas ilimitadas (chau tope de 25)",
-    "Hasta 3 profesionales con agenda propia",
-    "Seña por transferencia con verificación en 1 clic",
-    "Tienda de productos y cupones de descuento",
-    "Página con los colores de tu marca",
-    "Confirmación y recordatorio por email a tus clientes",
-  ],
-  escala: [
-    "Todo lo del plan Crece",
-    "Profesionales y equipos ilimitados",
-    "Lista de espera inteligente con prioridad",
-    "Estadísticas avanzadas y exportación a Excel",
-    "Soporte preferencial",
-  ],
-};
+import type { Plan, PaidPlan, BillingCycle } from "./plans";
+export { PLAN_AMOUNTS, PLAN_BENEFITS, PAID_PLANS, isPaidPlan } from "./plans";
+export type { PaidPlan, BillingCycle } from "./plans";
 
 const PENDING_KEY = "cupito_mp_pending";
 
@@ -91,7 +63,7 @@ export async function createMercadoPagoCheckout(opts: {
     });
     const r = await res.json().catch(() => ({}));
     if (r.demo) {
-      return { ok: false, error: "Mercado Pago no tiene configurado MP_ACCESS_TOKEN en Vercel (Settings → Environment Variables). Agregá tu token para habilitar los pagos reales." };
+      return { ok: false, error: "Los pagos no están disponibles en este momento. Tu plan actual sigue activo. Contactanos en hola@cupito.app para recibir ayuda." };
     }
     if (!res.ok || r.error) {
       return { ok: false, error: String(r.error || "Mercado Pago rechazó la solicitud de suscripción. Por favor intentá nuevamente.") };
