@@ -59,3 +59,18 @@
 .workspace-greeting span { color:#657868; font-weight:400; }
 @keyframes workspace-appear { from { transform: translateY(5px); } to { transform: none; } }
 .workspace-app .pop-in { animation: workspace-appear .18s ease-out both; }
+
+.cupito-modal-overlay {
+  padding: 1rem;
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+.cupito-modal {
+  max-height: calc(100svh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+@media(max-width: 639px) {
+  .cupito-modal { border-radius: 22px 22px 16px 16px; }
+}

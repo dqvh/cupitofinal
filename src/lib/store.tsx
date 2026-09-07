@@ -44,7 +44,7 @@ export interface Service { id: string; name: string; price: number; duration: nu
 export interface Product { id: string; name: string; price: number; desc: string }
 export interface Review { id: string; client: string; rating: number; text: string; date: string }
 export interface Coupon { id: string; code: string; pct: number; active: boolean }
-export interface Professional { id: string; name: string; role: string; color: string; hours?: DayHours[] }
+export interface Professional { id: string; name: string; role: string; color: string; phone?: string; hours?: DayHours[] }
 export interface WaitlistEntry { id: string; date: string; serviceId: string; client: string; phone: string; createdAt: number }
 
 export type BookingStatus = "pendiente" | "confirmada" | "atendida" | "cancelada" | "ausente";
@@ -808,8 +808,8 @@ function seedDemoExtras(userId: string) {
   if (data.coupons.length === 0) { data.coupons = seedCoupons(); changed = true; }
   if (data.professionals.length === 0) {
     data.professionals = [
-      { id: uid(), name: "Caro Méndez", role: "Nail artist", color: "#cdf463" },
-      { id: uid(), name: "Maru Lopez", role: "Manicura", color: "#ff7a59" },
+      { id: uid(), name: "Caro Méndez", role: "Nail artist", color: "#cdf463", phone: "1155551234" },
+      { id: uid(), name: "Maru Lopez", role: "Manicura", color: "#ff7a59", phone: "1166662345" },
     ];
     changed = true;
   }
@@ -846,6 +846,7 @@ function normalizeData(p: Partial<BizData>): BizData {
     professionals: Array.isArray(p.professionals)
       ? p.professionals.map((pro: any) => ({
           ...pro,
+          phone: typeof pro.phone === "string" ? pro.phone : "",
           hours: Array.isArray(pro.hours) && pro.hours.length === 7 ? pro.hours : undefined,
         }))
       : d.professionals,
@@ -1360,7 +1361,7 @@ interface StoreApi {
   addCoupon(c: { code: string; pct: number }): string | null;
   updateCoupon(id: string, patch: Partial<Omit<Coupon, "id">>): void;
   removeCoupon(id: string): void;
-  addProfessional(name: string, role: string, hours?: DayHours[]): string | null;
+  addProfessional(name: string, role: string, hours?: DayHours[], phone?: string): string | null;
   updateProfessional(id: string, patch: Partial<Omit<Professional, "id">>): void;
   removeProfessional(id: string): void;
   addWaitlist(e: { date: string; serviceId: string; client: string; phone: string }, ownerId?: string): Promise<string | null>;
@@ -2206,7 +2207,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     saveData(sessionUserId, data);
     emit();
   },
-  addProfessional(name, role, hours) {
+  addProfessional(name, role, hours, phone) {
     if (!sessionUserId) return "Necesitás una cuenta.";
     const data = loadData(sessionUserId);
     const owner = users.find((u) => u.id === sessionUserId);
@@ -2221,6 +2222,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
         name: name.trim(),
         role: role.trim() || "Profesional",
         color: PRO_COLORS[data.professionals.length % PRO_COLORS.length],
+        phone: phone?.replace(/\D/g, "").slice(0, 15) || "",
         hours: Array.isArray(hours) && hours.length === 7 ? hours : undefined,
       },
     ];

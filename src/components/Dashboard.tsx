@@ -2247,7 +2247,7 @@ function BookingRow({
       }`}
     >
       {/* Left info */}
-      <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
         <div
           className={`flex h-12 w-14 sm:h-13 sm:w-16 shrink-0 flex-col items-center justify-center rounded-xl font-display transition-colors ${
             cancelled
@@ -2264,8 +2264,8 @@ function BookingRow({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <span className={`font-display text-sm sm:text-base font-bold text-slate-900 truncate ${cancelled ? "line-through text-slate-400" : ""}`}>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className={`min-w-0 max-w-full break-words font-display text-sm sm:text-base font-bold leading-tight text-slate-900 ${cancelled ? "line-through text-slate-400" : ""}`}>
               {b.client}
             </span>
             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.2 text-[10px] font-bold ${sc.bg} ${sc.text}`}>
@@ -2323,7 +2323,7 @@ function BookingRow({
       </div>
 
       {/* Right actions */}
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+      <div className="booking-row-actions flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto sm:flex-nowrap sm:gap-2" onClick={(e) => e.stopPropagation()}>
         {claimPending ? (
           <>
             <button
@@ -2756,8 +2756,8 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-ink/60 p-4 backdrop-blur-[2px] sm:items-center" onClick={onClose}>
-      <div className="pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" onClick={(e) => e.stopPropagation()}>
+    <div className="cupito-modal-overlay fixed inset-0 z-[80] flex items-end justify-center bg-ink/60 backdrop-blur-[2px] sm:items-center" role="presentation" onClick={onClose}>
+      <div className="cupito-modal pop-in w-full max-w-md rounded-[22px] border-2 border-ink/15 bg-card p-6 text-ink shadow-block sm:p-7" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-display text-2xl font-extrabold">{title}</h3>
           <button onClick={onClose} aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-ink/15 text-inkmute transition-colors hover:border-coral hover:text-coral">✕</button>
@@ -2951,9 +2951,9 @@ function CalendarSyncModal({
         </div>
 
         {/* Compartir por WhatsApp a ese profesional */}
-        {selectedPro && (
+        {selectedPro && selectedPro.phone ? (
           <a
-            href={createWhatsAppUrl("", whatsappShareText)}
+            href={createWhatsAppUrl(selectedPro.phone, whatsappShareText)}
             target="_blank"
             rel="noreferrer"
             className="btn-press flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-600/30 bg-emerald-50 py-3 text-xs font-bold text-emerald-800 transition-all hover:bg-emerald-100"
@@ -2961,7 +2961,12 @@ function CalendarSyncModal({
             <IconWhatsApp className="h-4 w-4 text-emerald-600" />
             Enviar enlace a {selectedPro.name} por WhatsApp
           </a>
-        )}
+        ) : selectedPro ? (
+          <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs leading-relaxed text-amber-900">
+            <IconWhatsApp className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+            <span>Agregá el teléfono de {selectedPro.name} en <strong>Equipo</strong> para habilitar el envío directo por WhatsApp.</span>
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border border-ink/10 bg-paper p-3.5 space-y-2">
           <div className="flex items-center justify-between">
@@ -4631,6 +4636,7 @@ function TeamView({ onSyncCalendar }: { onSyncCalendar?: (proId: string) => void
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-lg font-extrabold text-ink truncate">{p.name}</p>
                   <p className="text-sm text-inkmute">{p.role}</p>
+                  {p.phone && <p className="mt-1 text-xs font-semibold text-emerald-700">WhatsApp · {formatArgentinaPhone(p.phone)}</p>}
                   <span className={`inline-block mt-2 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${hasCustom ? "bg-evergreen/10 text-evergreen border border-evergreen/20" : "bg-ink/5 text-inkmute border border-ink/10"}`}>
                     {hasCustom ? "🕒 Horarios propios" : "🏢 Horario del negocio"}
                   </span>
@@ -4689,12 +4695,13 @@ function TeamView({ onSyncCalendar }: { onSyncCalendar?: (proId: string) => void
               updateProfessional(editingPro.id, {
                 name: payload.name,
                 role: payload.role,
+                phone: payload.phone,
                 hours: payload.hours,
               });
               toast(`${payload.name} actualizado ✓`);
               return null;
             } else {
-              const err = addProfessional(payload.name, payload.role, payload.hours);
+              const err = addProfessional(payload.name, payload.role, payload.hours, payload.phone);
               if (err) return err;
               toast(`${payload.name} se sumó al equipo 🎉`);
               return null;
@@ -4715,10 +4722,11 @@ function ProModal({
   initial?: Professional;
   bizHours: DayHours[];
   onClose: () => void;
-  onSave: (payload: { name: string; role: string; hours?: DayHours[] }) => string | null;
+  onSave: (payload: { name: string; role: string; phone: string; hours?: DayHours[] }) => string | null;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [role, setRole] = useState(initial?.role ?? "");
+  const [phone, setPhone] = useState(initial?.phone ?? "");
   const [useCustomHours, setUseCustomHours] = useState(
     !!(initial?.hours && Array.isArray(initial.hours) && initial.hours.length === 7)
   );
@@ -4744,6 +4752,7 @@ function ProModal({
           const err = onSave({
             name,
             role,
+            phone,
             hours: useCustomHours ? hours : undefined,
           });
           if (err) return setError(err);
@@ -4758,6 +4767,11 @@ function ProModal({
         <div>
           <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Rol o especialidad</label>
           <input className="field" placeholder="Nail artist, Barbero, Colorista..." value={role} onChange={(e) => setRole(e.target.value)} />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Teléfono / WhatsApp</label>
+          <input className="field" type="tel" inputMode="tel" autoComplete="tel" placeholder="11 5555 1234" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <p className="mt-1.5 text-[11px] leading-relaxed text-inkmute">Lo usamos para enviarle su enlace personal de calendario desde el panel.</p>
         </div>
 
         {/* Configuración de horarios */}

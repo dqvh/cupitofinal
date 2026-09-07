@@ -767,6 +767,7 @@ function BookingForm({
                           })),
                         ]}
                         placeholder="Elegir profesional"
+                        buttonClassName="booking-select-trigger"
                       />
                     </label>
                   )}
@@ -788,7 +789,7 @@ function BookingForm({
                 </div>
 
                 {/* Atajos rápidos de días */}
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <div className="booking-day-shortcuts">
                   {[
                     { label: "Hoy", date: todayKey },
                     { label: "Mañana", date: dateKey(addDays(now, 1)) },
@@ -807,12 +808,7 @@ function BookingForm({
                           setError(null);
                         }}
                         className={"btn small " + (active ? "primary" : "")}
-                        style={{
-                          fontSize: 12,
-                          padding: "6px 12px",
-                          borderRadius: 8,
-                          opacity: !open ? 0.4 : 1,
-                        }}
+                        style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, opacity: !open ? 0.4 : 1 }}
                       >
                         {d.label}
                       </button>

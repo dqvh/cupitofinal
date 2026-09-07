@@ -408,9 +408,9 @@ export default async function handler(req: Request): Promise<Response> {
           { id: "coup-viernes20", code: "VIERNES20", pct: 20, active: true },
         ],
         professionals: [
-          { id: "pro-feli", name: "Feli", role: "Barber Master & Fundador", color: "#cdf463" },
-          { id: "pro-lucas", name: "Lucas", role: "Especialista en Fades", color: "#38bdf8" },
-          { id: "pro-nico", name: "Nico", role: "Estilista & Barba Tradicional", color: "#ff7a59" },
+          { id: "pro-feli", name: "Feli", role: "Barber Master & Fundador", color: "#cdf463", phone: "1155551234" },
+          { id: "pro-lucas", name: "Lucas", role: "Especialista en Fades", color: "#38bdf8", phone: "1166662345" },
+          { id: "pro-nico", name: "Nico", role: "Estilista & Barba Tradicional", color: "#ff7a59", phone: "1177773456" },
         ],
         bookings: [
           {
