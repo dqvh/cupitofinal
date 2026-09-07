@@ -186,9 +186,12 @@ function Gate({ hasCode }: { hasCode: boolean }) {
   );
 }
 
+type AdminTab = "resumen" | "negocios" | "dinero" | "alertas" | "sistema";
+
 function Console() {
   const store = useStore();
   const { users, adminLogout, adminDeleteUser, adminUpdateUser, loginAs, getData, toast, isCloudSyncActive } = store;
+  const [tab, setTab] = useState<AdminTab>("resumen");
   const [q, setQ] = useState("");
   const [planFilter, setPlanFilter] = useState<"todos" | Plan | "expiring">("todos");
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
@@ -199,6 +202,13 @@ function Console() {
 
   const toggleRevealPassword = (id: string) => {
     setRevealedPasswords((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const dateOnly = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+  const daysAgo = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 10);
   };
 
   const list = useMemo(() => {
@@ -227,21 +237,86 @@ function Console() {
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    const DAY = 24 * 3600 * 1000;
     let bookings = 0;
     let todayCount = 0;
+    let cancelled = 0;
+    let noShow = 0;
+    let withOutcome = 0;
+    let servicesTotal = 0;
+    let last7Bookings = 0;
+    const perDay: { key: string; label: string; count: number }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      perDay.push({ key, label: String(d.getDate()), count: 0 });
+    }
+    const perDayMap = new Map(perDay.map((d) => [d.key, d]));
+    const signups14: { key: string; label: string; count: number }[] = perDay.map((d) => ({ ...d, count: 0 }));
+    const signupsMap = new Map(signups14.map((d) => [d.key, d]));
+    const byBiz: { user: User; bookings: number; revenue: number; lastBooking: number }[] = [];
+
     for (const u of users) {
       const d = getData(u.id);
       bookings += d.bookings.length;
+      servicesTotal += d.services.length;
       todayCount += d.bookings.filter((b) => b.date === today && b.status !== "cancelada").length;
+      cancelled += d.bookings.filter((b) => b.status === "cancelada").length;
+      noShow += d.bookings.filter((b) => b.status === "ausente").length;
+      withOutcome += d.bookings.filter((b) => b.status === "atendida" || b.status === "ausente").length;
+      const last7 = d.bookings.filter((b) => b.date >= daysAgo(6)).length;
+      last7Bookings += last7;
+      for (const b of d.bookings) {
+        const slot = perDayMap.get(b.date);
+        if (slot && b.status !== "cancelada") slot.count += 1;
+      }
+      const createdKey = dateOnly(u.createdAt);
+      const sSlot = signupsMap.get(createdKey);
+      if (sSlot) sSlot.count += 1;
+      const revenue = d.bookings
+        .filter((b) => b.status !== "cancelada")
+        .reduce((acc, b) => acc + (d.services.find((s) => s.id === b.serviceId)?.price ?? 0), 0);
+      let lastTs = 0;
+      for (const b of d.bookings) {
+        const ts = new Date(b.date + "T" + (b.time || "12:00")).getTime();
+        if (!Number.isNaN(ts) && ts > lastTs) lastTs = ts;
+      }
+      byBiz.push({ user: u, bookings: d.bookings.filter((b) => b.status !== "cancelada").length, revenue, lastBooking: lastTs });
     }
-    const paidCount = users.filter((u) => u.plan !== "semilla").length;
-    const estimatedMonthly = users.reduce((acc, u) => {
-      if (u.plan === "crece") return acc + 9500;
-      if (u.plan === "escala") return acc + 22000;
-      return acc;
-    }, 0);
+    const semilla = users.filter((u) => u.plan === "semilla").length;
+    const crece = users.filter((u) => u.plan === "crece").length;
+    const escala = users.filter((u) => u.plan === "escala").length;
+    const paidCount = crece + escala;
+    const estimatedMonthly = crece * 9500 + escala * 22000;
+    const conversion = users.length ? Math.round((paidCount / users.length) * 100) : 0;
+    const avgTicket = paidCount ? Math.round(estimatedMonthly / paidCount) : 0;
+    const cancelRate = bookings ? Math.round((cancelled / bookings) * 100) : 0;
+    const noShowRate = withOutcome ? Math.round((noShow / withOutcome) * 100) : 0;
+    const new7 = users.filter((u) => u.createdAt >= now - 7 * DAY).length;
+    const new30 = users.filter((u) => u.createdAt >= now - 30 * DAY).length;
+    const expiring7 = users.filter((u) => u.subscription?.nextRenewal && u.subscription.nextRenewal - now < 7 * DAY && u.subscription.nextRenewal >= now).length;
+    const expired = users.filter((u) => {
+      if (u.plan === "semilla") return false;
+      return getSubscriptionStatus(u).isExpired;
+    }).length;
+    const grace = users.filter((u) => getSubscriptionStatus(u).isGracePeriod).length;
+    const mpAuto = users.filter((u) => (u.subscription as UserSubscription | undefined)?.mpPreapprovalId).length;
+    const inactive7 = byBiz.filter((b) => b.lastBooking === 0 || b.lastBooking < now - 7 * DAY).length;
+    const topByBookings = [...byBiz].sort((a, b) => b.bookings - a.bookings).slice(0, 5);
+    const topByRevenue = [...byBiz].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+    const maxDay = Math.max(1, ...perDay.map((d) => d.count));
+    const maxSignup = Math.max(1, ...signups14.map((d) => d.count));
 
-    return { locales: users.length, bookings, todayCount, paid: paidCount, estimatedMonthly };
+    return {
+      locales: users.length, bookings, todayCount, paid: paidCount,
+      estimatedMonthly, semilla, crece, escala, conversion, avgTicket,
+      cancelRate, cancelled, noShowRate, noShow, last7Bookings, servicesTotal,
+      new7, new30, expiring7, expired, grace, mpAuto, inactive7,
+      perDay, maxDay, signups14, maxSignup, topByBookings, topByRevenue, byBiz,
+      arr: estimatedMonthly * 12,
+    };
   }, [users, getData]);
 
   return (
@@ -288,32 +363,205 @@ function Console() {
       </header>
 
       <main className="mx-auto max-w-7xl px-5 py-8 sm:px-8">
-        {/* Métricas clave */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="card p-5 shadow-sm">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-fern"><IconUsers className="h-5 w-5" /></span>
-            <p className="mt-3 font-display text-3xl font-extrabold text-ink">{stats.locales}</p>
-            <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-inkmute">Negocios registrados</p>
+        {/* Hero simple: qué es la Central, en criollo */}
+        <section className="overflow-hidden rounded-3xl border-2 border-ink bg-evergreen text-paper shadow-block">
+          <div className="flex flex-wrap items-start justify-between gap-5 p-6 sm:p-8">
+            <div className="min-w-0 max-w-2xl">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-lime/15 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-lime">
+                ✨ Tu SaaS en una mirada
+              </span>
+              <h1 className="mt-2 font-display text-2xl font-extrabold leading-tight sm:text-3xl">
+                Hola 👋 Así viene Cupito hoy: {stats.locales} locales y {fmtMoney(stats.estimatedMonthly)}/mes
+              </h1>
+              <p className="mt-2 text-sm leading-relaxed text-paper/70">
+                Todo explicado en fácil: cuánta plata entra, cuántos pagan, quién está por vencer y qué negocio necesita ayuda. Elegí una pestaña abajo para ver el detalle.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button onClick={() => setShowNewModal(true)} className="btn-press rounded-full bg-lime px-5 py-2.5 font-display text-xs font-extrabold text-ink hover:bg-limedeep">
+                  ＋ Agregar negocio
+                </button>
+                <button onClick={() => { setTab("negocios"); }} className="btn-press rounded-full border border-paper/25 bg-paper/10 px-5 py-2.5 font-display text-xs font-bold text-paper hover:bg-paper/20">
+                  Ver negocios →
+                </button>
+                <button onClick={() => exportAdminCSV(users, getData)} className="btn-press rounded-full border border-paper/25 px-5 py-2.5 font-display text-xs font-bold text-paper/80 hover:text-paper hover:bg-paper/10">
+                  ⬇ Exportar Excel
+                </button>
+              </div>
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-2.5">
+              <div className="rounded-2xl bg-paper/10 p-4 text-center ring-1 ring-paper/15">
+                <p className="font-display text-2xl font-extrabold text-lime">{stats.conversion}%</p>
+                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-paper/60">Pagan</p>
+                <p className="mt-1 text-[10px] text-paper/50">En criollo: de cada 100, pagan {stats.conversion}</p>
+              </div>
+              <div className="rounded-2xl bg-paper/10 p-4 text-center ring-1 ring-paper/15">
+                <p className="font-display text-2xl font-extrabold text-paper">{stats.todayCount}</p>
+                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-paper/60">Turnos hoy</p>
+                <p className="mt-1 text-[10px] text-paper/50">En toda la plataforma</p>
+              </div>
+              <div className="rounded-2xl bg-paper/10 p-4 text-center ring-1 ring-paper/15">
+                <p className="font-display text-2xl font-extrabold text-paper">{stats.new7}</p>
+                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-paper/60">Nuevos 7 días</p>
+                <p className="mt-1 text-[10px] text-paper/50">Locales que se sumaron</p>
+              </div>
+              <div className={`rounded-2xl p-4 text-center ring-1 ${stats.expired + stats.grace > 0 ? "bg-coral/20 ring-coral/40" : "bg-paper/10 ring-paper/15"}`}>
+                <p className="font-display text-2xl font-extrabold text-paper">{stats.expired + stats.grace}</p>
+                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-paper/60">Necesitan cobro</p>
+                <p className="mt-1 text-[10px] text-paper/50">Vencidos + en gracia</p>
+              </div>
+            </div>
           </div>
-          <div className="card p-5 shadow-sm">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime/20 text-fern"><IconStar className="h-5 w-5" /></span>
-            <p className="mt-3 font-display text-3xl font-extrabold text-ink">{stats.paid}</p>
-            <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-inkmute">Planes pagos activos</p>
-          </div>
-          <div className="card p-5 shadow-sm">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 font-extrabold">$</span>
-            <p className="mt-3 font-display text-3xl font-extrabold text-emerald-800">{fmtMoney(stats.estimatedMonthly)}</p>
-            <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-inkmute">Facturación estimada / mes</p>
-          </div>
-          <div className="card p-5 shadow-sm">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink/5 text-fern"><IconCalendar className="h-5 w-5" /></span>
-            <p className="mt-3 font-display text-3xl font-extrabold text-ink">{stats.todayCount}</p>
-            <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-inkmute">Turnos agendados hoy ({stats.bookings} totales)</p>
-          </div>
-        </div>
+          {/* Pestañas grandes y claras */}
+          <nav aria-label="Secciones de la Central" className="flex gap-1.5 overflow-x-auto border-t border-paper/15 bg-pine/60 px-4 py-2.5 sm:px-6">
+            {([
+              { id: "resumen", label: "📊 Resumen", hint: "Lo importante" },
+              { id: "negocios", label: "🏪 Negocios", hint: `${stats.locales}` },
+              { id: "dinero", label: "💰 Dinero", hint: fmtMoney(stats.estimatedMonthly) },
+              { id: "alertas", label: `🔔 Alertas${stats.expired + stats.expiring7 + stats.grace > 0 ? ` (${stats.expired + stats.expiring7 + stats.grace})` : ""}`, hint: "Qué atender" },
+              { id: "sistema", label: "☁️ Sistema", hint: isCloudSyncActive ? "Nube OK" : "Local" },
+            ] as { id: AdminTab; label: string; hint: string }[]).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                aria-current={tab === t.id ? "page" : undefined}
+                className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-left transition-all ${
+                  tab === t.id ? "bg-lime font-extrabold text-ink shadow-sm" : "text-paper/70 hover:bg-paper/10 hover:text-paper"
+                }`}
+              >
+                <span className="font-display text-xs">{t.label}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${tab === t.id ? "bg-ink/10 text-ink" : "bg-paper/10 text-paper/60"}`}>{t.hint}</span>
+              </button>
+            ))}
+          </nav>
+        </section>
 
-        {/* Buscador y Filtros */}
-        <div className="mt-8 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        {tab === "resumen" && (
+          <div className="pop-in mt-6 space-y-6">
+            {/* KPIs con explicación en criollo */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <SaasKpi emoji="🏪" value={String(stats.locales)} title="Negocios registrados" criollo={`Semilla ${stats.semilla} · Crece ${stats.crece} · Escala ${stats.escala}`} accent={false} />
+              <SaasKpi emoji="💳" value={String(stats.paid)} title={`Pagan (${stats.conversion}%)`} criollo="Cuántos dejan plata todos los meses." accent={stats.conversion < 20} />
+              <SaasKpi emoji="💰" value={fmtMoney(stats.estimatedMonthly)} title="Plata / mes (MRR)" criollo={`Por año: ${fmtMoney(stats.arr)}. Ticket: ${fmtMoney(stats.avgTicket)}.`} accent money />
+              <SaasKpi emoji="📅" value={String(stats.bookings)} title={`Turnos totales (${stats.todayCount} hoy)`} criollo={`Últimos 7 días: ${stats.last7Bookings}. Servicios: ${stats.servicesTotal}.`} accent={false} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <SaasKpi emoji="🆕" value={`+${stats.new30}`} title={`Nuevos 30 días (${stats.new7} en 7d)`} criollo="Si este número crece, tu publicidad funciona." small />
+              <SaasKpi emoji="⚠️" value={String(stats.expiring7)} title="Vencen en 7 días" criollo="Escribiles hoy: son plata casi segura." small alert={stats.expiring7 > 0} />
+              <SaasKpi emoji="🔴" value={String(stats.expired)} title={`Vencidos (${stats.grace} en gracia)`} criollo="Pasaron su fecha y siguen en básico. +30 días los salva." small alert={stats.expired > 0} />
+              <SaasKpi emoji="😴" value={String(stats.inactive7)} title="Sin movimiento 7 días" criollo="Sin turnos nuevos. Quizás necesitan ayuda." small alert={stats.inactive7 > 0} />
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+              <div className="card p-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-lg font-extrabold text-ink">📈 Turnos · últimos 14 días</h3>
+                    <p className="text-xs text-inkmute">En criollo: si sube, tus locales trabajan. Si baja, hay que ayudarlos.</p>
+                  </div>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-800">{stats.perDay.reduce((a, d) => a + d.count, 0)} turnos</span>
+                </div>
+                <div className="mt-5 flex h-44 items-end gap-1 sm:gap-1.5">
+                  {stats.perDay.map((d, i) => (
+                    <div key={d.key} className="group relative flex h-full flex-1 items-end" title={`${d.key}: ${d.count} turnos`}>
+                      <div className={`w-full rounded-t-md transition-all ${i === stats.perDay.length - 1 ? "bg-emerald-500 ring-2 ring-emerald-600/30" : "bg-emerald-800/90 group-hover:bg-emerald-700"}`} style={{ height: `${d.count === 0 ? 3 : Math.max(8, (d.count / stats.maxDay) * 100)}%` }} />
+                      <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100">{d.count} · {d.key.slice(5)}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1.5 flex gap-1">
+                  {stats.perDay.map((d) => (<span key={d.key} className="flex-1 text-center text-[9px] font-bold text-ink/35">{d.label}</span>))}
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="card p-6">
+                  <h3 className="font-display text-lg font-extrabold text-ink">🍰 Cómo se reparten los planes</h3>
+                  <p className="text-xs text-inkmute">En criollo: quién usa gratis y quién paga.</p>
+                  <div className="mx-auto mt-4 h-24 w-24 rounded-full border-4 border-white shadow-sm" style={{ background: `conic-gradient(#10b981 0 ${(stats.crece / Math.max(1, stats.locales)) * 100}%, #0f766e ${(stats.crece / Math.max(1, stats.locales)) * 100}% ${((stats.crece + stats.escala) / Math.max(1, stats.locales)) * 100}%, #e2e8f0 ${((stats.crece + stats.escala) / Math.max(1, stats.locales)) * 100}% 100%)` }} aria-hidden="true" />
+                  <div className="mt-4 space-y-2.5">
+                    {([
+                      { label: "🌱 Semilla gratis", n: stats.semilla, color: "bg-slate-300" },
+                      { label: "🌿 Crece $9.500", n: stats.crece, color: "bg-emerald-500" },
+                      { label: "🚀 Escala $22.000", n: stats.escala, color: "bg-teal-700" },
+                    ] as const).map((r) => (
+                      <div key={r.label}>
+                        <div className="flex justify-between text-xs font-bold"><span>{r.label}</span><span>{r.n} ({stats.locales ? Math.round((r.n / stats.locales) * 100) : 0}%)</span></div>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-ink/8"><div className={`h-full rounded-full ${r.color}`} style={{ width: `${stats.locales ? (r.n / stats.locales) * 100 : 0}%` }} /></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="card p-6">
+                  <h3 className="font-display text-lg font-extrabold text-ink">🆕 Locales nuevos · 14 días</h3>
+                  <p className="text-xs text-inkmute">Cada barrita = cuántos se crearon ese día.</p>
+                  <div className="mt-4 flex h-20 items-end gap-1">
+                    {stats.signups14.map((d) => (
+                      <div key={d.key} title={`${d.key}: ${d.count}`} className="flex-1 rounded-t bg-lime" style={{ height: `${d.count === 0 ? 4 : Math.max(12, (d.count / stats.maxSignup) * 100)}%`, backgroundColor: d.count > 0 ? "#65a30d" : "#e2e8f0" }} />
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs font-bold text-ink">Total 14 días: {stats.signups14.reduce((a, d) => a + d.count, 0)} · <span className="text-inkmute font-semibold">Últimos 7: {stats.new7}</span></p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="card p-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display text-lg font-extrabold text-ink">🏆 Top por turnos</h3>
+                  <button onClick={() => setTab("negocios")} className="text-xs font-bold text-fern hover:underline">Ver todos →</button>
+                </div>
+                <p className="text-xs text-inkmute">Los que más trabajan. Aprendé de ellos.</p>
+                <ol className="mt-4 space-y-2.5">
+                  {stats.topByBookings.length === 0 && <li className="text-sm text-inkmute">Todavía no hay datos.</li>}
+                  {stats.topByBookings.map((t, i) => (
+                    <li key={t.user.id} className="flex items-center gap-3 rounded-xl border border-ink/8 bg-paper px-3 py-2">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 font-display text-xs font-extrabold text-white">{i + 1}</span>
+                      <span className="min-w-0 flex-1"><span className="block truncate font-display text-sm font-bold text-ink">{t.user.business}</span><span className="block text-[11px] text-inkmute">{t.bookings} turnos · Plan {PLAN_META[t.user.plan].name}</span></span>
+                      <button onClick={() => { loginAs(t.user.id); window.location.hash = "#/app"; }} className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700">Entrar →</button>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <div className="card p-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display text-lg font-extrabold text-ink">💰 Top por plata generada</h3>
+                  <button onClick={() => setTab("dinero")} className="text-xs font-bold text-fern hover:underline">Ver dinero →</button>
+                </div>
+                <p className="text-xs text-inkmute">Estimado según precios × turnos no cancelados.</p>
+                <ol className="mt-4 space-y-2.5">
+                  {stats.topByRevenue.length === 0 && <li className="text-sm text-inkmute">Todavía no hay datos.</li>}
+                  {stats.topByRevenue.map((t, i) => (
+                    <li key={t.user.id} className="flex items-center gap-3 rounded-xl border border-ink/8 bg-paper px-3 py-2">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 font-display text-xs font-extrabold text-white">{i + 1}</span>
+                      <span className="min-w-0 flex-1"><span className="block truncate font-display text-sm font-bold text-ink">{t.user.business}</span><span className="block text-[11px] text-inkmute">{fmtMoney(t.revenue)} estimados</span></span>
+                      <button onClick={() => setEditingUser(t.user)} className="rounded-full border border-ink/15 px-3 py-1.5 text-[11px] font-bold hover:border-ink">Editar</button>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+
+            {(stats.expired > 0 || stats.expiring7 > 0 || stats.inactive7 > 0) && (
+              <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5">
+                <p className="font-display text-base font-extrabold text-amber-950">🔔 Hoy te conviene atender esto primero</p>
+                <ul className="mt-2 space-y-1 text-sm text-amber-900">
+                  {stats.expired > 0 && <li>· <strong>{stats.expired}</strong> vencidos + <strong>{stats.grace}</strong> en gracia → <button onClick={() => setTab("alertas")} className="font-bold underline">ver y dar +30 días</button></li>}
+                  {stats.expiring7 > 0 && <li>· <strong>{stats.expiring7}</strong> vencen en 7 días → <button onClick={() => setTab("dinero")} className="font-bold underline">avisarles hoy</button></li>}
+                  {stats.inactive7 > 0 && <li>· <strong>{stats.inactive7}</strong> sin movimiento en 7 días → <button onClick={() => setTab("alertas")} className="font-bold underline">entrar y ayudarlos</button></li>}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "negocios" && (
+          <div className="pop-in mt-6 space-y-6">
+            <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/60 p-4">
+              <p className="font-display text-sm font-extrabold text-emerald-950">🏪 Todos tus locales, con buscador.</p>
+              <p className="mt-0.5 text-xs text-emerald-900/80">Escribí el nombre, dueño o email. Tocá “Entrar como dueño” para ayudarlos como si fueras ellos. Nada se rompe.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
           <div className="relative flex-1 max-w-md">
             <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-inkmute" />
             <input
@@ -547,6 +795,217 @@ function Console() {
             })}
           </div>
         )}
+          </div>
+        )}
+
+        {tab === "dinero" && (
+          <div className="pop-in mt-6 space-y-6">
+            <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/60 p-4">
+              <p className="font-display text-sm font-extrabold text-emerald-950">💰 Tu plata, sin contadora.</p>
+              <p className="mt-0.5 text-xs text-emerald-900/80">MRR = lo que entra todos los meses si nadie se va. Tocá “+30 días” para cobrar un pago manual al instante.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <SaasKpi emoji="💰" value={fmtMoney(stats.estimatedMonthly)} title="Entra / mes (MRR)" criollo={`Por año: ${fmtMoney(stats.arr)}.`} money />
+              <SaasKpi emoji="🎫" value={fmtMoney(stats.avgTicket)} title="Ticket promedio" criollo="Lo que paga en promedio cada que sí paga." />
+              <SaasKpi emoji="🌿" value={`${stats.crece} × $9.500`} title={`Crece = ${fmtMoney(stats.crece * 9500)}`} criollo="Tu plan más popular. El que usa casi todo el mundo." />
+              <SaasKpi emoji="🚀" value={`${stats.escala} × $22.000`} title={`Escala = ${fmtMoney(stats.escala * 22000)}`} criollo="Tus clientes más grandes. Cuidalos mucho." />
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="card p-6">
+                <h3 className="font-display text-lg font-extrabold text-ink">📅 Quién vence pronto (7 días)</h3>
+                <p className="text-xs text-inkmute">En criollo: plata casi segura. Escribiles hoy por WhatsApp.</p>
+                <div className="mt-4 space-y-2.5">
+                  {users.filter((u) => u.subscription?.nextRenewal && u.subscription.nextRenewal - Date.now() < 7 * 24 * 3600 * 1000 && u.subscription.nextRenewal >= Date.now()).length === 0 && (
+                    <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">🎉 Nadie vence esta semana. Todo al día.</p>
+                  )}
+                  {users
+                    .filter((u) => u.subscription?.nextRenewal && u.subscription.nextRenewal - Date.now() < 7 * 24 * 3600 * 1000 && u.subscription.nextRenewal >= Date.now())
+                    .sort((a, b) => (a.subscription!.nextRenewal - b.subscription!.nextRenewal))
+                    .slice(0, 8)
+                    .map((u) => (
+                      <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3.5 py-2.5">
+                        <span className="min-w-0"><span className="block truncate font-display text-sm font-bold text-ink">{u.business}</span><span className="block text-[11px] text-amber-900">Vence {new Date(u.subscription!.nextRenewal).toLocaleDateString("es-AR")} · {PLAN_META[u.plan].name}</span></span>
+                        <span className="flex gap-1.5">
+                          <button onClick={() => { loginAs(u.id); window.location.hash = "#/app"; }} className="rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white">Entrar →</button>
+                          <button
+                            onClick={() => {
+                              const cur = u.subscription!.nextRenewal > Date.now() ? u.subscription!.nextRenewal : Date.now();
+                              adminUpdateUser(u.id, { subscription: { ...u.subscription!, nextRenewal: cur + 30 * 24 * 3600 * 1000, status: "activa", autoRenew: true } });
+                              toast(`+30 días para ${u.business} ✓`);
+                            }}
+                            className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700"
+                          >
+                            +30 días
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+              <div className="card p-6">
+                <h3 className="font-display text-lg font-extrabold text-ink">🔴 Vencidos: a recuperar hoy</h3>
+                <p className="text-xs text-inkmute">Ya pasaron su fecha. Un mensaje + 30 días los trae de vuelta.</p>
+                <div className="mt-4 space-y-2.5">
+                  {users.filter((u) => getSubscriptionStatus(u).isExpired).length === 0 && (
+                    <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">🎉 Cero vencidos. Sos un campeón.</p>
+                  )}
+                  {users.filter((u) => getSubscriptionStatus(u).isExpired).slice(0, 8).map((u) => (
+                    <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-3.5 py-2.5">
+                      <span className="min-w-0"><span className="block truncate font-display text-sm font-bold text-ink">{u.business}</span><span className="block text-[11px] text-rose-900">{u.name} · {u.email}</span></span>
+                      <span className="flex gap-1.5">
+                        <a href={`https://wa.me/${u.email ? "" : ""}`} onClick={(e) => e.preventDefault()} className="hidden" aria-hidden="true">x</a>
+                        <button onClick={() => setEditingUser(u)} className="rounded-full border border-ink/15 bg-white px-3 py-1.5 text-[11px] font-bold">Editar</button>
+                        <button
+                          onClick={() => {
+                            adminUpdateUser(u.id, { subscription: { billing: u.subscription?.billing || "mensual", activeSince: u.subscription?.activeSince || Date.now(), nextRenewal: Date.now() + 30 * 24 * 3600 * 1000, autoRenew: true, status: "activa" } });
+                            toast(`Reactivado ${u.business} por 30 días ✓`);
+                          }}
+                          className="rounded-full bg-rose-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-rose-700"
+                        >
+                          Reactivar +30d
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-xl bg-slate-900 p-4 text-white">
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">💡 Cómo cobrar en 1 minuto</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-300">1) Pedí la transferencia. 2) Tocá +30 días. 3) Avisale por WhatsApp que ya está activo. Listo, sin Mercado Pago.</p>
+                </div>
+              </div>
+            </div>
+            <div className="card p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-lg font-extrabold text-ink">🧾 Todos los pagos, en una tabla simple</h3>
+                  <p className="text-xs text-inkmute">Quién paga, cómo (automático o manual) y cuándo vence. Verde = al día. Rojo = atender hoy.</p>
+                </div>
+                <button onClick={() => exportAdminCSV(users, getData)} className="rounded-full border border-ink/15 bg-white px-4 py-2 text-xs font-bold hover:border-ink">⬇ Exportar Excel (.csv)</button>
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-ink/10 text-[10px] uppercase tracking-wider text-inkmute">
+                      <th className="py-2 pr-3">Negocio</th>
+                      <th className="py-2 pr-3">Plan</th>
+                      <th className="py-2 pr-3">Cobro</th>
+                      <th className="py-2 pr-3">Vence</th>
+                      <th className="py-2">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...users].sort((a, b) => (a.subscription?.nextRenewal || 0) - (b.subscription?.nextRenewal || 0)).slice(0, 20).map((u) => {
+                      const st = getSubscriptionStatus(u);
+                      const auto = (u.subscription as UserSubscription | undefined)?.mpPreapprovalId ? "⚡ Automático" : u.plan === "semilla" ? "— Gratis" : "✋ Manual";
+                      const vence = u.subscription?.nextRenewal ? new Date(u.subscription.nextRenewal).toLocaleDateString("es-AR") : "—";
+                      return (
+                        <tr key={u.id} className="border-b border-ink/5 hover:bg-paper">
+                          <td className="py-2 pr-3 font-bold text-ink">{u.business}</td>
+                          <td className="py-2 pr-3">{PLAN_META[u.plan].name}</td>
+                          <td className="py-2 pr-3">{auto}</td>
+                          <td className="py-2 pr-3">{vence}</td>
+                          <td className="py-2">{u.plan === "semilla" ? "🌱 Gratis" : st.isExpired ? "🔴 Vencido" : st.isGracePeriod ? "🟡 En gracia" : st.isExpiringSoon ? `🟡 ${st.daysRemaining}d` : "🟢 Al día"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === "alertas" && (
+          <div className="pop-in mt-6 space-y-6">
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+              <p className="font-display text-sm font-extrabold text-amber-950">🔔 Tu lista de hoy: qué atender primero.</p>
+              <p className="mt-0.5 text-xs text-amber-900/80">Empezá por los rojos (plata), después amarillos (riesgo) y al final grises (ayuda). Cada tarjeta tiene su botón de solución.</p>
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <AlertCard
+                emoji="🔴"
+                title={`Vencidos (${stats.expired})`}
+                desc="Pasaron su fecha y están en básico. Se van si no los llamás."
+                empty="🎉 Sin vencidos. Todo cobrado."
+                items={users.filter((u) => getSubscriptionStatus(u).isExpired).slice(0, 6).map((u) => ({ id: u.id, name: u.business, sub: `${u.name} · ${u.email}` }))}
+                actionLabel="+30 días"
+                onAction={(id) => {
+                  const u = users.find((x) => x.id === id);
+                  if (!u) return;
+                  adminUpdateUser(id, { subscription: { billing: u.subscription?.billing || "mensual", activeSince: u.subscription?.activeSince || Date.now(), nextRenewal: Date.now() + 30 * 24 * 3600 * 1000, autoRenew: true, status: "activa" } });
+                  toast("Reactivado por 30 días ✓");
+                }}
+                onOpen={(id) => { loginAs(id); window.location.hash = "#/app"; }}
+              />
+              <AlertCard
+                emoji="🟡"
+                title={`Vencen en 7 días (${stats.expiring7})`}
+                desc="Avisales hoy por WhatsApp y cobrás sin perseguir."
+                empty="🎉 Nadie vence esta semana."
+                items={users.filter((u) => u.subscription?.nextRenewal && u.subscription.nextRenewal - Date.now() < 7 * 24 * 3600 * 1000 && u.subscription.nextRenewal >= Date.now()).slice(0, 6).map((u) => ({ id: u.id, name: u.business, sub: `Vence ${new Date(u.subscription!.nextRenewal).toLocaleDateString("es-AR")}` }))}
+                actionLabel="+30 días"
+                onAction={(id) => {
+                  const u = users.find((x) => x.id === id);
+                  if (!u?.subscription) return;
+                  const cur = u.subscription.nextRenewal > Date.now() ? u.subscription.nextRenewal : Date.now();
+                  adminUpdateUser(id, { subscription: { ...u.subscription, nextRenewal: cur + 30 * 24 * 3600 * 1000, status: "activa" } });
+                  toast("+30 días ✓");
+                }}
+                onOpen={(id) => { loginAs(id); window.location.hash = "#/app"; }}
+              />
+              <AlertCard
+                emoji="😴"
+                title={`Sin movimiento 7 días (${stats.inactive7})`}
+                desc="Sin turnos nuevos. Entrá, mirá sus horarios y dales una mano."
+                empty="🎉 Todos se mueven. Buen trabajo."
+                items={stats.byBiz.filter((b) => b.lastBooking === 0 || b.lastBooking < Date.now() - 7 * 24 * 3600 * 1000).slice(0, 6).map((b) => ({ id: b.user.id, name: b.user.business, sub: b.lastBooking === 0 ? "Nunca tuvo turnos" : `Último: ${new Date(b.lastBooking).toLocaleDateString("es-AR")}` }))}
+                actionLabel="Entrar y ayudar"
+                onAction={(id) => { loginAs(id); window.location.hash = "#/app"; }}
+                onOpen={(id) => { const u = users.find((x) => x.id === id); if (u) setEditingUser(u); }}
+              />
+              <AlertCard
+                emoji="🧩"
+                title="Sin servicios cargados"
+                desc="Si no tienen servicios, no pueden recibir reservas. Es lo primero que hay que cargar."
+                empty="🎉 Todos tienen servicios."
+                items={users.filter((u) => getData(u.id).services.length === 0).slice(0, 6).map((u) => ({ id: u.id, name: u.business, sub: u.email }))}
+                actionLabel="Entrar y cargar"
+                onAction={(id) => { loginAs(id); window.location.hash = "#/app"; }}
+                onOpen={(id) => { const u = users.find((x) => x.id === id); if (u) setEditingUser(u); }}
+              />
+            </div>
+          </div>
+        )}
+
+        {tab === "sistema" && (
+          <div className="pop-in mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="card p-6">
+              <h3 className="font-display text-lg font-extrabold text-ink">☁️ Nube: ¿dónde se guardan los datos?</h3>
+              <p className="mt-1 text-sm text-inkmute">Verde = todo se guarda en internet y se ve en todos los celus. Amarillo = solo en este navegador.</p>
+              <div className={`mt-4 rounded-2xl border p-4 ${isCloudSyncActive ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
+                <p className="font-display text-sm font-extrabold">{isCloudSyncActive ? "🟢 Nube activa y sincronizando" : "🟡 Modo local: solo este dispositivo"}</p>
+                <p className="mt-1 text-xs text-inkmute">{isCloudSyncActive ? "Lo que crees acá aparece al instante en cualquier celu." : "Conectá Supabase para que todo se vea en todos lados."}</p>
+                <button onClick={() => setShowSyncModal(true)} className="mt-3 rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800">
+                  {isCloudSyncActive ? "Ver detalles" : "Cómo activar la nube →"}
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <button onClick={() => exportAdminCSV(users, getData)} className="rounded-xl border border-ink/15 bg-white px-3 py-2.5 text-xs font-bold hover:border-ink">⬇ Exportar negocios</button>
+                <button onClick={() => { setTab("negocios"); }} className="rounded-xl border border-ink/15 bg-white px-3 py-2.5 text-xs font-bold hover:border-ink">🔍 Buscar negocio</button>
+              </div>
+            </div>
+            <div className="card p-6">
+              <h3 className="font-display text-lg font-extrabold text-ink">🧭 Atajos para todos los días</h3>
+              <p className="text-xs text-inkmute">Lo que vas a tocar 9 de 10 veces, en botones gigantes.</p>
+              <div className="mt-4 grid gap-2.5">
+                <button onClick={() => setShowNewModal(true)} className="flex items-center justify-between rounded-2xl bg-lime px-4 py-3.5 font-display text-sm font-extrabold text-ink hover:bg-limedeep">＋ Crear negocio nuevo <span>→</span></button>
+                <button onClick={() => { setTab("alertas"); }} className="flex items-center justify-between rounded-2xl bg-slate-900 px-4 py-3.5 font-display text-sm font-extrabold text-white hover:bg-slate-800">🔔 Ver qué necesita atención <span>→</span></button>
+                <button onClick={() => { setTab("dinero"); }} className="flex items-center justify-between rounded-2xl border-2 border-ink/10 bg-paper px-4 py-3.5 font-display text-sm font-extrabold text-ink hover:border-ink">💰 Revisar cobros <span>→</span></button>
+              </div>
+              <p className="mt-4 rounded-xl bg-paper px-4 py-3 text-xs leading-relaxed text-inkmute">💡 Consejo de abuelo: si algo se ve raro, recargá la página. El 90% se arregla así. Si sigue raro, la nube te dice qué pasa arriba a la derecha.</p>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Modal de Editar Negocio */}
@@ -573,6 +1032,68 @@ function Console() {
       )}
     </div>
   );
+}
+
+/* ============ HELPERS SaaS (tarjetas simples y exportación) ============ */
+function SaasKpi({ emoji, value, title, criollo, money = false, small = false, alert = false, accent = false }: { emoji: string; value: string; title: string; criollo: string; money?: boolean; small?: boolean; alert?: boolean; accent?: boolean }) {
+  return (
+    <div className={`card p-5 shadow-sm ${alert ? "!border-rose-300 !bg-rose-50/50" : accent ? "!border-amber-300 !bg-amber-50/60" : money ? "!border-emerald-300 !bg-emerald-50/50" : ""}`}>
+      <span className="text-2xl" aria-hidden="true">{emoji}</span>
+      <p className={`mt-2 font-display font-extrabold text-ink ${small ? "text-2xl" : "text-3xl"} ${money ? "!text-emerald-800" : ""}`}>{value}</p>
+      <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-inkmute">{title}</p>
+      <p className="mt-1.5 rounded-lg bg-ink/5 px-2 py-1 text-[11px] font-medium leading-snug text-ink/70">💡 {criollo}</p>
+    </div>
+  );
+}
+
+function AlertCard({ emoji, title, desc, empty, items, actionLabel, onAction, onOpen }: {
+  emoji: string; title: string; desc: string; empty: string;
+  items: { id: string; name: string; sub: string }[];
+  actionLabel: string; onAction: (id: string) => void; onOpen: (id: string) => void;
+}) {
+  return (
+    <div className="card p-6">
+      <p className="font-display text-lg font-extrabold text-ink">{emoji} {title}</p>
+      <p className="mt-0.5 text-xs text-inkmute">{desc}</p>
+      {items.length === 0 ? (
+        <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">{empty}</p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {items.map((it) => (
+            <li key={it.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink/10 bg-white px-3.5 py-2.5">
+              <span className="min-w-0"><span className="block truncate font-display text-sm font-bold text-ink">{it.name}</span><span className="block truncate text-[11px] text-inkmute">{it.sub}</span></span>
+              <span className="flex shrink-0 gap-1.5">
+                <button onClick={() => onOpen(it.id)} className="rounded-full border border-ink/15 px-3 py-1.5 text-[11px] font-bold hover:border-ink">Ver</button>
+                <button onClick={() => onAction(it.id)} className="rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-slate-700">{actionLabel}</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function exportAdminCSV(users: User[], getData: (id: string) => { bookings: { status: string }[]; services: unknown[] }) {
+  try {
+    const headers = ["Negocio", "Dueno", "Email", "Slug", "Plan", "Vence", "Turnos", "Creado"];
+    const rows = users.map((u) => {
+      const d = getData(u.id);
+      const vence = u.subscription?.nextRenewal ? new Date(u.subscription.nextRenewal).toISOString().slice(0, 10) : "";
+      const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+      return [esc(u.business), esc(u.name), esc(u.email), esc(u.slug), esc(u.plan), vence, d.bookings.length, new Date(u.createdAt).toISOString().slice(0, 10)].join(",");
+    });
+    const csv = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cupito-negocios-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch { /* noop */ }
 }
 
 /* ============ MODAL: EDITAR NEGOCIO ============ */
