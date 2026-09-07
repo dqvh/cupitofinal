@@ -724,12 +724,10 @@
     border-radius: 20px;
   }
   .business-card {
-    padding: 28px 24px;
-    border-right: 0;
-    border-bottom: 1px solid #e2e8f0;
+    display: none !important;
   }
   .booking-form {
-    padding: 28px 22px;
+    padding: 24px 20px;
   }
   .booking-nav { align-items: flex-start; flex-wrap: wrap; }
   .booking-nav > div { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }

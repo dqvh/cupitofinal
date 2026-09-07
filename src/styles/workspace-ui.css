@@ -391,6 +391,7 @@
   .workspace-attention {
     padding: 6px 8px;
     gap: 6px;
+    margin-bottom: 8px;
   }
   .workspace-badge,
   .workspace-badge-cta {

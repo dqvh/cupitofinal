@@ -153,7 +153,20 @@ export async function fetchRemoteUserBySlug(
         `/cupito_data?select=data,deleted&user_id=eq.${encodeURIComponent(user.id)}`
       );
       if (rowData?.data && !rowData.deleted) {
-        data = rowData.data as BizData;
+        const raw = rowData.data as BizData;
+        data = {
+          ...raw,
+          bookings: (raw.bookings || []).map((b: any) => ({
+            ...b,
+            client: "Reservado",
+            phone: "",
+            email: undefined,
+            notes: undefined,
+            depositClaim: undefined,
+            paymentMethod: undefined,
+          })),
+          waitlist: [],
+        };
       }
     } catch {
       // Si la consulta de data falla o todavía no existe la fila, no bloqueamos el usuario

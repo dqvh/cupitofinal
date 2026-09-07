@@ -469,8 +469,12 @@ export default function Dashboard() {
   const nextBooking = dayBookings.find(booking => (booking.status === "confirmada" || booking.status === "pendiente") && (booking.date > today || (booking.date === today && booking.time >= new Date().toTimeString().slice(0, 5))));
   const pendingBookings = data.bookings.filter(booking => booking.status === "pendiente").length;
   const dayIncome = dayBookings
-    .filter((b) => b.status === "confirmada" || b.status === "atendida")
-    .reduce((acc, b) => acc + (data.services.find((s) => s.id === b.serviceId)?.price ?? 0), 0);
+    .filter((b) => b.status === "atendida" || (b.status === "confirmada" && b.paymentStatus === "total_pagado"))
+    .reduce((acc, b) => {
+      const sPrice = data.services.find((s) => s.id === b.serviceId)?.price ?? 0;
+      const extraPrice = (b.extraServiceIds || []).reduce((sum, sid) => sum + (data.services.find((s) => s.id === sid)?.price ?? 0), 0);
+      return acc + (b.paidAmount || (sPrice + extraPrice));
+    }, 0);
 
   const daySlots = slotsForDay(getDayHours(data.settings, selDate));
   const freeSlots = useMemo(() => {
@@ -895,12 +899,17 @@ export default function Dashboard() {
 
             {view === "hoy" && <SetupGuide onGo={(v) => setView(v)} onCheckout={(p) => setCheckoutPlan(p)} />}
 
-            {view === "hoy" && <div className="workspace-greeting"><Sun size={21} aria-hidden="true" /><p>Hola, {user.name.split(" ")[0]}. <span>Tenés {data.bookings.filter(booking => booking.date === today && booking.status !== "cancelada").length} turnos para hoy.</span></p></div>}
+            {view === "hoy" && (
+              <div className="workspace-greeting my-1 text-xs sm:text-sm">
+                <Sun size={18} aria-hidden="true" />
+                <p>Hola, {user.name.split(" ")[0]}. <span>Tenés {data.bookings.filter(booking => booking.date === today && booking.status !== "cancelada").length} turnos para hoy.</span></p>
+              </div>
+            )}
 
             {pendingClaims > 0 && (
-              <div className="pop-in mt-6 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 shadow-xs">
+              <div className="pop-in mt-3 sm:mt-6 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-2.5 shadow-xs">
                 <IconBell className="h-5 w-5 shrink-0 text-rose-600" />
-                <p className="flex-1 text-sm font-semibold text-slate-900">
+                <p className="flex-1 text-xs sm:text-sm font-semibold text-slate-900">
                   {pendingClaims} seña{pendingClaims === 1 ? "" : "s"} esperando tu verificación — revisá tu homebanking y acreditá o rechazá desde Reservas.
                   <span className="block text-xs font-normal text-slate-500">Se liberan solas si pasan 24 h sin verificar{oldestClaimHrs > 0 ? ` · la más vieja lleva ${oldestClaimHrs} h` : ""}.</span>
                 </p>
@@ -909,7 +918,7 @@ export default function Dashboard() {
 
             {/* ============ HOY ============ */}
             {view === "hoy" && (
-              <div className="pop-in mt-6">
+              <div className="pop-in mt-2 sm:mt-6">
                 {/* Badges compactos de acciones pendientes y bloqueo rápido */}
                 <section className="workspace-attention" aria-label="Acciones pendientes">
                   <h2 className="sr-only">Acciones pendientes</h2>
@@ -943,9 +952,9 @@ export default function Dashboard() {
                 </section>
 
                 {nextBooking && (
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-2.5 text-xs text-emerald-950 shadow-xs">
+                  <div className="mb-2 sm:mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-1.5 text-xs text-emerald-950 shadow-xs">
                     <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white">
                         <IconClock className="h-3 w-3" />
                       </span>
                       <span>
@@ -955,42 +964,42 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => setDetailBooking(nextBooking)}
-                      className="font-bold text-emerald-800 underline hover:text-emerald-950"
+                      className="font-bold text-emerald-800 underline hover:text-emerald-950 text-xs"
                     >
                       Ver detalle →
                     </button>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setWeekStart((w) => w - 7)} aria-label="Semana anterior" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4 rotate-180" /></button>
-                  <div className="no-scrollbar flex flex-1 gap-2 overflow-x-auto py-1">
+                  <button onClick={() => setWeekStart((w) => w - 7)} aria-label="Semana anterior" className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4 rotate-180" /></button>
+                  <div className="no-scrollbar flex flex-1 gap-1.5 sm:gap-2 overflow-x-auto py-1">
                     {week.map((d) => {
                       const k = dateKey(d);
                       const count = data.bookings.filter((b) => b.date === k && b.status !== "cancelada").length;
                       const isSel = selDate === k;
                       return (
                         <button key={k} onClick={() => setSelDate(k)}
-                          className={`flex min-w-[78px] flex-col items-center rounded-2xl border px-3.5 py-3 transition-all duration-150 ${isSel ? "border-slate-900 bg-slate-900 text-white shadow-sm ring-2 ring-emerald-500/20" : "border-slate-200/80 bg-white text-slate-800 hover:border-slate-300 hover:shadow-xs"}`}>
+                          className={`flex min-w-[62px] sm:min-w-[78px] flex-col items-center rounded-2xl border px-2.5 sm:px-3.5 py-2 sm:py-3 transition-all duration-150 ${isSel ? "border-slate-900 bg-slate-900 text-white shadow-sm ring-2 ring-emerald-500/20" : "border-slate-200/80 bg-white text-slate-800 hover:border-slate-300 hover:shadow-xs"}`}>
                           <span className={`text-[10px] font-bold uppercase tracking-wider ${isSel ? "text-slate-300" : "text-slate-400"}`}>{k === today ? "Hoy" : d.toLocaleDateString("es-ES", { weekday: "short" }).slice(0, 3)}</span>
-                          <span className="font-display text-xl font-extrabold leading-tight mt-0.5">{d.getDate()}</span>
-                          <span className={`mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${isSel ? "bg-emerald-500 text-slate-950" : count > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60" : "bg-slate-100 text-slate-400"}`}>{count} turno{count === 1 ? "" : "s"}</span>
+                          <span className="font-display text-base sm:text-xl font-extrabold leading-tight mt-0.5">{d.getDate()}</span>
+                          <span className={`mt-1 rounded-full px-2 py-0.5 text-[9px] sm:text-[10px] font-bold ${isSel ? "bg-emerald-500 text-slate-950" : count > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60" : "bg-slate-100 text-slate-400"}`}>{count} turno{count === 1 ? "" : "s"}</span>
                         </button>
                       );
                     })}
                   </div>
-                  <button onClick={() => setWeekStart((w) => w + 7)} aria-label="Semana siguiente" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4" /></button>
+                  <button onClick={() => setWeekStart((w) => w + 7)} aria-label="Semana siguiente" className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300"><IconChevron className="h-4 w-4" /></button>
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="mt-2 sm:mt-4 flex flex-wrap items-center justify-between gap-2">
                   <button onClick={() => { setWeekStart(0); setSelDate(today); }} className="text-xs font-bold text-emerald-700 underline-offset-4 hover:underline">
                     ← Ir a hoy
                   </button>
 
-                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1 text-xs font-bold">
+                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 sm:p-1 text-xs font-bold">
                     <button
                       type="button"
                       onClick={() => setAgendaView("day")}
-                      className={`rounded-lg px-3 py-1.5 transition-all ${
+                      className={`rounded-lg px-2.5 sm:px-3 py-1 sm:py-1.5 transition-all ${
                         agendaView === "day"
                           ? "bg-white text-slate-900 shadow-xs font-extrabold"
                           : "text-slate-600 hover:text-slate-900"
@@ -1001,7 +1010,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => setAgendaView("week")}
-                      className={`rounded-lg px-3 py-1.5 transition-all ${
+                      className={`rounded-lg px-2.5 sm:px-3 py-1 sm:py-1.5 transition-all ${
                         agendaView === "week"
                           ? "bg-white text-slate-900 shadow-xs font-extrabold"
                           : "text-slate-600 hover:text-slate-900"
@@ -1013,7 +1022,7 @@ export default function Dashboard() {
                 </div>
 
                 {agendaView === "week" ? (
-                  <div className="mt-6">
+                  <div className="mt-4 sm:mt-6">
                     <AgendaWeek
                       dates={week.map((d) => dateKey(d))}
                       records={data.bookings}
@@ -1034,10 +1043,10 @@ export default function Dashboard() {
                 ) : (
                   <>
                     {data.professionals.length > 0 && (
-                      <div className="mt-6 flex flex-wrap gap-2">
-                        <button onClick={() => setProFilter("todos")} className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === "todos" ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>Todos</button>
+                      <div className="mt-2.5 sm:mt-6 flex flex-wrap gap-1.5">
+                        <button onClick={() => setProFilter("todos")} className={`rounded-full border px-3.5 py-1 text-xs font-semibold transition-all ${proFilter === "todos" ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>Todos</button>
                         {data.professionals.map((p) => (
-                          <button key={p.id} onClick={() => setProFilter(p.id)} className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs font-semibold transition-all ${proFilter === p.id ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>
+                          <button key={p.id} onClick={() => setProFilter(p.id)} className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-xs font-semibold transition-all ${proFilter === p.id ? "border-slate-900 bg-slate-900 text-white shadow-xs" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"}`}>
                             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color || "#10b981" }} />
                             {p.name}
                           </button>
@@ -1045,9 +1054,9 @@ export default function Dashboard() {
                       </div>
                     )}
 
-                    <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+                    <div className="mt-3 sm:mt-6 flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <h3 className="font-display text-lg sm:text-xl font-extrabold text-slate-900 capitalize">
+                        <h3 className="font-display text-base sm:text-xl font-extrabold text-slate-900 capitalize">
                           {fmtDateNatural(selDate)}
                         </h3>
                         <p className="text-xs font-semibold text-slate-500 mt-0.5">
@@ -1068,46 +1077,52 @@ export default function Dashboard() {
 
                     {/* Huecos libres interactivos para crear turno con 1 toque */}
                     {freeSlots.length > 0 && (
-                      <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200/70 bg-slate-50/70 p-3">
-                        <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1">
-                          <IconClock className="h-3.5 w-3.5 text-slate-400" /> Huecos libres:
-                        </span>
-                        {freeSlots.slice(0, 8).map((slotTime) => (
-                          <button
-                            key={slotTime}
-                            type="button"
-                            onClick={() => {
-                              setPrefill({
-                                date: selDate,
-                                time: slotTime,
-                                proId: proFilter !== "todos" ? proFilter : undefined,
-                              });
-                              setShowNew(true);
-                            }}
-                            className="agenda-free-slot"
-                            title="Tocar para agendar turno en este horario"
-                          >
-                            <IconPlus className="h-3 w-3" />
-                            <span>{slotTime} hs</span>
-                          </button>
-                        ))}
-                        {freeSlots.length > 8 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPrefill({
-                                date: selDate,
-                                time: freeSlots[8],
-                                proId: proFilter !== "todos" ? proFilter : undefined,
-                              });
-                              setShowNew(true);
-                            }}
-                            className="text-xs font-bold text-emerald-700 hover:underline px-1.5"
-                          >
-                            +{freeSlots.length - 8} más
-                          </button>
-                        )}
-                      </div>
+                      <details className="mt-2 sm:mt-3 rounded-xl border border-slate-200/70 bg-slate-50/70 px-3 py-1.5 text-xs">
+                        <summary className="cursor-pointer font-bold text-slate-600 flex items-center justify-between select-none py-0.5">
+                          <span className="flex items-center gap-1.5">
+                            <IconClock className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>{freeSlots.length} hueco{freeSlots.length === 1 ? "" : "s"} libre{freeSlots.length === 1 ? "" : "s"} hoy</span>
+                          </span>
+                          <span className="text-[11px] font-semibold text-emerald-700 underline">Tocar para agendar +</span>
+                        </summary>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200/60">
+                          {freeSlots.slice(0, 8).map((slotTime) => (
+                            <button
+                              key={slotTime}
+                              type="button"
+                              onClick={() => {
+                                setPrefill({
+                                  date: selDate,
+                                  time: slotTime,
+                                  proId: proFilter !== "todos" ? proFilter : undefined,
+                                });
+                                setShowNew(true);
+                              }}
+                              className="agenda-free-slot"
+                              title="Tocar para agendar turno en este horario"
+                            >
+                              <IconPlus className="h-3 w-3" />
+                              <span>{slotTime} hs</span>
+                            </button>
+                          ))}
+                          {freeSlots.length > 8 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPrefill({
+                                  date: selDate,
+                                  time: freeSlots[8],
+                                  proId: proFilter !== "todos" ? proFilter : undefined,
+                                });
+                                setShowNew(true);
+                              }}
+                              className="text-xs font-bold text-emerald-700 hover:underline px-1.5"
+                            >
+                              +{freeSlots.length - 8} más
+                            </button>
+                          )}
+                        </div>
+                      </details>
                     )}
 
                     {dayBookings.length === 0 ? (
@@ -4253,11 +4268,17 @@ function StatsView({ db }: { db: BizData }) {
   const isEscala = user?.plan === "escala";
 
   const active = (b: Booking) => b.status !== "cancelada";
+  const isIncome = (b: Booking) => b.status === "atendida" || (b.status === "confirmada" && b.paymentStatus === "total_pagado");
   const monthBookings = db.bookings.filter((b) => b.date.startsWith(monthKey) && active(b));
-  const revenue = monthBookings.reduce((acc, b) => acc + (db.services.find((s) => s.id === b.serviceId)?.price ?? 0), 0);
+  const incomeBookings = db.bookings.filter((b) => b.date.startsWith(monthKey) && isIncome(b));
+  const revenue = incomeBookings.reduce((acc, b) => {
+    const sPrice = db.services.find((s) => s.id === b.serviceId)?.price ?? 0;
+    const extraPrice = (b.extraServiceIds || []).reduce((sum, sid) => sum + (db.services.find((s) => s.id === sid)?.price ?? 0), 0);
+    return acc + (b.paidAmount || (sPrice + extraPrice));
+  }, 0);
   const confirmed = db.bookings.filter((b) => b.status === "confirmada" || b.status === "atendida").length;
   const confirmRate = db.bookings.length ? Math.round((confirmed / db.bookings.length) * 100) : 0;
-  const avgTicket = monthBookings.length ? Math.round(revenue / monthBookings.length) : 0;
+  const avgTicket = incomeBookings.length ? Math.round(revenue / incomeBookings.length) : 0;
 
   const days = Array.from({ length: 14 }, (_, i) => addDays(today, i - 13));
   const perDay = days.map((d) => {
@@ -4269,8 +4290,8 @@ function StatsView({ db }: { db: BizData }) {
   const svcCount = db.services
     .map((s) => ({
       s,
-      count: db.bookings.filter((b) => b.serviceId === s.id && active(b)).length,
-      revenue: db.bookings.filter((b) => b.serviceId === s.id && active(b)).length * s.price,
+      count: db.bookings.filter((b) => (b.serviceId === s.id || (b.extraServiceIds || []).includes(s.id)) && active(b)).length,
+      revenue: db.bookings.filter((b) => (b.serviceId === s.id || (b.extraServiceIds || []).includes(s.id)) && isIncome(b)).length * s.price,
     }))
     .filter((x) => x.count > 0)
     .sort((a, b) => b.count - a.count);

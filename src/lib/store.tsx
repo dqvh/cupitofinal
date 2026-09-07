@@ -2941,6 +2941,23 @@ export function usePublicPage(slug: string): ({ user: User } & Record<"data", Bi
     const user = matches.find((u) => !isDemoUser(u)) ?? matches[0] ?? null;
     if (!user) return null;
     const pageData = loadData(user.id);
+    const isOwner = sessionUserId && sessionUserId === user.id;
+    if (!isOwner) {
+      const publicData: BizData = {
+        ...pageData,
+        bookings: (pageData.bookings || []).map((b) => ({
+          ...b,
+          client: "Reservado",
+          phone: "",
+          email: undefined,
+          notes: undefined,
+          depositClaim: undefined,
+          paymentMethod: undefined,
+        })),
+        waitlist: [],
+      };
+      return { user, ["data"]: publicData };
+    }
     return { user, ["data"]: pageData };
   }, [version, slug]);
 }

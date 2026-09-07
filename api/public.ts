@@ -40,6 +40,23 @@ function uid(): string {
   }
 }
 
+function sanitizeBizForPublic(data: any) {
+  if (!data) return data;
+  return {
+    ...data,
+    bookings: (data.bookings || []).map((b: any) => ({
+      id: b.id,
+      date: b.date,
+      time: b.time,
+      serviceId: b.serviceId,
+      extraServiceIds: b.extraServiceIds,
+      proId: b.proId,
+      status: b.status,
+    })),
+    waitlist: [],
+  };
+}
+
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
 
@@ -237,7 +254,7 @@ export default async function handler(req: Request): Promise<Response> {
       };
       const next = { ...data, bookings: [...(data.bookings || []), booking] };
       await save(next);
-      return json({ ok: true, id, data: next });
+      return json({ ok: true, id, data: sanitizeBizForPublic(next) });
     }
 
     /* ---------------- LISTA DE ESPERA ---------------- */
@@ -256,7 +273,7 @@ export default async function handler(req: Request): Promise<Response> {
       const entry = { id: uid(), date, serviceId, client, phone, createdAt: Date.now() };
       const next = { ...data, waitlist: [...(data.waitlist || []), entry] };
       await save(next);
-      return json({ ok: true, id: entry.id, data: next });
+      return json({ ok: true, id: entry.id });
     }
 
     /* ---------------- CANCELAR ---------------- */
@@ -283,7 +300,7 @@ export default async function handler(req: Request): Promise<Response> {
         ),
       };
       await save(next);
-      return json({ ok: true, data: next });
+      return json({ ok: true, data: sanitizeBizForPublic(next) });
     }
 
     /* ---------------- RESEÑA ---------------- */
@@ -297,7 +314,31 @@ export default async function handler(req: Request): Promise<Response> {
       const review = { id: uid(), client, rating, text, date: new Date().toISOString().slice(0, 10) };
       const next = { ...data, reviews: [review, ...(data.reviews || [])].slice(0, 200) };
       await save(next);
-      return json({ ok: true, data: next });
+      return json({ ok: true, data: sanitizeBizForPublic(next) });
+    }
+
+    /* ---------------- CONSULTAR TURNOS PROPIOS (MIS TURNOS) ---------------- */
+    if (body.action === "lookup") {
+      const phoneDigits = String(body.phone || "").replace(/\D/g, "");
+      if (phoneDigits.length < 8) {
+        return json({ error: "Ingresá un número de teléfono válido para consultar tus turnos." }, 400);
+      }
+      const last8 = phoneDigits.slice(-8);
+      const myBookings = (data.bookings || [])
+        .filter((b: any) => String(b.phone || "").replace(/\D/g, "").slice(-8) === last8)
+        .map((b: any) => ({
+          id: b.id,
+          serviceId: b.serviceId,
+          extraServiceIds: b.extraServiceIds,
+          proId: b.proId,
+          date: b.date,
+          time: b.time,
+          status: b.status,
+          client: b.client,
+          notes: b.notes,
+          phone: b.phone,
+        }));
+      return json({ ok: true, bookings: myBookings });
     }
 
     return json({ error: "Acción inválida." }, 400);

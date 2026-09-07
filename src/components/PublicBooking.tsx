@@ -75,6 +75,26 @@ function gcalUrl(o: { title: string; date: string; time: string; duration: numbe
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(o.title)}&dates=${toLocalStamp(start)}/${toLocalStamp(end)}&details=${encodeURIComponent(o.desc || "Turno reservado con Cupito. ¡Te esperamos!")}`;
 }
 
+const MY_BOOKINGS_STORAGE_KEY = "cupito_my_bookings";
+function getMyLocalBookings(ownerId: string): Array<{ id: string; serviceId: string; date: string; time: string; client: string; phone: string; notes?: string; status?: string; proId?: string }> {
+  try {
+    const raw = localStorage.getItem(MY_BOOKINGS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return Array.isArray(parsed[ownerId]) ? parsed[ownerId] : [];
+  } catch {
+    return [];
+  }
+}
+function saveMyLocalBooking(ownerId: string, booking: { id: string; serviceId: string; date: string; time: string; client: string; phone: string; notes?: string; status?: string; proId?: string }) {
+  try {
+    const raw = localStorage.getItem(MY_BOOKINGS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const list = Array.isArray(parsed[ownerId]) ? parsed[ownerId] : [];
+    parsed[ownerId] = [booking, ...list.filter((x: any) => x.id !== booking.id)].slice(0, 30);
+    localStorage.setItem(MY_BOOKINGS_STORAGE_KEY, JSON.stringify(parsed));
+  } catch { /* noop */ }
+}
+
 export default function PublicBooking(props: { owner?: ({ user: User; data: BizData }) | null; isPreview?: boolean; initialLookupOpen?: boolean; initialReviewOpen?: boolean } = {}) {
   const store = useStore();
   const owner = props.owner || (store.user && store.data ? { user: store.user, data: store.data } : null);
@@ -120,6 +140,8 @@ function BookingForm({
   const [showLookupModal, setShowLookupModal] = useState(initialLookupOpen);
   const [lookupPhone, setLookupPhone] = useState("");
   const [lookupFeedback, setLookupFeedback] = useState<string | null>(null);
+  const [remoteLookupBookings, setRemoteLookupBookings] = useState<any[] | null>(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
 
   const [showReviewsModal, setShowReviewsModal] = useState(initialReviewOpen);
   const [newReviewAuthor, setNewReviewAuthor] = useState("");
@@ -412,13 +434,56 @@ function BookingForm({
     return settings.hours.filter((h) => h.open).length;
   }, [settings.hours]);
 
-  // Turnos del cliente en modal de consulta
+  const myLocalBookings = useMemo(() => {
+    return getMyLocalBookings(user.id);
+  }, [user.id, done]);
+
+  // Turnos del cliente en modal de consulta (seguro: solo propios, nunca de terceros)
   const clientBookings = useMemo(() => {
-    if (!lookupPhone.trim()) return [];
+    if (remoteLookupBookings !== null) return remoteLookupBookings;
+    if (!lookupPhone.trim()) return myLocalBookings;
     const digits = cleanPhoneDigits(lookupPhone);
-    if (digits.length < 6) return [];
-    return (biz.bookings || []).filter((b) => cleanPhoneDigits(b.phone).includes(digits));
-  }, [biz.bookings, lookupPhone]);
+    if (digits.length < 8) return [];
+    const last8 = digits.slice(-8);
+    return myLocalBookings.filter((b) => cleanPhoneDigits(b.phone).slice(-8) === last8);
+  }, [remoteLookupBookings, lookupPhone, myLocalBookings]);
+
+  const handleLookupSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const digits = cleanPhoneDigits(lookupPhone);
+    if (digits.length < 8) {
+      setLookupFeedback("Ingresá al menos 8 dígitos de tu número de celular.");
+      return;
+    }
+    setIsLookingUp(true);
+    setLookupFeedback(null);
+    try {
+      const res = await fetch("/api/public", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "lookup", ownerId: user.id, phone: lookupPhone }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.ok && Array.isArray(d.bookings)) {
+          setRemoteLookupBookings(d.bookings);
+          if (d.bookings.length === 0) {
+            setLookupFeedback("No encontramos ningún turno registrado con ese número.");
+          }
+          return;
+        }
+      }
+    } catch { /* offline o fallback local */ }
+    finally {
+      setIsLookingUp(false);
+    }
+    const last8 = digits.slice(-8);
+    const matched = myLocalBookings.filter((b) => cleanPhoneDigits(b.phone).slice(-8) === last8);
+    setRemoteLookupBookings(matched);
+    if (matched.length === 0) {
+      setLookupFeedback("No encontramos ningún turno registrado con ese número.");
+    }
+  };
 
   // Confirmar reserva
   const handleReserve = async (e: React.FormEvent) => {
@@ -489,11 +554,25 @@ function BookingForm({
 
     setDone(true);
     sound.playSuccess();
+    if (res.id) {
+      saveMyLocalBooking(user.id, {
+        id: res.id,
+        serviceId,
+        date: selectedDate,
+        time,
+        client: client.trim(),
+        phone: phone.trim(),
+        notes: notes.trim() || undefined,
+        proId: proId || undefined,
+        status: depositOn && depositAmount > 0 ? "pendiente" : "confirmada",
+      });
+    }
 
     // Enviar email de confirmación si el cliente puso correo
     if (email.trim()) {
+      const combinedTitle = selectedServices.map((s) => s.name).join(" + ") || service?.name || "Turno";
       const gcal = gcalUrl({
-        title: `${service?.name || "Turno"} en ${user.business}`,
+        title: `${combinedTitle} en ${user.business}`,
         date: selectedDate,
         time,
         duration: dur,
@@ -504,11 +583,11 @@ function BookingForm({
         toEmail: email.trim(),
         clientName: client.trim(),
         businessName: user.business,
-        serviceName: service?.name || "Servicio",
+        serviceName: combinedTitle,
         dateStr: fmtLong(selectedDate),
         timeStr: time,
         proName: pro?.name,
-        priceStr: fmtMoney(service?.price || 0),
+        priceStr: fmtMoney(totalServicesPrice),
         depositStr: depositAmount > 0 ? fmtMoney(depositAmount) : undefined,
         address: settings.address,
         slug: user.slug,
@@ -1536,12 +1615,16 @@ function BookingForm({
               Ingresá el número de celular con el que reservaste en <b>{user.business}</b> para ver o cancelar tus turnos.
             </p>
 
-            <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+            <form onSubmit={handleLookupSubmit} style={{ display: "flex", gap: 8, marginBottom: 20 }}>
               <input
                 type="tel"
                 placeholder="Ej. 11 1234 5678"
                 value={lookupPhone}
-                onChange={(e) => setLookupPhone(e.target.value)}
+                onChange={(e) => {
+                  setLookupPhone(e.target.value);
+                  setRemoteLookupBookings(null);
+                  setLookupFeedback(null);
+                }}
                 style={{
                   flex: 1,
                   padding: "11px 14px",
@@ -1550,11 +1633,19 @@ function BookingForm({
                   fontSize: 14,
                 }}
               />
-            </div>
+              <button
+                type="submit"
+                disabled={isLookingUp}
+                className="btn primary"
+                style={{ borderRadius: 10, padding: "10px 18px", fontSize: 13 }}
+              >
+                {isLookingUp ? "Buscando..." : "Buscar"}
+              </button>
+            </form>
 
             {lookupFeedback && <div className="notice" style={{ margin: "10px 0" }}>{lookupFeedback}</div>}
 
-            {lookupPhone.trim() && clientBookings.length === 0 && (
+            {lookupPhone.trim() && !isLookingUp && clientBookings.length === 0 && !lookupFeedback && (
               <p className="notice" style={{ margin: "14px 0" }}>
                 No encontramos ningún turno registrado con ese número de teléfono.
               </p>
@@ -1603,8 +1694,8 @@ function BookingForm({
                         onClick={() => {
                           setServiceId(b.serviceId);
                           setProId(b.proId || null);
-                          setClient(b.client);
-                          setPhone(b.phone);
+                          setClient(b.client || "");
+                          setPhone(b.phone || "");
                           setNotes(b.notes || "");
                           setCart({});
                           setDone(false);
@@ -1623,8 +1714,8 @@ function BookingForm({
                             onClick={() => {
                               setServiceId(b.serviceId);
                               setProId(b.proId || null);
-                              setClient(b.client);
-                              setPhone(b.phone);
+                              setClient(b.client || "");
+                              setPhone(b.phone || "");
                               setNotes(b.notes || "");
                               setCart({});
                               setDone(false);
@@ -1640,9 +1731,10 @@ function BookingForm({
                             style={{ color: "#dc2626", borderColor: "#fecaca" }}
                             onClick={async () => {
                               if (!window.confirm("¿Seguro que querés cancelar este turno?")) return;
-                              const r = await cancelBookingByClient(user.id, b.id, "Cancelado por el cliente", lookupPhone);
+                              const r = await cancelBookingByClient(user.id, b.id, "Cancelado por el cliente", lookupPhone || b.phone);
                               if (r.ok) {
                                 setLookupFeedback("Turno cancelado correctamente.");
+                                setRemoteLookupBookings((prev) => (prev ? prev.map((x) => x.id === b.id ? { ...x, status: "cancelada" } : x) : null));
                               } else {
                                 setLookupFeedback(r.error || "No se pudo cancelar el turno.");
                               }
