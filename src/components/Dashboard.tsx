@@ -5490,7 +5490,16 @@ function SettingsView({
 
       <div className="pop-in mt-6 max-w-2xl" key={tab}>
         {tab === "negocio" && <BusinessTab user={user} onSave={onSaveProfile} />}
-        {tab === "pagina" && <PersonalizationCard settings={settings} paid={isPaid(user)} onSave={(patch) => updateSettings(patch)} onRequestUpgrade={() => onSelectPlan("crece")} />}
+        {tab === "pagina" && (
+          <PersonalizationCard
+            settings={settings}
+            paid={isPaid(user)}
+            businessName={user.business}
+            userSlug={user.slug}
+            onSave={(patch) => updateSettings(patch)}
+            onRequestUpgrade={() => onSelectPlan("crece")}
+          />
+        )}
         {tab === "pagos" && <DepositCard settings={settings} paid={isPaid(user)} onChange={(patch) => updateSettings(patch)} />}
         {tab === "horarios" && <HoursCard hours={settings.hours} settings={settings} onChange={(hours) => updateSettings({ hours })} onUpdateSettings={(patch) => updateSettings(patch)} />}
         {tab === "plan" && (
@@ -5541,7 +5550,94 @@ function BusinessTab({ user, onSave }: { user: { business: string; name: string;
   );
 }
 
-function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { settings: BizSettings; paid: boolean; onSave: (patch: Partial<BizSettings>) => void; onRequestUpgrade: () => void }) {
+interface DesignerTheme {
+  id: ThemeId;
+  name: string;
+  tag: string;
+  primary: string;
+  secondary: string;
+  bgLight: string;
+}
+
+const DESIGNER_THEMES: DesignerTheme[] = [
+  {
+    id: "evergreen",
+    name: "Verde Bosque & Salvia",
+    tag: "Orgánico, sobrio y profesional",
+    primary: "#16845f",
+    secondary: "#cdf463",
+    bgLight: "#f0fdf4",
+  },
+  {
+    id: "midnight",
+    name: "Medianoche & Zafiro",
+    tag: "Moderno, barberías y tech",
+    primary: "#0284c7",
+    secondary: "#38bdf8",
+    bgLight: "#f0f9ff",
+  },
+  {
+    id: "coral",
+    name: "Sunset Coral & Terracota",
+    tag: "Cálido, cafes, nails y bienestar",
+    primary: "#ea580c",
+    secondary: "#ff7a59",
+    bgLight: "#fff7ed",
+  },
+  {
+    id: "rose",
+    name: "Rosa Estética & Malva",
+    tag: "Spas, estética, lash & brow",
+    primary: "#db2777",
+    secondary: "#f472b6",
+    bgLight: "#fdf2f8",
+  },
+  {
+    id: "obsidian",
+    name: "Obsidiana & Oro",
+    tag: "Alta gama, tatuajes y autor",
+    primary: "#d97706",
+    secondary: "#fbbf24",
+    bgLight: "#fefce8",
+  },
+  {
+    id: "ocean",
+    name: "Océano Calmo & Menta",
+    tag: "Fresco, salud, masajes y yoga",
+    primary: "#059669",
+    secondary: "#34d399",
+    bgLight: "#ecfdf5",
+  },
+];
+
+const STUDIO_SWATCHES = [
+  { name: "Bosque", hex: "#16845f" },
+  { name: "Pino", hex: "#245442" },
+  { name: "Zafiro", hex: "#0284c7" },
+  { name: "Marino", hex: "#0f172a" },
+  { name: "Terracota", hex: "#ea580c" },
+  { name: "Frambuesa", hex: "#db2777" },
+  { name: "Borgoña", hex: "#9f1239" },
+  { name: "Oro", hex: "#d97706" },
+  { name: "Esmeralda", hex: "#059669" },
+  { name: "Grafito", hex: "#334155" },
+];
+
+function PersonalizationCard({
+  settings,
+  paid,
+  businessName = "Mi Negocio",
+  userSlug = "",
+  onSave,
+  onRequestUpgrade,
+}: {
+  settings: BizSettings;
+  paid: boolean;
+  businessName?: string;
+  userSlug?: string;
+  onSave: (patch: Partial<BizSettings>) => void;
+  onRequestUpgrade: () => void;
+}) {
   const { toast } = useStore();
   const [f, setF] = useState({
     description: settings.description || "",
@@ -5553,8 +5649,6 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
     brandColor: settings.brandColor || "",
   });
 
-  // Solo resincronizar si lo guardado cambió de verdad (no en cada
-  // pulso de la nube, que te borraba lo que estabas escribiendo).
   const savedPageKey = JSON.stringify([
     settings.description || "",
     settings.address || "",
@@ -5564,6 +5658,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
     settings.theme || "evergreen",
     settings.brandColor || "",
   ]);
+
   useEffect(() => {
     setF({
       description: settings.description || "",
@@ -5577,6 +5672,12 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedPageKey]);
 
+  const activeColor = useMemo(() => {
+    if (f.brandColor) return f.brandColor;
+    const match = DESIGNER_THEMES.find((t) => t.id === f.theme);
+    return match ? match.primary : "#16845f";
+  }, [f.theme, f.brandColor]);
+
   const handleSave = () => {
     onSave({
       description: f.description.trim(),
@@ -5587,138 +5688,415 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
       theme: paid ? f.theme : "evergreen",
       brandColor: paid && f.brandColor ? f.brandColor : undefined,
     });
-    toast("Tu página se actualizó ✓");
+    toast("Identidad visual guardada con éxito ✓");
   };
 
   return (
-    <div className="card p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-lime/30 text-fern"><IconSpark className="h-5 w-5" /></span>
-        <div>
-          <h3 className="font-display text-lg font-extrabold text-ink">Tu página, con tu identidad</h3>
-          <p className="text-sm text-inkmute">Esto es lo que ven tus clientes en tu link público.</p>
-        </div>
-      </div>
-
-      {/* Paleta de colores */}
-      <div>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <label className="block text-xs font-bold uppercase tracking-wider text-inkmute">
-            Paleta de colores de tu página
-          </label>
-          {!paid && (
-            <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
-              Paletas exclusivas: Plan Crece
-            </span>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-          {(Object.keys(THEMES) as ThemeId[]).map((tid) => {
-            const th = THEMES[tid];
-            const isLocked = !paid && tid !== "evergreen";
-            const isSel = f.theme === tid && !f.brandColor;
-            return (
-              <button
-                key={tid}
-                type="button"
-                onClick={() => {
-                  if (isLocked) {
-                    toast("Las paletas de colores exclusivas están disponibles en el plan Crece.", "warn");
-                    onRequestUpgrade();
-                    return;
-                  }
-                  setF({ ...f, theme: tid, brandColor: "" });
-                }}
-                className={`relative flex items-center gap-2.5 rounded-xl border-2 p-3 text-left transition-all ${
-                  isSel
-                    ? "!border-evergreen !bg-evergreen/5 shadow-sm"
-                    : isLocked
-                    ? "border-ink/8 bg-ink/[0.02] opacity-75 hover:border-amber-500/40"
-                    : "border-ink/10 bg-white hover:border-ink/30"
-                }`}
-              >
-                <span className={`h-6 w-6 shrink-0 rounded-full bg-gradient-to-tr ${th.sampleGradient} shadow-inner flex items-center justify-center`}>
-                  {isSel && <span className="h-2 w-2 rounded-full bg-white shadow" />}
-                  {isLocked && !isSel && <IconLock className="h-3 w-3 text-white drop-shadow" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-ink">{th.name}</p>
-                  {isLocked && <p className="text-[9px] font-bold text-amber-800">Plan Crece</p>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Selector de color personalizado */}
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-black/[0.08] bg-[#F5F5F7] p-3">
+    <div className="space-y-6">
+      {/* Cabecera Principal */}
+      <div className="card p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={f.brandColor || "#16845f"}
-              onChange={(e) => {
-                if (!paid) {
-                  toast("El color personalizado está disponible en el plan Crece.", "warn");
-                  onRequestUpgrade();
-                  return;
-                }
-                setF({ ...f, brandColor: e.target.value });
-              }}
-              className="h-9 w-9 cursor-pointer rounded-xl border border-black/10 bg-transparent p-0.5"
-              title="Elegir color personalizado"
-            />
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-black/[0.05] text-[#1D1D1F]">
+              <IconSpark className="h-5 w-5" />
+            </span>
             <div>
-              <p className="text-xs font-bold text-[#1D1D1F]">Color propio personalizado (Hex)</p>
-              <p className="text-[11px] text-[#6E6E73]">
-                {f.brandColor ? `Color activo: ${f.brandColor}` : "Elegí el tono exacto de tu logo o marca."}
+              <h3 className="font-display text-xl font-extrabold text-[#1D1D1F]">
+                Diseño & Identidad de tu Local
+              </h3>
+              <p className="text-xs text-[#6E6E73] mt-0.5 leading-relaxed">
+                Personalizá los colores, la estética y la información que verán tus clientes al reservar.
               </p>
             </div>
           </div>
-          {f.brandColor ? (
-            <button
-              type="button"
-              onClick={() => setF({ ...f, brandColor: "" })}
-              className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
+          {userSlug && (
+            <a
+              href={`#/reservar/${userSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-xs font-bold text-[#1D1D1F] hover:bg-[#F5F5F7] hover:border-black/20 transition-all shadow-2xs"
             >
-              Quitar
-            </button>
-          ) : !paid ? (
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-amber-900">
-              Plan Crece
+              <span>Ver link público</span>
+              <ArrowUpRight size={13} />
+            </a>
+          )}
+        </div>
+
+        {/* Live Mockup Device (Vista Previa en Tiempo Real) */}
+        <div className="mt-6 overflow-hidden rounded-2xl border border-black/[0.08] bg-[#F5F5F7] p-4 sm:p-5">
+          <div className="flex items-center justify-between mb-3.5">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56] border border-black/10" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E] border border-black/10" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F] border border-black/10" />
+              <span className="ml-2 text-[11px] font-bold text-[#6E6E73] uppercase tracking-wider">
+                Vista previa en vivo
+              </span>
+            </div>
+            <span
+              className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-white border border-black/5"
+              style={{ color: activeColor }}
+            >
+              {activeColor.toUpperCase()}
             </span>
-          ) : null}
+          </div>
+
+          {/* Tarjeta Simulador de Reserva */}
+          <div className="rounded-xl border border-black/[0.06] bg-white p-4 shadow-sm transition-all">
+            <div className="flex items-center justify-between pb-3 border-b border-black/[0.05]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white font-display text-sm font-extrabold shadow-xs transition-colors"
+                  style={{ backgroundColor: activeColor }}
+                >
+                  {businessName.slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-bold text-[#1D1D1F] truncate leading-tight">
+                    {businessName}
+                  </h4>
+                  <p className="text-[10px] text-[#6E6E73] mt-0.5">Reservá en 1 minuto · Sin llamadas</p>
+                </div>
+              </div>
+              <span
+                className="shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold transition-colors"
+                style={{
+                  backgroundColor: `${activeColor}15`,
+                  color: activeColor,
+                }}
+              >
+                Abierto hoy
+              </span>
+            </div>
+
+            {/* Servicio Mock Seleccionado */}
+            <div
+              className="mt-3.5 rounded-xl border-2 p-3 transition-all"
+              style={{
+                borderColor: activeColor,
+                backgroundColor: `${activeColor}08`,
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-[#1D1D1F]">Servicio Principal</span>
+                  <p className="text-[10px] text-[#6E6E73] mt-0.5">45 min · Atención personalizada</p>
+                </div>
+                <span className="text-sm font-extrabold" style={{ color: activeColor }}>
+                  $9.500
+                </span>
+              </div>
+            </div>
+
+            {/* Horario y Botón de Acción */}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold text-[#6E6E73]">Turno elegido:</span>
+                <span
+                  className="rounded-lg px-2.5 py-1 text-xs font-bold text-white shadow-2xs transition-colors"
+                  style={{ backgroundColor: activeColor }}
+                >
+                  10:30 hs
+                </span>
+              </div>
+              <button
+                type="button"
+                className="rounded-full px-4 py-1.5 text-xs font-bold text-white shadow-2xs transition-all pointer-events-none"
+                style={{ backgroundColor: activeColor }}
+              >
+                Continuar reserva →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Sección: Paletas de Diseño */}
+        <div className="mt-8 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">
+                1. Paletas de autor curadas
+              </label>
+              <p className="text-xs text-[#1D1D1F] font-semibold mt-0.5">
+                Armonías de color probadas para máxima legibilidad y estética profesional.
+              </p>
+            </div>
+            {!paid && (
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
+                Paletas exclusivas: Plan Crece
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {DESIGNER_THEMES.map((theme) => {
+              const isLocked = !paid && theme.id !== "evergreen";
+              const isSelected = f.theme === theme.id && !f.brandColor;
+              return (
+                <button
+                  key={theme.id}
+                  type="button"
+                  onClick={() => {
+                    if (isLocked) {
+                      toast("Las paletas de colores exclusivas están disponibles en el plan Crece.", "warn");
+                      onRequestUpgrade();
+                      return;
+                    }
+                    setF({ ...f, theme: theme.id, brandColor: "" });
+                  }}
+                  className={`group relative flex flex-col justify-between rounded-2xl border p-3.5 text-left transition-all cursor-pointer ${
+                    isSelected
+                      ? "border-[#1D1D1F] bg-white ring-2 ring-[#1D1D1F] shadow-sm"
+                      : isLocked
+                      ? "border-black/[0.08] bg-black/[0.015] opacity-75 hover:border-black/20"
+                      : "border-black/[0.08] bg-white hover:border-black/25 hover:shadow-2xs"
+                  }`}
+                >
+                  {/* Barra tricolor */}
+                  <div className="flex h-6 w-full overflow-hidden rounded-lg border border-black/5 shadow-inner mb-3">
+                    <div className="w-1/2" style={{ backgroundColor: theme.primary }} />
+                    <div className="w-1/3" style={{ backgroundColor: theme.secondary }} />
+                    <div className="w-1/6" style={{ backgroundColor: theme.bgLight }} />
+                  </div>
+
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-display text-xs font-bold text-[#1D1D1F] leading-snug">
+                        {theme.name}
+                      </p>
+                      <p className="text-[10px] text-[#6E6E73] mt-0.5 leading-tight">{theme.tag}</p>
+                    </div>
+                    {isSelected && (
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1D1D1F] text-white">
+                        <IconCheck className="h-3 w-3 stroke-[3]" />
+                      </span>
+                    )}
+                    {isLocked && !isSelected && (
+                      <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-amber-900">
+                        <IconLock className="h-2.5 w-2.5" /> Crece
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Sección: Color Propio a Medida */}
+        <div className="mt-8 rounded-2xl border border-black/[0.08] bg-[#F5F5F7] p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#6E6E73]">
+                2. O elegí tu color propio a medida (Hex)
+              </h4>
+              <p className="text-xs text-[#1D1D1F] font-semibold mt-0.5">
+                Usá el tono exacto de tu marca o logotipo en cada botón y detalle de reserva.
+              </p>
+            </div>
+            {f.brandColor ? (
+              <button
+                type="button"
+                onClick={() => setF({ ...f, brandColor: "" })}
+                className="text-xs font-bold text-rose-600 hover:underline cursor-pointer"
+              >
+                Revertir a paleta clásica
+              </button>
+            ) : !paid ? (
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
+                Plan Crece
+              </span>
+            ) : null}
+          </div>
+
+          {/* Tonos rápidos de estudio */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-3.5">
+            {STUDIO_SWATCHES.map((swatch) => {
+              const isCurrent = (f.brandColor || "").toLowerCase() === swatch.hex.toLowerCase();
+              return (
+                <button
+                  key={swatch.hex}
+                  type="button"
+                  title={swatch.name}
+                  onClick={() => {
+                    if (!paid) {
+                      toast("El color personalizado está disponible en el plan Crece.", "warn");
+                      onRequestUpgrade();
+                      return;
+                    }
+                    setF({ ...f, brandColor: swatch.hex });
+                  }}
+                  className={`flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold transition-all cursor-pointer ${
+                    isCurrent
+                      ? "border-black bg-black text-white shadow-xs"
+                      : "border-black/[0.08] bg-white text-[#1D1D1F] hover:bg-neutral-100 hover:border-black/20"
+                  }`}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full shrink-0 border border-black/10"
+                    style={{ backgroundColor: swatch.hex }}
+                  />
+                  <span>{swatch.name}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Rueda de color + Input Hex */}
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-black/[0.06] bg-white p-3 shadow-2xs">
+            <div className="relative flex items-center">
+              <input
+                type="color"
+                value={f.brandColor || activeColor}
+                onChange={(e) => {
+                  if (!paid) {
+                    toast("El color personalizado está disponible en el plan Crece.", "warn");
+                    onRequestUpgrade();
+                    return;
+                  }
+                  setF({ ...f, brandColor: e.target.value });
+                }}
+                className="h-10 w-10 cursor-pointer rounded-xl border border-black/10 p-0.5 bg-transparent"
+                title="Abrir selector de color libre"
+              />
+            </div>
+            <div className="flex-1 min-w-[130px]">
+              <div className="relative flex items-center">
+                <span className="absolute left-3 text-xs font-bold text-[#6E6E73]">#</span>
+                <input
+                  type="text"
+                  maxLength={6}
+                  placeholder="16845F"
+                  value={(f.brandColor || "").replace(/^#/, "")}
+                  onChange={(e) => {
+                    if (!paid) {
+                      toast("El color personalizado está disponible en el plan Crece.", "warn");
+                      onRequestUpgrade();
+                      return;
+                    }
+                    const clean = e.target.value.replace(/[^0-9A-Fa-f]/g, "").slice(0, 6);
+                    setF({ ...f, brandColor: clean ? `#${clean}` : "" });
+                  }}
+                  className="field pl-7 py-2 text-xs font-mono font-bold uppercase tracking-wider"
+                />
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] text-[#6E6E73] block uppercase tracking-wider font-bold">
+                Tono activo
+              </span>
+              <span className="text-xs font-mono font-bold text-[#1D1D1F]">
+                {activeColor.toUpperCase()}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Descripción</label>
-          <textarea className="field min-h-20 resize-none" placeholder="Ej: Manicura y nail art con productos de primera." value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
-        </div>
+      {/* Tarjeta: Información Pública del Local */}
+      <div className="card p-6 space-y-4">
         <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Dirección</label>
-          <input className="field" placeholder="Av. Corrientes 1234, CABA" value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} />
+          <h3 className="font-display text-lg font-extrabold text-[#1D1D1F]">
+            Información Pública de tu Local
+          </h3>
+          <p className="text-xs text-[#6E6E73] mt-0.5">
+            Datos visibles en la cabecera y pie de página de tu link de reservas.
+          </p>
         </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">WhatsApp (solo números)</label>
-          <input className="field" placeholder="1155551234" value={f.whatsapp} onChange={(e) => setF({ ...f, whatsapp: e.target.value })} />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">
+              Biografía / Presentación
+            </label>
+            <textarea
+              className="field min-h-20 resize-none text-xs"
+              placeholder="Ej: Manicura, kapping y nail art con productos de primera. Más de 5 años cuidando tus uñas."
+              value={f.description}
+              onChange={(e) => setF({ ...f, description: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">
+              Dirección del local
+            </label>
+            <input
+              className="field text-xs"
+              placeholder="Av. Corrientes 1234, CABA"
+              value={f.address}
+              onChange={(e) => setF({ ...f, address: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">
+              WhatsApp público (solo números)
+            </label>
+            <input
+              className="field text-xs"
+              placeholder="1155551234"
+              value={f.whatsapp}
+              onChange={(e) => setF({ ...f, whatsapp: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">
+              Instagram (sin @)
+            </label>
+            <input
+              className="field text-xs"
+              placeholder="studionails.ok"
+              value={f.instagram}
+              onChange={(e) => setF({ ...f, instagram: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">
+              Link de Google Maps
+            </label>
+            <div className="flex gap-2">
+              <input
+                className="field text-xs flex-1 min-w-0"
+                placeholder="https://maps.app.goo.gl/..."
+                value={f.mapsUrl}
+                onChange={(e) => setF({ ...f, mapsUrl: e.target.value })}
+              />
+              {f.mapsUrl && (
+                <a
+                  href={f.mapsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn shrink-0 text-xs px-3"
+                  title="Probar enlace"
+                >
+                  <ArrowUpRight size={14} />
+                </a>
+              )}
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Instagram (sin el @)</label>
-          <input className="field" placeholder="studionails.ok" value={f.instagram} onChange={(e) => setF({ ...f, instagram: e.target.value })} />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-inkmute">Link de Google Maps</label>
-          <input className="field" placeholder="https://maps.app.goo.gl/..." value={f.mapsUrl} onChange={(e) => setF({ ...f, mapsUrl: e.target.value })} />
+
+        {/* Botonera de Guardado */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-black/[0.06]">
+          <button
+            type="button"
+            onClick={handleSave}
+            className="rounded-full bg-[#16845f] px-7 py-2.5 font-display text-sm font-bold text-white shadow-xs transition-all hover:bg-[#126b4c] hover:shadow hover:-translate-y-0.5 cursor-pointer"
+          >
+            Guardar cambios de mi página
+          </button>
+          {userSlug && (
+            <a
+              href={`#/reservar/${userSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1D1D1F] hover:underline"
+            >
+              <span>Ver cómo queda mi link</span>
+              <ArrowUpRight size={13} />
+            </a>
+          )}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={handleSave}
-        className="rounded-full bg-emerald-600 px-6 py-2.5 font-display text-sm font-bold text-white shadow-xs transition-all hover:-translate-y-0.5 hover:bg-emerald-700"
-      >
-        Guardar mi página
-      </button>
     </div>
   );
 }

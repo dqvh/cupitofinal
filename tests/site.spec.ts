@@ -341,11 +341,13 @@ test('ajustes: pestaña Página y color visible y configurable', async ({ page }
   const pageColorTab = page.getByRole('button', { name: /Página y color/i });
   await expect(pageColorTab).toBeVisible();
   await pageColorTab.click();
-  await expect(page.getByText('Tu página, con tu identidad')).toBeVisible();
-  await expect(page.getByText('Paleta de colores de tu página')).toBeVisible();
-  await expect(page.getByText('Color propio personalizado (Hex)')).toBeVisible();
+  await expect(page.getByText('Diseño & Identidad de tu Local')).toBeVisible();
+  await expect(page.getByText('Paletas de autor curadas')).toBeVisible();
+  await expect(page.getByText('Color propio a medida (Hex)')).toBeVisible();
+  await expect(page.getByText('Vista previa en vivo')).toBeVisible();
   // El aviso confuso de "Modo local: contactá a hola@cupito.app" NO debe mostrarse para cuenta real
   await expect(page.getByText(/Modo local: los cambios se guardan sólo en este dispositivo/i)).not.toBeVisible();
+  await page.screenshot({ path: 'artifacts/personalizacion-color-studio.png', fullPage: true });
 });
 
 test('cursor: pointer presente en botones y controles interactivos', async ({ page }) => {
