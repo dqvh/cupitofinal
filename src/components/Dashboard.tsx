@@ -16,6 +16,7 @@ import {
   fmtDateNatural,
   getDayHours,
   isPaid,
+  isDemoUser,
   getSubscriptionStatus,
   PLAN_META,
   PRO_LIMIT,
@@ -5393,7 +5394,8 @@ function SettingsView({
   const tab = initialTab;
   const setTab = onTabChange;
   const { updateSettings } = useStore();
-  const [showLocalNotice, setShowLocalNotice] = useState(true);
+  const isDemo = isDemoUser(user);
+  const [showDemoNotice, setShowDemoNotice] = useState(isDemo);
 
   const mainGroups: {
     id: string;
@@ -5405,6 +5407,7 @@ function SettingsView({
       label: "Local",
       tabs: [
         { id: "negocio", label: "Negocio", icon: <IconWallet className="h-3.5 w-3.5" /> },
+        { id: "pagina", label: "Página y color", icon: <IconSpark className="h-3.5 w-3.5" /> },
         { id: "horarios", label: "Horarios", icon: <IconClock className="h-3.5 w-3.5" /> },
       ],
     },
@@ -5427,21 +5430,25 @@ function SettingsView({
 
   return (
     <div className="pop-in mt-8">
-      {/* Sutil aviso de modo local dentro de Ajustes */}
-      {showLocalNotice && (
-        <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-black/[0.08] bg-white p-4 shadow-sm">
+      {/* Aviso informativo solo si está en la cuenta demo de prueba */}
+      {isDemo && showDemoNotice && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#F5F5F7] text-[#1D1D1F]">
-              <IconGear className="h-4 w-4" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-900">
+              <IconSpark className="h-4 w-4" />
             </span>
-            <p className="text-xs text-[#6E6E73] leading-relaxed">
-              <strong className="text-[#1D1D1F]">Modo local:</strong> los cambios se guardan sólo en este dispositivo. Para usar la agenda desde otros equipos, contactá a hola@cupito.app.
+            <p className="text-xs text-amber-950 leading-relaxed">
+              <strong>Cuenta de prueba:</strong> Estás explorando la demo. Los cambios se guardan localmente en este navegador.{" "}
+              <a href="#/registro" className="font-bold underline text-emerald-800 hover:text-emerald-950">
+                Creá tu cuenta gratis
+              </a>{" "}
+              para guardar tu negocio en la nube.
             </p>
           </div>
           <button
             type="button"
-            onClick={() => setShowLocalNotice(false)}
-            className="shrink-0 rounded-lg p-1.5 text-[#6E6E73] hover:bg-black/5 hover:text-[#1D1D1F] transition-colors"
+            onClick={() => setShowDemoNotice(false)}
+            className="shrink-0 rounded-lg p-1.5 text-amber-800 hover:bg-black/5 transition-colors cursor-pointer"
             aria-label="Cerrar aviso"
           >
             ✕
@@ -5543,6 +5550,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
     instagram: settings.instagram || "",
     mapsUrl: settings.mapsUrl || "",
     theme: (settings.theme || "evergreen") as ThemeId,
+    brandColor: settings.brandColor || "",
   });
 
   // Solo resincronizar si lo guardado cambió de verdad (no en cada
@@ -5554,6 +5562,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
     settings.instagram || "",
     settings.mapsUrl || "",
     settings.theme || "evergreen",
+    settings.brandColor || "",
   ]);
   useEffect(() => {
     setF({
@@ -5563,6 +5572,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
       instagram: settings.instagram || "",
       mapsUrl: settings.mapsUrl || "",
       theme: (settings.theme || "evergreen") as ThemeId,
+      brandColor: settings.brandColor || "",
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedPageKey]);
@@ -5575,6 +5585,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
       instagram: f.instagram.trim().replace(/^@/, ""),
       mapsUrl: f.mapsUrl.trim(),
       theme: paid ? f.theme : "evergreen",
+      brandColor: paid && f.brandColor ? f.brandColor : undefined,
     });
     toast("Tu página se actualizó ✓");
   };
@@ -5605,7 +5616,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
           {(Object.keys(THEMES) as ThemeId[]).map((tid) => {
             const th = THEMES[tid];
             const isLocked = !paid && tid !== "evergreen";
-            const isSel = f.theme === tid;
+            const isSel = f.theme === tid && !f.brandColor;
             return (
               <button
                 key={tid}
@@ -5616,7 +5627,7 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
                     onRequestUpgrade();
                     return;
                   }
-                  setF({ ...f, theme: tid });
+                  setF({ ...f, theme: tid, brandColor: "" });
                 }}
                 className={`relative flex items-center gap-2.5 rounded-xl border-2 p-3 text-left transition-all ${
                   isSel
@@ -5637,6 +5648,45 @@ function PersonalizationCard({ settings, paid, onSave, onRequestUpgrade }: { set
               </button>
             );
           })}
+        </div>
+
+        {/* Selector de color personalizado */}
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-black/[0.08] bg-[#F5F5F7] p-3">
+          <div className="flex items-center gap-3">
+            <input
+              type="color"
+              value={f.brandColor || "#16845f"}
+              onChange={(e) => {
+                if (!paid) {
+                  toast("El color personalizado está disponible en el plan Crece.", "warn");
+                  onRequestUpgrade();
+                  return;
+                }
+                setF({ ...f, brandColor: e.target.value });
+              }}
+              className="h-9 w-9 cursor-pointer rounded-xl border border-black/10 bg-transparent p-0.5"
+              title="Elegir color personalizado"
+            />
+            <div>
+              <p className="text-xs font-bold text-[#1D1D1F]">Color propio personalizado (Hex)</p>
+              <p className="text-[11px] text-[#6E6E73]">
+                {f.brandColor ? `Color activo: ${f.brandColor}` : "Elegí el tono exacto de tu logo o marca."}
+              </p>
+            </div>
+          </div>
+          {f.brandColor ? (
+            <button
+              type="button"
+              onClick={() => setF({ ...f, brandColor: "" })}
+              className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
+            >
+              Quitar
+            </button>
+          ) : !paid ? (
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-amber-900">
+              Plan Crece
+            </span>
+          ) : null}
         </div>
       </div>
 

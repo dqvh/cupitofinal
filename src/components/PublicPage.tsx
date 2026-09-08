@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { usePublicPage, useStore, ensureDemo, DEMO_SLUG } from "../lib/store";
+import { useEffect, useState, useRef } from "react";
+import { usePublicPage, useStore, ensureDemo, DEMO_SLUG, isDemoSlug } from "../lib/store";
 import PublicBooking from "./PublicBooking";
 import { LogoMark } from "./kit";
 import { RotateCw } from "lucide-react";
@@ -8,6 +8,7 @@ import { RotateCw } from "lucide-react";
 export default function PublicPage({ slug }: { slug: string }) {
   const page = usePublicPage(slug);
   const { fetchPageRemote, sessionUserId } = useStore();
+  const isDemo = isDemoSlug(slug);
 
   // Los emails traen ?buscar=1 para abrir directo «Mis turnos» (ver/cancelar).
   // El pedido de reseña trae ?resena=1 para abrir directo el formulario de opiniones.
@@ -29,20 +30,34 @@ export default function PublicPage({ slug }: { slug: string }) {
     return false;
   })();
 
-  const [loadingRemote, setLoadingRemote] = useState(!page);
+  const [loadingRemote, setLoadingRemote] = useState(!page && !isDemo);
+  // Contador para forzar re-render tras re-sembrar la demo
+  const [, setTick] = useState(0);
+  const demoSeeded = useRef(false);
+
+  // Si es la demo y no existe, re-sembrar de inmediato (antes del useEffect)
+  if (isDemo && !page && !demoSeeded.current) {
+    try { localStorage.removeItem("cupito_demo_deleted"); } catch { /* noop */ }
+    ensureDemo();
+    demoSeeded.current = true;
+  }
 
   useEffect(() => {
+    // Si recién sembramos la demo, forzar re-render para que usePublicPage la vea
+    if (isDemo && demoSeeded.current) {
+      setTick((t) => t + 1);
+      demoSeeded.current = false;
+      return;
+    }
+
     // Si estoy viendo mi propia página logueado, lo local ya es lo más fresco.
     if (page && sessionUserId && page.user.id === sessionUserId) {
       setLoadingRemote(false);
       return;
     }
 
-    // Si es la demo y no existe localmente, re-sembrarla en vez de ir a la nube.
-    if (!page && slug.toLowerCase() === DEMO_SLUG) {
-      // Limpiar flag de demo borrada para que ensureDemo re-siembre
-      try { localStorage.removeItem("cupito_demo_deleted"); } catch { /* noop */ }
-      ensureDemo();
+    // La demo es 100% local, nunca va a la nube.
+    if (isDemo) {
       setLoadingRemote(false);
       return;
     }
@@ -63,7 +78,7 @@ export default function PublicPage({ slug }: { slug: string }) {
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  }, [slug, isDemo]);
 
   if (loadingRemote) {
     return (

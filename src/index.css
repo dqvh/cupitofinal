@@ -7,6 +7,22 @@
 
 /* Foco consistente y controles legibles al reservar desde el celular. */
 :where(button, a, input, select, textarea):focus-visible { outline: 3px solid #047857; outline-offset: 3px; }
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+summary,
+select,
+label[for],
+input[type="checkbox"],
+input[type="radio"],
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+.btn,
+.lp-button,
+.cursor-pointer {
+  cursor: pointer;
+}
 button:disabled { cursor: not-allowed; }
 @media (max-width: 640px) {
   input:not([type="range"]):not([type="checkbox"]), select, textarea { font-size: 16px; }

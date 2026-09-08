@@ -428,7 +428,11 @@ export const isPaid = (u: User) => {
 
 /* La cuenta demo vive solo en cada dispositivo: jamás se sube ni se trae de la nube */
 export const DEMO_EMAIL = "demo@cupito.app";
-export const DEMO_SLUG = "cupito-demo";
+export const DEMO_SLUG = "studio-nails";
+export const isDemoSlug = (s: string | undefined | null) => {
+  const x = (s || "").toLowerCase().trim();
+  return x === "studio-nails" || x === "cupito-demo" || x === "demo";
+};
 export const isDemoUser = (u: Pick<User, "email"> | undefined | null) => !!u && u.email === DEMO_EMAIL;
 export const PRO_COLORS = ["#cdf463", "#ff7a59", "#93e6c3", "#b7e33f", "#f4b863"];
 
@@ -1505,6 +1509,7 @@ interface StoreApi {
 const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   isCloudSyncActive: isSupabaseConfigured,
   async fetchPageRemote(slug: string) {
+    if (isDemoSlug(slug)) return false;
     if (!isSupabaseConfigured) return false;
     const remote = await fetchRemoteUserBySlug(slug);
     if (!remote || isDemoUser(remote.user)) return false;
@@ -2974,9 +2979,20 @@ export function usePublicPage(slug: string): ({ user: User } & Record<"data", Bi
   return useMemo(() => {
     void version;
     const target = (slug || "").toLowerCase().trim();
-    const matches = users.filter((u) => u.slug.toLowerCase().trim() === target);
-    // Si hay colisión (demo vieja + negocio real con mismo slug), gana el real.
-    const user = matches.find((u) => !isDemoUser(u)) ?? matches[0] ?? null;
+    const isTargetDemo = isDemoSlug(target);
+
+    let user: User | null = null;
+    if (isTargetDemo) {
+      user = users.find((u) => isDemoUser(u) || isDemoSlug(u.slug)) ?? null;
+      if (!user) {
+        ensureDemo();
+        user = users.find((u) => isDemoUser(u) || isDemoSlug(u.slug)) ?? null;
+      }
+    } else {
+      const matches = users.filter((u) => u.slug.toLowerCase().trim() === target);
+      // Si hay colisión (demo vieja + negocio real con mismo slug), gana el real.
+      user = matches.find((u) => !isDemoUser(u)) ?? matches[0] ?? null;
+    }
     if (!user) return null;
     const pageData = loadData(user.id);
     const isOwner = sessionUserId && sessionUserId === user.id;
@@ -3002,13 +3018,10 @@ export function usePublicPage(slug: string): ({ user: User } & Record<"data", Bi
 
 /* ============ demo ============ */
 export function ensureDemo(): void {
-  if (safeGet(DEMO_DELETED_KEY) === "1") return;
-  const deleted = getDeletedUserIds();
-  const existing = users.find((u) => u.email === "demo@cupito.app");
-  if (existing && deleted.has(existing.id)) return;
+  const existing = users.find((u) => u.email === "demo@cupito.app" || isDemoUser(u));
   if (!existing) {
     const demo: User = {
-      id: uid(),
+      id: "demo-session",
       name: "Caro Méndez",
       business: "Studio Nails (demo local)",
       email: "demo@cupito.app",
@@ -3017,17 +3030,19 @@ export function ensureDemo(): void {
       plan: "crece",
       createdAt: Date.now(),
     };
-    saveUsers([...users, demo]);
+    users = [...users.filter((u) => u.id !== demo.id && u.email !== demo.email), demo];
+    safeSet(USERS_KEY, JSON.stringify(users));
     loadData(demo.id);
     seedDemoExtras(demo.id);
+    emit();
     return;
   }
-  // Migración: demo vieja con slug studio-nails tapaba el ejemplo real.
-  if ((existing as User).slug === "studio-nails") {
-    (existing as User).slug = DEMO_SLUG;
+  if (!isDemoSlug(existing.slug)) {
+    existing.slug = DEMO_SLUG;
     safeSet(USERS_KEY, JSON.stringify(users));
   }
   seedDemoExtras(existing.id);
+  emit();
 }
 try {
   ensureDemo();

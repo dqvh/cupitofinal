@@ -142,7 +142,7 @@ export default function Landing() {
 
   const goToDemo = (e: React.MouseEvent) => {
     e.preventDefault();
-    window.location.hash = "#/cupito-demo";
+    window.location.hash = "#/reservar/studio-nails";
   };
 
   return (
@@ -265,7 +265,7 @@ export default function Landing() {
               </a>
               <a
                 className="lp-button ghost"
-                href="#/cupito-demo"
+                href="#/reservar/studio-nails"
                 onClick={goToDemo}
               >
                 <Play size={14} fill="currentColor" />
@@ -536,7 +536,7 @@ export default function Landing() {
               </article>
             ))}
           </div>
-          <a className="lp-inline-link" href="#/cupito-demo" onClick={goToDemo}>
+          <a className="lp-inline-link" href="#/reservar/studio-nails" onClick={goToDemo}>
             Probalo como si fueras tu cliente <ArrowRight size={16} />
           </a>
         </section>

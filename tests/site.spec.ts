@@ -28,7 +28,10 @@ test('hidratación, menú mobile, planes y rutas secundarias', async ({ page }) 
   page.on('request', request => requests.push(request.url()));
   await page.goto('/');
   await expect(page.locator('h1')).toBeVisible();
-  await page.getByRole('button', { name: 'Abrir menú' }).click();
+  const openMenuBtn = page.getByRole('button', { name: 'Abrir menú' });
+  await expect(openMenuBtn).toBeVisible();
+  await page.waitForTimeout(300);
+  await openMenuBtn.click();
   await expect(page.getByRole('button', { name: 'Cerrar menú' })).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Abrir menú' })).toHaveAttribute('aria-expanded', 'false');
@@ -222,7 +225,8 @@ test('dashboard: turnos en mobile tienen estructura limpia y barra de acciones s
     const key = `cupito_data_${session}`;
     const raw = localStorage.getItem(key);
     const data = raw ? JSON.parse(raw) : {};
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     data.professionals = [
       { id: 'pro1', name: 'Lucas', color: '#0284c7' },
       { id: 'pro2', name: 'Feli', color: '#16a34a' },
@@ -313,6 +317,41 @@ test('reserva: upscroll suave al cambiar de paso', async ({ page }) => {
   expect(scrollYAfterStep1).toBeLessThan(100);
 
   await page.screenshot({ path: 'artifacts/booking-step1-upscroll.png' });
+});
+
+test('landing: botón ver demo en vivo navega a la demo y carga sin error', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Ver demo en vivo' }).click();
+  await expect(page).toHaveURL(/#\/reservar\/studio-nails/);
+  await expect(page.locator('h1')).toContainText(/Studio Nails/i);
+  await expect(page.getByText('Este negocio todavía no tiene su página')).not.toBeVisible();
+});
+
+test('demo: /#/cupito-demo también resuelve a la demo de Studio Nails', async ({ page }) => {
+  await page.goto('/#/cupito-demo');
+  await expect(page.locator('h1')).toContainText(/Studio Nails/i);
+  await expect(page.getByText('Este negocio todavía no tiene su página')).not.toBeVisible();
+});
+
+test('ajustes: pestaña Página y color visible y configurable', async ({ page }) => {
+  await seed(page, true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/app');
+  await page.getByRole('button', { name: 'Ajustes', exact: true }).click();
+  const pageColorTab = page.getByRole('button', { name: /Página y color/i });
+  await expect(pageColorTab).toBeVisible();
+  await pageColorTab.click();
+  await expect(page.getByText('Tu página, con tu identidad')).toBeVisible();
+  await expect(page.getByText('Paleta de colores de tu página')).toBeVisible();
+  await expect(page.getByText('Color propio personalizado (Hex)')).toBeVisible();
+  // El aviso confuso de "Modo local: contactá a hola@cupito.app" NO debe mostrarse para cuenta real
+  await expect(page.getByText(/Modo local: los cambios se guardan sólo en este dispositivo/i)).not.toBeVisible();
+});
+
+test('cursor: pointer presente en botones y controles interactivos', async ({ page }) => {
+  await page.goto('/');
+  const btnCursor = await page.getByRole('link', { name: 'Ver demo en vivo' }).evaluate((el) => getComputedStyle(el).cursor);
+  expect(btnCursor).toBe('pointer');
 });
 
 
