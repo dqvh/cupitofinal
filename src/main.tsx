@@ -1,8 +1,5 @@
 import "./index.css";
 import "./styles/landing.css";
-import "./styles/landing-light.css";
-import "./styles/landing-refinement.css";
-import "./styles/landing-polish.css";
 
 // El HTML público se pinta antes de descargar y ejecutar React.
 const start = () => import("./bootstrap").catch(() => {

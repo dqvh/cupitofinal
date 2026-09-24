@@ -2,8 +2,6 @@
 @source "./Landing.tsx";
 @source "./App.tsx";
 @source "./components/kit.tsx";
-@source "./components/Accordion.tsx";
-@source "./components/LandingTour.tsx";
 
 /* Foco consistente y controles legibles al reservar desde el celular. */
 @layer base {
