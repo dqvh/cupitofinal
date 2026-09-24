@@ -193,3 +193,80 @@ test('recuperación de contraseña funciona aun si cupito_users no tiene recover
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   }
 });
+
+import { checkSlot, slotsFor, nextFreeDay } from '../src/lib/availability';
+
+test('disponibilidad: duración combinada, pausa entre turnos, bloqueos y horario especial', () => {
+  const date = '2030-06-10'; // lunes
+  const biz = {
+    settings: { hours: Array(7).fill({ open: true, from: '09:00', to: '13:00' }), bufferMinutes: 15, slotInterval: 30, specialHours: { '2030-06-11': { open: true, from: '15:00', to: '17:00' } } as Record<string, { open: boolean; from: string; to: string }> },
+    services: [{ id: 'a', duration: 30 }, { id: 'b', duration: 60 }],
+    professionals: [] as { id: string }[],
+    bookings: [{ id: 'x', date, time: '10:00', status: 'confirmada', serviceId: 'b' }],
+    blockedSlots: [{ date, time: '12:00', endTime: '12:30' }],
+  };
+  // 10:00-11:00 ocupado + 15 min de pausa: 11:00 no, 11:30 sí.
+  expect(checkSlot(biz, { date, time: '11:00', serviceIds: ['a'] }).ok).toBe(false);
+  expect(checkSlot(biz, { date, time: '11:30', serviceIds: ['a'] }).ok).toBe(true);
+  // Servicios combinados (90 min) desde 11:30 pisan el bloqueo de las 12:00.
+  const combo = checkSlot(biz, { date, time: '11:30', serviceIds: ['a', 'b'] });
+  expect(combo.ok).toBe(false);
+  // Horario especial del martes: 15 a 17.
+  const special = slotsFor(biz, { date: '2030-06-11', serviceIds: ['b'] });
+  expect(special.map((x) => x.time)).toEqual(['15:00', '15:30', '16:00']);
+  // Feriado cargado: cerrado.
+  const closed = { ...biz, settings: { ...biz.settings, closedDates: ['2030-06-12'] } };
+  expect(checkSlot(closed, { date: '2030-06-12', time: '10:00', serviceIds: ['a'] }).ok).toBe(false);
+  expect(nextFreeDay(closed, { from: '2030-06-12', serviceIds: ['a'] })?.date).toBe('2030-06-13');
+});
+
+test('disponibilidad: con equipo asigna al profesional libre y respeta su horario', () => {
+  const date = '2030-06-10';
+  const biz = {
+    settings: { hours: Array(7).fill({ open: true, from: '09:00', to: '18:00' }), slotInterval: 30 },
+    services: [{ id: 's', duration: 60 }],
+    professionals: [
+      { id: 'p1', hours: Array(7).fill({ open: true, from: '09:00', to: '12:00' }) },
+      { id: 'p2' },
+    ],
+    bookings: [{ id: 'x', date, time: '10:00', status: 'confirmada', serviceId: 's', proId: 'p2' }],
+  };
+  const r = checkSlot(biz, { date, time: '10:00', serviceIds: ['s'] });
+  expect(r.ok && r.proId).toBe('p1');
+  expect(checkSlot(biz, { date, time: '14:00', serviceIds: ['s'], proId: 'p1' }).ok).toBe(false);
+  expect(checkSlot(biz, { date, time: '14:00', serviceIds: ['s'] }).ok && true).toBe(true);
+});
+
+test('servidor: el cliente puede reprogramar su turno validando teléfono y disponibilidad', async () => {
+  const originalFetch = globalThis.fetch;
+  process.env.SUPABASE_URL = 'https://example.test';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'fixture';
+  const day = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const data = {
+    services: [{ id: 's', price: 1000, duration: 60 }],
+    professionals: [],
+    bookings: [
+      { id: 'b1', client: 'Ana', phone: '1123456789', serviceId: 's', date: day(3), time: '10:00', status: 'confirmada' },
+      { id: 'b2', client: 'Otro', phone: '1199999999', serviceId: 's', date: day(4), time: '11:00', status: 'confirmada' },
+    ],
+    settings: { hours: Array(7).fill({ open: true, from: '09:00', to: '18:00' }), maxAdvanceDays: 30 },
+  };
+  let saved: any;
+  globalThis.fetch = async (url, init) => {
+    if (init?.method === 'PATCH') { saved = JSON.parse(String(init.body)); return Response.json({}); }
+    return Response.json(String(url).includes('cupito_users') ? [{ id: 'owner', plan: 'crece' }] : [{ data }]);
+  };
+  const call = (body: object) => publicApi(new Request('http://localhost/api/public', { method: 'POST', body: JSON.stringify({ action: 'reschedule', ownerId: 'owner', bookingId: 'b1', ...body }) }));
+  try {
+    expect((await call({ date: day(4), time: '11:00', phone: '1123456789' })).status).toBe(409);
+    expect((await call({ date: day(4), time: '15:00', phone: '1100000000' })).status).toBe(403);
+    const ok = await call({ date: day(4), time: '15:00', phone: '11 2345-6789' });
+    expect(ok.status).toBe(200);
+    const moved = saved.data.bookings.find((b: any) => b.id === 'b1');
+    expect(moved.date).toBe(day(4));
+    expect(moved.time).toBe('15:00');
+    expect(moved.events[0].type).toBe('reprogramada');
+    const res = await ok.json();
+    expect(JSON.stringify(res.data)).not.toContain('Otro');
+  } finally { globalThis.fetch = originalFetch; delete process.env.SUPABASE_URL; delete process.env.SUPABASE_SERVICE_ROLE_KEY; }
+});

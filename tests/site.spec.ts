@@ -59,7 +59,9 @@ test('reserva completa: horario, contacto y notas persistidas', async ({ page })
   await page.getByRole('button', { name: /Consulta de prueba/ }).click();
   await page.getByRole('button', { name: 'Elegir horario' }).click();
   await page.getByRole('button', { name: 'Mañana', exact: true }).click();
-  await expect(page.getByRole('button', { name: '17:15', exact: true })).toBeDisabled();
+  // Servicio de 60 min y cierre a las 18: el último horario es 17:00.
+  await expect(page.getByRole('button', { name: '17:00', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '17:30', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '09:00', exact: true }).click();
   await page.getByRole('button', { name: 'Continuar', exact: true }).click();
   await page.getByLabel('Nombre y apellido').fill('Cliente de prueba');
@@ -73,42 +75,69 @@ test('reserva completa: horario, contacto y notas persistidas', async ({ page })
   await page.screenshot({ path: 'artifacts/booking-mobile.png', fullPage: true });
 });
 
-test('ajustes: borrador de horarios, validación, guardado y seña', async ({ page }) => {
+test('horarios: borrador, validación y guardado', async ({ page }) => {
   await seed(page, true);
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto('/#/app');
-  await page.getByRole('button', { name: 'Ajustes', exact: true }).click();
-  await page.getByRole('button', { name: 'Horarios', exact: true }).click();
+  await page.goto('/#/app/horarios');
   await page.getByLabel('Lunes: cierre', { exact: true }).fill('08:00');
   await page.getByRole('button', { name: 'Guardar horarios' }).click();
   await expect(page.getByRole('alert')).toContainText('posterior');
-  await page.getByRole('button', { name: 'Pagos y seña', exact: true }).click();
-  await page.getByRole('button', { name: 'Horarios', exact: true }).click();
+  // El borrador sobrevive a cambiar de sección.
+  await page.getByRole('navigation', { name: 'Secciones' }).getByRole('button', { name: 'Agenda', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Secciones' }).getByRole('button', { name: 'Horarios', exact: true }).click();
   await expect(page.getByLabel('Lunes: cierre', { exact: true })).toHaveValue('08:00');
   await page.getByLabel('Lunes: cierre', { exact: true }).fill('17:00');
   await page.getByRole('button', { name: 'Guardar horarios' }).click();
   await expect(page.getByText('Sin cambios pendientes')).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cupito_data_test-owner')!).settings.hours[1].to)).toBe('17:00');
-  await page.screenshot({ path: 'artifacts/settings-desktop.png', fullPage: true });
-  await page.getByRole('button', { name: 'Pagos y seña', exact: true }).click();
-  await page.getByRole('button', { name: 'Activar seña', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Activar seña', exact: true })).toHaveAttribute('aria-pressed', 'false');
-  await page.getByLabel('Alias de transferencia').fill('local.prueba');
-  await page.getByLabel('Titular de la cuenta').fill('Ana Prueba');
-  await page.getByRole('button', { name: 'Activar seña', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Activar seña', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: 'artifacts/horarios-desktop.png', fullPage: true });
 });
 
-test('búsqueda rápida abre horarios con teclado y restaura el foco', async ({ page }) => {
+test('ajustes: seña requiere datos de cobro y persiste', async ({ page }) => {
   await seed(page, true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/app/ajustes/pagos');
+  const toggle = page.getByRole('switch', { name: 'Activar seña' });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  await page.getByLabel('Alias de transferencia').fill('local.prueba');
+  await page.getByLabel('Titular de la cuenta').fill('Ana Prueba');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  const settings = await page.evaluate(() => JSON.parse(localStorage.getItem('cupito_data_test-owner')!).settings);
+  expect(settings.depositEnabled).toBe(true);
+  expect(settings.transferAlias).toBe('local.prueba');
+});
+
+test('ajustes: reglas de reserva y color se guardan de verdad', async ({ page }) => {
+  await seed(page, true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/app/ajustes/reservas');
+  await page.getByRole('button', { name: '15′' }).click();
+  await page.getByLabel('Tiempo entre turnos').selectOption('10');
+  await page.goto('/#/app/ajustes/apariencia');
+  await page.getByRole('button', { name: 'Color #6d28d9' }).click();
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await page.reload();
+  const s = await page.evaluate(() => JSON.parse(localStorage.getItem('cupito_data_test-owner')!).settings);
+  expect(s.slotInterval).toBe(15);
+  expect(s.bufferMinutes).toBe(10);
+  expect(s.brandColor).toBe('#6d28d9');
+  // Otro guardado no borra el color (antes normalizeData lo descartaba).
+  await page.goto('/#/app/ajustes/reservas');
+  await page.getByLabel('Anticipación máxima').selectOption('60');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cupito_data_test-owner')!).settings.brandColor)).toBe('#6d28d9');
+});
+
+test('buscador global: secciones, clientes y atajo de teclado', async ({ page }) => {
+  await seed(page, true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/#/app');
-  await expect(page.getByRole('region', { name: 'Acciones pendientes' })).toBeVisible();
-  await page.screenshot({ path: 'artifacts/dashboard-desktop.png' });
-  await page.getByRole('button', { name: 'Buscar acciones' }).click();
+  await page.getByRole('button', { name: 'Buscar clientes, turnos o secciones' }).click();
   await expect(page.getByRole('dialog', { name: 'Buscar en el panel' })).toBeVisible();
-  await page.getByLabel('Buscar sección o acción').fill('horarios');
-  await page.getByLabel('Buscar sección o acción').press('Enter');
-  await expect(page.getByRole('heading', { name: 'Días y horarios de atención' })).toBeVisible();
+  await page.getByLabel('Buscar clientes, turnos o secciones').last().fill('horarios');
+  await page.getByLabel('Buscar clientes, turnos o secciones').last().press('Enter');
+  await expect(page.getByRole('heading', { level: 1, name: 'Horarios' })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.keyboard.press('Control+k');
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -116,17 +145,48 @@ test('búsqueda rápida abre horarios con teclado y restaura el foco', async ({ 
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('panel mobile muestra acciones cotidianas sin desbordar', async ({ page }) => {
+test('panel mobile: resumen, barra inferior y sin desborde', async ({ page }) => {
   await seed(page, true);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#/app');
-  await expect(page.getByRole('region', { name: 'Acciones pendientes' })).toBeVisible();
-  await page.screenshot({ path: "artifacts/dashboard-overview-mobile.png", fullPage: true });
-  await page.getByRole('button', { name: 'Turnos por confirmar' }).click();
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(/reservas/i);
-  await expect(page.getByRole('heading', { level: 1 })).toBeInViewport();
+  await expect(page.getByRole('region', { name: 'Resumen' })).toBeVisible();
+  const newBtn = page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('button', { name: 'Nuevo turno' });
+  await expect(newBtn).toBeVisible();
+  const bg = await newBtn.locator('span').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+  await page.getByRole('region', { name: 'Resumen' }).getByRole('button', { name: /Por confirmar/ }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Reservas');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'artifacts/dashboard-mobile.png', fullPage: true });
+});
+
+test('turno: alta rápida, confirmación y reprogramación desde la ficha', async ({ page }) => {
+  await seed(page, true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/#/app/agenda');
+  await page.getByRole('button', { name: 'Nuevo turno' }).first().click();
+  await page.getByLabel('Nombre del cliente').fill('Julia Paz');
+  await page.getByLabel('Celular del cliente').fill('1133334444');
+  // Con un solo servicio ya viene elegido.
+  await expect(page.getByRole('button', { name: /Consulta de prueba/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('group', { name: 'Elegir día' }).getByRole('button').nth(1).click();
+  await page.getByRole('button', { name: '10:00', exact: true }).click();
+  await page.getByRole('button', { name: 'Crear turno' }).click();
+  await expect(page.getByText(/Turno creado/)).toBeVisible();
+  let bookings = await page.evaluate(() => JSON.parse(localStorage.getItem('cupito_data_test-owner')!).bookings);
+  expect(bookings).toHaveLength(1);
+  expect(bookings[0].time).toBe('10:00');
+  // Ficha: reprogramar a las 11:00 del mismo día.
+  await page.goto('/#/app/reservas');
+  await page.getByRole('button', { name: /Julia Paz/ }).first().click();
+  await page.getByRole('button', { name: 'Reprogramar' }).click();
+  await page.getByRole('dialog').getByRole('checkbox').uncheck();
+  await page.getByRole('dialog').getByRole('button', { name: '11:00', exact: true }).click();
+  await page.getByRole('button', { name: 'Guardar cambio' }).click();
+  bookings = await page.evaluate(() => JSON.parse(localStorage.getItem('cupito_data_test-owner')!).bookings);
+  expect(bookings[0].time).toBe('11:00');
+  expect(bookings[0].events.map((e: { type: string }) => e.type)).toEqual(['creada', 'reprogramada']);
+  await page.screenshot({ path: 'artifacts/booking-drawer.png' });
 });
 
 test('reserva mobile: productos opcionales colapsados y fáciles de agregar', async ({ page }) => {
@@ -147,6 +207,7 @@ test('reserva mobile: productos opcionales colapsados y fáciles de agregar', as
   await expect(page.locator('.large-logo img')).toHaveAttribute('alt', 'Logo de Cupito');
   await page.getByRole('button', { name: /Consulta de prueba/ }).click();
   await page.getByRole('button', { name: 'Elegir horario' }).click();
+  await page.getByRole('button', { name: 'Mañana', exact: true }).click();
   await page.getByRole('button', { name: '09:00', exact: true }).click();
 
   const productsToggle = page.getByRole('button', { name: /¿Te llevás algo más\?/ });
@@ -161,127 +222,46 @@ test('reserva mobile: productos opcionales colapsados y fáciles de agregar', as
   await page.screenshot({ path: 'artifacts/booking-products-mobile.png', fullPage: true });
 });
 
-test('sidebar: pestañas activas tienen contraste blanco legible', async ({ page }) => {
+test('agenda: grilla del día con columnas por profesional y turnos ubicados', async ({ page }) => {
   await seed(page, true);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/#/app');
-  await page.waitForTimeout(1000);
-
-  const aside = page.locator('aside');
-  await expect(aside).toBeVisible();
-
-  // 1. Pestaña principal activa (Hoy)
-  const hoyBtn = aside.getByRole('button', { name: 'Hoy', exact: true });
-  await expect(hoyBtn).toHaveAttribute('aria-current', 'page');
-  const hoyColor = await hoyBtn.evaluate(el => getComputedStyle(el).color);
-  expect(hoyColor).toBe('rgb(255, 255, 255)');
-
-  // 2. Pestaña del submenú Más (Equipo)
-  const equipoBtn = aside.getByRole('button', { name: 'Equipo', exact: true });
-  if (!(await equipoBtn.isVisible())) {
-    await aside.getByRole('button', { name: 'Más', exact: true }).click();
-  }
-  await equipoBtn.click();
-  await expect(equipoBtn).toHaveAttribute('aria-current', 'page');
-  const equipoSpanColor = await equipoBtn.locator('span').first().evaluate(el => getComputedStyle(el).color);
-  expect(equipoSpanColor).toBe('rgb(255, 255, 255)');
-});
-
-test('dashboard: botón nuevo turno en cabecera tiene alto contraste y no es blanco', async ({ page }) => {
-  await seed(page, true);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/#/app');
-  await page.waitForTimeout(800);
-
-  const welcomeBanner = page.locator('.welcome');
-  await expect(welcomeBanner).toBeVisible();
-  const nuevoTurnoBtn = welcomeBanner.getByRole('button', { name: 'Nuevo turno' });
-  await expect(nuevoTurnoBtn).toBeVisible();
-
-  const btnStyle = await nuevoTurnoBtn.evaluate(el => {
-    const cs = getComputedStyle(el);
-    return {
-      color: cs.color,
-      backgroundColor: cs.backgroundColor,
-    };
-  });
-
-  // El texto debe ser blanco
-  expect(btnStyle.color).toBe('rgb(255, 255, 255)');
-  // El fondo NO debe ser blanco ni transparente
-  expect(btnStyle.backgroundColor).not.toBe('rgb(255, 255, 255)');
-  expect(btnStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-  expect(btnStyle.backgroundColor).toContain('36, 84, 66');
-
-  await page.screenshot({ path: 'artifacts/dashboard-welcome-mobile.png' });
-});
-
-test('dashboard: turnos en mobile tienen estructura limpia y barra de acciones separada', async ({ page }) => {
-  await seed(page, true);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/#/app');
   await page.evaluate(() => {
-    const session = localStorage.getItem('cupito_session') || 'test-owner';
-    const key = `cupito_data_${session}`;
-    const raw = localStorage.getItem(key);
-    const data = raw ? JSON.parse(raw) : {};
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    data.professionals = [
-      { id: 'pro1', name: 'Lucas', color: '#0284c7' },
-      { id: 'pro2', name: 'Feli', color: '#16a34a' },
-    ];
-    data.services = [
-      { id: 's1', name: 'Corte Tradicional / Fade', price: 9500, duration: 35 },
-    ];
-    data.products = [
-      { id: 'p1', name: 'Cera Mate', price: 3500 },
-      { id: 'p2', name: 'Shampoo', price: 4200 },
-    ];
+    const key = 'cupito_data_test-owner';
+    const data = JSON.parse(localStorage.getItem(key)!);
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    data.professionals = [{ id: 'pro1', name: 'Lucas', role: 'Barbero', color: '#0ea5e9' }, { id: 'pro2', name: 'Feli', role: 'Barbera', color: '#f59e0b' }];
     data.bookings = [
-      {
-        id: 'b-test-1',
-        client: 'Feli',
-        phone: '1123456789',
-        serviceId: 's1',
-        date: today,
-        time: '10:15',
-        status: 'pendiente',
-        proId: 'pro2',
-        items: [{ productId: 'p1', qty: 1 }, { productId: 'p2', qty: 1 }],
-      },
-      {
-        id: 'b-test-2',
-        client: 'Mariano García',
-        phone: '1198765432',
-        serviceId: 's1',
-        date: today,
-        time: '11:00',
-        status: 'confirmada',
-        proId: 'pro1',
-      },
+      { id: 'b1', client: 'Mariano García', phone: '1198765432', serviceId: 'service', date: k, time: '10:00', status: 'confirmada', source: 'manual', proId: 'pro1' },
+      { id: 'b2', client: 'Feli Cliente', phone: '1123456789', serviceId: 'service', date: k, time: '10:00', status: 'pendiente', source: 'online', proId: 'pro2' },
     ];
     localStorage.setItem(key, JSON.stringify(data));
+    location.hash = `#/app/agenda?d=${k}`;
   });
   await page.reload();
-  await page.waitForTimeout(800);
-
-  const bookingRows = page.locator('.workspace-content .space-y-3 > div');
-  await expect(bookingRows).toHaveCount(2);
-
-  const firstRow = bookingRows.first();
-  await expect(firstRow).toBeVisible();
-  await expect(firstRow.getByText('10:15')).toBeVisible();
-  await expect(firstRow.getByText('Feli').first()).toBeVisible();
-  await expect(firstRow.getByText('Pendiente')).toBeVisible();
-  await expect(firstRow.getByText('Corte Tradicional / Fade')).toBeVisible();
-  await expect(firstRow.getByText('+2 prod.')).toBeVisible();
-  await expect(firstRow.getByRole('button', { name: /Confirmar/i })).toBeVisible();
-  await expect(firstRow.getByRole('link', { name: /WhatsApp/i })).toBeVisible();
-  await expect(firstRow.getByRole('button', { name: /Detalles/i })).toBeVisible();
-
-  await firstRow.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: 'artifacts/dashboard-turnos-mobile.png' });
+  await expect(page.locator('.ag-head-cell', { hasText: 'Lucas' })).toBeVisible();
+  await expect(page.locator('.ag-head-cell', { hasText: 'Feli' })).toBeVisible();
+  const ev = page.getByRole('button', { name: /10:00 Mariano García/ });
+  await expect(ev).toBeVisible();
+  const box = await ev.boundingBox();
+  expect(box!.height).toBeGreaterThan(55); // 60 minutos a 64px/h
+  await page.screenshot({ path: 'artifacts/agenda-desktop.png' });
+  // Arrastrar el turno 2 horas más tarde (128 px) a la columna de Feli.
+  const feli = await page.locator('.ag-col').nth(1).boundingBox();
+  await page.mouse.move(box!.x + 20, box!.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(feli!.x + 30, box!.y + 60, { steps: 6 });
+  await page.mouse.move(feli!.x + 30, box!.y + 10 + 128, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByText(/Mariano García: .* 12:00/)).toBeVisible();
+  const moved = await page.evaluate(() => JSON.parse(localStorage.getItem('cupito_data_test-owner')!).bookings.find((b: { id: string }) => b.id === 'b1'));
+  expect(moved.time).toBe('12:00');
+  expect(moved.proId).toBe('pro2');
+  await page.waitForTimeout(300);
+  await page.getByRole('button', { name: /12:00 Mariano García/ }).click();
+  await expect(page.getByRole('dialog')).toContainText('Mariano García');
 });
 
 test('reserva: upscroll suave al cambiar de paso', async ({ page }) => {
@@ -304,7 +284,7 @@ test('reserva: upscroll suave al cambiar de paso', async ({ page }) => {
   await page.waitForTimeout(600);
 
   // Scrollear hacia abajo en la lista de servicios
-  await page.evaluate(() => window.scrollTo(0, 350));
+  await page.evaluate(() => window.scrollTo({ top: 350, behavior: 'instant' }));
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
 
   // Seleccionar servicio al final y avanzar a paso 1
@@ -331,23 +311,6 @@ test('demo: /#/cupito-demo también resuelve a la demo de Studio Nails', async (
   await page.goto('/#/cupito-demo');
   await expect(page.locator('h1')).toContainText(/Studio Nails/i);
   await expect(page.getByText('Este negocio todavía no tiene su página')).not.toBeVisible();
-});
-
-test('ajustes: pestaña Página y color visible y configurable', async ({ page }) => {
-  await seed(page, true);
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto('/#/app');
-  await page.getByRole('button', { name: 'Ajustes', exact: true }).click();
-  const pageColorTab = page.getByRole('button', { name: /Página y color/i });
-  await expect(pageColorTab).toBeVisible();
-  await pageColorTab.click();
-  await expect(page.getByText('Diseño & Identidad de tu Local')).toBeVisible();
-  await expect(page.getByText('Paletas de autor curadas')).toBeVisible();
-  await expect(page.getByText('Color propio a medida (Hex)')).toBeVisible();
-  await expect(page.getByText('Vista previa en vivo')).toBeVisible();
-  // El aviso confuso de "Modo local: contactá a hola@cupito.app" NO debe mostrarse para cuenta real
-  await expect(page.getByText(/Modo local: los cambios se guardan sólo en este dispositivo/i)).not.toBeVisible();
-  await page.screenshot({ path: 'artifacts/personalizacion-color-studio.png', fullPage: true });
 });
 
 test('cursor: pointer presente en botones y controles interactivos', async ({ page }) => {

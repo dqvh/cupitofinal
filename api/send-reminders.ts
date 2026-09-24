@@ -109,6 +109,8 @@ export default async function handler(req: Request): Promise<Response> {
       if (sent >= MAX_SEND) break;
       const data = dataByUser.get(u.id);
       if (!data) continue;
+      // El negocio puede apagar los recordatorios automáticos desde Ajustes → Notificaciones.
+      if (data.settings?.remindersEnabled === false) continue;
       const bookings = Array.isArray(data.bookings) ? data.bookings : [];
       const services = Array.isArray(data.services) ? data.services : [];
       const professionals = Array.isArray(data.professionals) ? data.professionals : [];

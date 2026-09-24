@@ -6,7 +6,9 @@
 @source "./components/LandingTour.tsx";
 
 /* Foco consistente y controles legibles al reservar desde el celular. */
-:where(button, a, input, select, textarea):focus-visible { outline: 3px solid #047857; outline-offset: 3px; }
+@layer base {
+  :where(button, a, input, select, textarea):focus-visible { outline: 3px solid #047857; outline-offset: 3px; }
+}
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
 a[href],

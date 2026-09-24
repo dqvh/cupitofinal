@@ -1,5 +1,5 @@
 import { SEMILLA_MONTHLY_LIMIT } from "../src/lib/plans";
-import { fitsWorkingDay } from "../src/lib/scheduling";
+import { checkSlot } from "../src/lib/availability";
 /**
  * POST /api/public
  * Escrituras de INVITADOS (sin login) con service role + validación en servidor.
@@ -21,15 +21,6 @@ const SEMILLA_LIMIT = SEMILLA_MONTHLY_LIMIT;
 
 function json(o: unknown, status = 200) {
   return new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
-}
-
-function toMin(t: string): number {
-  const [h, m] = String(t || "").split(":").map(Number);
-  return (h || 0) * 60 + (m || 0);
-}
-
-function durOf(services: any[], id: string): number {
-  return services.find((s) => s.id === id)?.duration ?? 45;
 }
 
 function uid(): string {
@@ -132,125 +123,30 @@ export default async function handler(req: Request): Promise<Response> {
       const advance = data.settings?.maxAdvanceDays ?? 30;
       const maxDay = new Date(Date.now() - 3 * 3600000 + advance * DAY_MS).toISOString().slice(0, 10);
       if (advance > 0 && date > maxDay) return json({ error: "La fecha supera la anticipación permitida por el local." }, 400);
-      const dayIndex = new Date(date + "T12:00:00Z").getUTCDay();
-      if (b.proId && !(data.professionals || []).some((p: any) => p.id === b.proId)) return json({ error: "Este profesional ya no está disponible." }, 400);
-      if (!(data.professionals || []).length && !fitsWorkingDay(data.settings?.hours?.[dayIndex], time, service.duration)) return json({ error: "El servicio debe terminar dentro del horario de atención." }, 400);
-      let pro = b.proId ? String(b.proId) : undefined;
-      const dur = durOf(data.services || [], serviceId);
-      const s = toMin(time);
-      const e = s + dur;
-      const pros = data.professionals || [];
-
-      if (!pro && pros.length > 0) {
-        // Opción "Cualquiera": Encontrar profesionales disponibles
-        const available = pros.filter((p: any) => {
-          const pHours = (p.hours && Array.isArray(p.hours) && p.hours.length === 7) ? p.hours : (data.settings?.hours || []);
-          const [y, m, d] = String(date || "").split("-").map(Number);
-          const dayIdx = new Date(y, m - 1, d).getDay();
-          const dayH = pHours[dayIdx];
-          if (!dayH || !dayH.open) return false;
-          const inS1 = dayH.from && dayH.to && s >= toMin(dayH.from) && e <= toMin(dayH.to);
-          const inS2 = dayH.from2 && dayH.to2 && s >= toMin(dayH.from2) && e <= toMin(dayH.to2);
-          if (!inS1 && !inS2) return false;
-
-          const isBlocked = (data.blockedSlots || []).some((bs: any) => {
-            if (bs.date !== date) return false;
-            if (bs.proId && bs.proId !== p.id) return false;
-            if (!bs.time) return true;
-            if (!bs.endTime) return bs.time === time;
-            const t = toMin(time);
-            return t >= toMin(bs.time) && t < toMin(bs.endTime);
-          });
-          if (isBlocked) return false;
-
-          const clash = (data.bookings || []).find((x: any) => {
-            if (x.date !== date || x.status === "cancelada") return false;
-            if (x.proId && x.proId !== p.id) return false;
-            const bs = toMin(x.time);
-            const be = bs + durOf(data.services || [], x.serviceId);
-            return s < be && bs < e;
-          });
-          return !clash;
-        });
-
-        if (available.length === 0) {
-          return json({ error: "No hay ningún profesional disponible en ese horario." }, 409);
-        }
-
-        // Balancear carga: asignar al profesional disponible con menos turnos hoy
-        available.sort((p1: any, p2: any) => {
-          const c1 = (data.bookings || []).filter((x: any) => x.date === date && x.proId === p1.id && x.status !== "cancelada").length;
-          const c2 = (data.bookings || []).filter((x: any) => x.date === date && x.proId === p2.id && x.status !== "cancelada").length;
-          return c1 - c2;
-        });
-        pro = available[0].id;
-      } else if (pro && pros.length > 0) {
-        // Profesional específico
-        const targetPro = pros.find((p: any) => p.id === pro);
-        if (targetPro) {
-          const pHours = (targetPro.hours && Array.isArray(targetPro.hours) && targetPro.hours.length === 7) ? targetPro.hours : (data.settings?.hours || []);
-          const [y, m, d] = String(date || "").split("-").map(Number);
-          const dayIdx = new Date(y, m - 1, d).getDay();
-          const dayH = pHours[dayIdx];
-          if (!dayH || !dayH.open) return json({ error: `${targetPro.name} no atiende en esa fecha.` }, 409);
-          const inS1 = dayH.from && dayH.to && s >= toMin(dayH.from) && e <= toMin(dayH.to);
-          const inS2 = dayH.from2 && dayH.to2 && s >= toMin(dayH.from2) && e <= toMin(dayH.to2);
-          if (!inS1 && !inS2) return json({ error: `${targetPro.name} no atiende en ese horario.` }, 409);
-
-          const isBlocked = (data.blockedSlots || []).some((bs: any) => {
-            if (bs.date !== date) return false;
-            if (bs.proId && bs.proId !== pro) return false;
-            if (!bs.time) return true;
-            if (!bs.endTime) return bs.time === time;
-            const t = toMin(time);
-            return t >= toMin(bs.time) && t < toMin(bs.endTime);
-          });
-          if (isBlocked) return json({ error: "Este horario se encuentra bloqueado." }, 409);
-
-          const clash = (data.bookings || []).find((x: any) => {
-            if (x.date !== date || x.status === "cancelada") return false;
-            if (x.proId && x.proId !== pro) return false;
-            const bs = toMin(x.time);
-            const be = bs + durOf(data.services || [], x.serviceId);
-            return s < be && bs < e;
-          });
-          if (clash) {
-            return json({ error: clash.time === time ? `${targetPro.name} ya tiene un turno a las ${time}.` : `Se superpone con otro turno de ${targetPro.name}.` }, 409);
-          }
-        }
-      } else {
-        // Negocio sin profesionales cargados (un solo dueño)
-        const blocked = (data.blockedSlots || []).some((bs: any) => {
-          if (bs.date !== date) return false;
-          if (bs.proId && pro && bs.proId !== pro) return false;
-          if (!bs.time) return true;
-          if (!bs.endTime) return bs.time === time;
-          const t = toMin(time);
-          return t >= toMin(bs.time) && t < toMin(bs.endTime);
-        });
-        if (blocked) return json({ error: "Este horario se encuentra bloqueado por el negocio." }, 409);
-        const clash = (data.bookings || []).find((x: any) => {
-          if (x.date !== date || x.status === "cancelada") return false;
-          if (x.proId && pro && x.proId !== pro) return false;
-          const bs = toMin(x.time);
-          const be = bs + durOf(data.services || [], x.serviceId);
-          return s < be && bs < e;
-        });
-        if (clash) {
-          return json({ error: clash.time === time ? `El horario ${time} ya fue tomado.` : `Se superpone con otro turno (${clash.time}).` }, 409);
-        }
-      }
+      // Hora de Argentina expresada como "hora local" para el motor de disponibilidad.
+      const nowAr = new Date(Date.now() - 3 * 3600000);
+      const extraServiceIds = Array.isArray(b.extraServiceIds)
+        ? b.extraServiceIds.map(String).filter((x: string) => x !== serviceId && (data.services || []).some((sv: any) => sv.id === x)).slice(0, 5)
+        : [];
+      const check = checkSlot(
+        { settings: data.settings || { hours: [] }, services: data.services || [], professionals: data.professionals || [], bookings: (data.bookings || []).map(({ client: _c, ...rest }: any) => rest), blockedSlots: data.blockedSlots || [] },
+        { date, time, serviceIds: [serviceId, ...extraServiceIds], proId: b.proId ? String(b.proId) : undefined, online: true, now: nowAr }
+      );
+      if (!check.ok) return json({ error: check.error }, check.reason === "taken" || check.reason === "blocked" ? 409 : 400);
+      const pro = check.proId;
       const id = uid();
       const status = owner.plan !== "semilla" && data.settings?.depositEnabled && data.settings?.depositPct > 0 && service.price > 0 ? "pendiente" : "confirmada";
       const claimTx = b.depositClaim && typeof b.depositClaim.txId === "string" ? b.depositClaim.txId.slice(0, 60) : "";
       const booking = {
-        id, client, phone, email: email || undefined, notes: String(b.notes || "").trim().slice(0, 300) || undefined, serviceId, date, time,
+        id, client, phone, email: email || undefined, notes: String(b.notes || "").trim().slice(0, 300) || undefined, serviceId,
+        extraServiceIds: extraServiceIds.length ? extraServiceIds : undefined, date, time,
         status, source: b.source === "manual" ? "manual" : "online",
         items: Array.isArray(b.items) ? b.items.slice(0, 10) : undefined,
         proId: pro, createdAt: Date.now(),
         paidDeposit: false,
         paymentMethod: ["tarjeta", "transferencia", "billetera"].includes(b.paymentMethod) ? b.paymentMethod : undefined,
         depositClaim: claimTx ? { txId: claimTx, sentAt: Date.now() } : undefined,
+        events: [{ at: Date.now(), type: "creada", by: "cliente" }],
       };
       const next = { ...data, bookings: [...(data.bookings || []), booking] };
       await save(next);
@@ -296,7 +192,39 @@ export default async function handler(req: Request): Promise<Response> {
       const next = {
         ...data,
         bookings: (data.bookings || []).map((x: any) =>
-          x.id === bookingId ? { ...x, status: "cancelada", cancelReason: String(body.reason || "Cancelado por el cliente") } : x
+          x.id === bookingId
+            ? { ...x, status: "cancelada", cancelReason: String(body.reason || "Cancelado por el cliente").slice(0, 200), events: [...(x.events || []), { at: Date.now(), type: "cancelada", by: "cliente" }].slice(-20) }
+            : x
+        ),
+      };
+      await save(next);
+      return json({ ok: true, data: sanitizeBizForPublic(next) });
+    }
+
+    /* ---------------- REPROGRAMAR (cliente) ---------------- */
+    if (body.action === "reschedule") {
+      const bookingId = String(body.bookingId || "");
+      const date = String(body.date || "");
+      const time = String(body.time || "");
+      const target = (data.bookings || []).find((x: any) => x.id === bookingId);
+      if (!target || target.status === "cancelada") return json({ error: "No se encontró el turno." }, 404);
+      const a = String(body.phone || "").replace(/\D/g, "").slice(-8);
+      const bPhone = String(target.phone || "").replace(/\D/g, "").slice(-8);
+      if (!a || a !== bPhone) return json({ error: "Ese turno no coincide con tu número." }, 403);
+      const current = new Date(String(target.date) + "T" + String(target.time) + ":00-03:00").getTime();
+      if (current - Date.now() < DAY_MS) return json({ error: "FALTA_MENOS_24H" }, 403);
+      const nowAr = new Date(Date.now() - 3 * 3600000);
+      const check = checkSlot(
+        { settings: data.settings || { hours: [] }, services: data.services || [], professionals: data.professionals || [], bookings: (data.bookings || []).map(({ client: _c, ...rest }: any) => rest), blockedSlots: data.blockedSlots || [] },
+        { date, time, serviceIds: [target.serviceId, ...(target.extraServiceIds || [])], proId: target.proId, excludeId: bookingId, online: true, now: nowAr }
+      );
+      if (!check.ok) return json({ error: check.error }, 409);
+      const next = {
+        ...data,
+        bookings: (data.bookings || []).map((x: any) =>
+          x.id === bookingId
+            ? { ...x, date, time, proId: check.proId ?? x.proId, reminderSentAt: undefined, events: [...(x.events || []), { at: Date.now(), type: "reprogramada", by: "cliente", detail: `Antes: ${x.date} ${x.time}` }].slice(-20) }
+            : x
         ),
       };
       await save(next);

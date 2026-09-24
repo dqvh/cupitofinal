@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import react from '@vitejs/plugin-react';
 
 // El HTML y React comparten el mismo árbol: no hay una portada alternativa.
-const server = await createServer({ configFile: false, plugins: [react()], server: { middlewareMode: true, watch: null }, appType: 'custom' });
+const server = await createServer({ configFile: false, plugins: [react()], server: { middlewareMode: true, watch: null }, appType: 'custom', optimizeDeps: { noDiscovery: true, include: [] } });
 try {
   const { default: App } = await server.ssrLoadModule('/src/App.tsx');
   let html = await readFile('dist/index.html', 'utf8');
