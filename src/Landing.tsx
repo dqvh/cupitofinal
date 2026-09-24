@@ -72,11 +72,14 @@ function HeroScene() {
         const r = el.getBoundingClientRect();
         const x = (e.clientX - (r.left + r.width / 2)) / r.width;
         const y = (e.clientY - (r.top + r.height / 2)) / r.height;
-        el.style.setProperty("--rx", `${(-y * 5).toFixed(2)}deg`);
-        el.style.setProperty("--ry", `${(x * 7).toFixed(2)}deg`);
+        // Paralaje 2D en píxeles enteros: sin 3D, el texto se mantiene nítido.
+        el.style.setProperty("--px", `${Math.round(x * 18)}px`);
+        el.style.setProperty("--py", `${Math.round(y * 12)}px`);
+        el.style.setProperty("--ax", `${Math.round(-x * 8)}px`);
+        el.style.setProperty("--ay", `${Math.round(-y * 6)}px`);
       });
     };
-    const reset = () => { el.style.setProperty("--rx", "0deg"); el.style.setProperty("--ry", "0deg"); };
+    const reset = () => { for (const k of ["--px", "--py", "--ax", "--ay"]) el.style.setProperty(k, "0px"); };
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("pointerleave", reset);
     return () => { window.removeEventListener("pointermove", onMove); document.removeEventListener("pointerleave", reset); cancelAnimationFrame(raf); };
@@ -332,7 +335,6 @@ export default function Landing() {
           </a>
           <nav id="lp-nav" className="lp-nav" aria-label="Navegación principal">
             <a href="#producto" onClick={() => setMenu(false)}>Producto</a>
-            <a href="#como-funciona" onClick={() => setMenu(false)}>Cómo funciona</a>
             <a href="#tu-pagina" onClick={() => setMenu(false)}>Tu página</a>
             <a href="#precios" onClick={() => setMenu(false)}>Precios</a>
             <a href="#faq" onClick={() => setMenu(false)}>Preguntas</a>
@@ -410,39 +412,9 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ============ PROBLEMA → SOLUCIÓN ============ */}
-        <section className="lp-section lp-problem" id="producto">
-          <div className="lp-chat lp-rv" aria-hidden="true">
-            <div className="lp-chat-head"><span className="lp-chat-av">WA</span><div><b>Clientes</b><small>14 chats sin leer</small></div></div>
-            <div className="lp-chat-body">
-              {[
-                ["in", "Hola! ¿tenés lugar mañana?"],
-                ["out", "Tengo a las 11 o a las 17"],
-                ["in", "Uh, ¿y a las 15?"],
-                ["in", "¿Cuánto sale el color?"],
-                ["out", "A las 15 no, perdón 🙏"],
-                ["in", "Bueno, te aviso"],
-              ].map(([k, t], i) => <p key={i} className={`lp-bubble ${k}`} style={{ ["--i" as string]: i } as CSSProperties}>{t}</p>)}
-            </div>
-            <div className="lp-chat-fix">
-              <span><Link2 size={15} /></span>
-              <div><b>cupito.app/estudio-bloom</b><small>Horarios libres, precios y reserva en un toque</small></div>
-            </div>
-          </div>
-          <div className="lp-problem-copy lp-rv">
-            <span className="lp-kicker">El problema</span>
-            <h2 className="lp-h2">Dejá de coordinar turnos por chat.</h2>
-            <p className="lp-p">Cada “¿tenés lugar?” te saca de lo que estás haciendo. Con Cupito, tus clientes ven los horarios libres y reservan solos, a cualquier hora.</p>
-            <ul className="lp-list">
-              <li><span><Clock size={16} /></span><div><b>Reservas las 24 h</b>Mientras atendés, dormís o estás de vacaciones.</div></li>
-              <li><span><CalendarDays size={16} /></span><div><b>Sin superposiciones</b>Respeta la duración de cada servicio, tus descansos y los horarios de tu equipo.</div></li>
-              <li><span><Bell size={16} /></span><div><b>Menos ausencias</b>Recordatorio automático el día antes y aviso cuando alguien cancela.</div></li>
-            </ul>
-          </div>
-        </section>
 
         {/* ============ BENTO ============ */}
-        <section className="lp-section">
+        <section className="lp-section" id="producto">
           <div className="lp-head lp-rv">
             <span className="lp-kicker">Producto</span>
             <h2 className="lp-h2">Todo lo que necesita un negocio con turnos.<br /><span>Nada que sobre.</span></h2>
@@ -507,30 +479,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ============ CÓMO FUNCIONA ============ */}
-        <section className="lp-section lp-how" id="como-funciona">
-          <div className="lp-head lp-rv">
-            <span className="lp-kicker">Cómo funciona</span>
-            <h2 className="lp-h2">De cero a tu primera reserva<br /><span>en una tarde.</span></h2>
-          </div>
-          <ol className="lp-steps lp-rv">
-            {[
-              ["Creá tu cuenta", "Nombre del negocio y listo. Sin tarjeta.", Plus],
-              ["Cargá servicios y horarios", "Duración, precio y los días que atendés.", Clock],
-              ["Compartí tu link", "En tu bio de Instagram, en WhatsApp o con un QR en el local.", Link2],
-            ].map(([t, d, Icon], i) => {
-              const I = Icon as typeof Plus;
-              return (
-                <li key={t as string} style={{ ["--i" as string]: i } as CSSProperties}>
-                  <span className="lp-step-n"><I size={18} /><em>{i + 1}</em></span>
-                  <h3>{t as string}</h3>
-                  <p>{d as string}</p>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-
         {/* ============ PERSONALIZADOR ============ */}
         <section className="lp-section lp-brand" id="tu-pagina">
           <div className="lp-head lp-rv">
@@ -538,6 +486,21 @@ export default function Landing() {
             <h2 className="lp-h2">Probá cómo se vería la tuya.</h2>
             <p className="lp-p">Escribí el nombre de tu negocio y elegí un color. Así la ven tus clientes desde el celular.</p>
           </div>
+          <ol className="lp-flow lp-rv" id="como-funciona" aria-label="Cómo funciona">
+            {[
+              ["Creá tu cuenta", "Sin tarjeta", Plus],
+              ["Cargá servicios y horarios", "Duración y precio", Clock],
+              ["Compartí tu link", "Instagram, WhatsApp o QR", Link2],
+            ].map(([t, d, Icon], i) => {
+              const I = Icon as typeof Plus;
+              return (
+                <li key={t as string} style={{ ["--i" as string]: i } as CSSProperties}>
+                  <span className="lp-flow-n"><I size={16} /></span>
+                  <div><b>{i + 1}. {t as string}</b><small>{d as string}</small></div>
+                </li>
+              );
+            })}
+          </ol>
           <div className="lp-rv"><Customizer /></div>
         </section>
 
