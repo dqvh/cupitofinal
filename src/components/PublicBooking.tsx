@@ -1,4 +1,3 @@
-import { fitsWorkingDay } from "../lib/scheduling";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, MapPin,
@@ -6,12 +5,12 @@ import {
   MessageCircle, ExternalLink, Star, X, ChevronDown
 } from "lucide-react";
 import {
-  useStore, dateKey, addDays, fmtMoney, fmtLong, slotsForDay, dayOfWeek, isPaid,
-  findOverlap, isSlotBlocked,
-  getProHours, isProAvailable, getAvailablePros, toMinutes,
-  totalDurationOf, getDayHours,
+  useStore, dateKey, addDays, fmtMoney, fmtLong, isPaid,
+  totalDurationOf,
   type User, type BizData, type Service,
 } from "../lib/store";
+import { slotsFor, nextFreeDay, businessHoursOn } from "../lib/availability";
+import { themeAccent, contrastText } from "../lib/theme";
 import { CopyButton } from "./kit";
 import CustomSelect from "./ui/CustomSelect";
 import { normalizeArgentinaPhone, cleanPhoneDigits, createWhatsAppUrl } from "../lib/phone";
@@ -161,6 +160,10 @@ function BookingForm({
   const [waitlistClient, setWaitlistClient] = useState("");
   const [waitlistPhone, setWaitlistPhone] = useState("");
   const [waitlistSent, setWaitlistSent] = useState(false);
+  const [waitlistError, setWaitlistError] = useState<string | null>(null);
+  // Reprogramación desde "Mis turnos": se elige día y horario y se mueve el turno existente.
+  const [rescheduleTarget, setRescheduleTarget] = useState<null | { id: string; phone: string; date: string; time: string }>(null);
+  const [cancelAsk, setCancelAsk] = useState<string | null>(null);
 
   const submittingRef = useRef(false);
   const topAnchorRef = useRef<HTMLDivElement>(null);
@@ -197,17 +200,8 @@ function BookingForm({
   const isDemo = user.slug === "studio-nails" || user.slug === "demo" || user.slug === "cupito-demo";
   const paid = isPaid(user);
 
-  const accentColor = useMemo(() => {
-    if (settings.brandColor) return settings.brandColor;
-    switch (settings.theme) {
-      case "coral": return "#ff7a59";
-      case "midnight": return "#38bdf8";
-      case "rose": return "#f472b6";
-      case "obsidian": return "#fbbf24";
-      case "ocean": return "#34d399";
-      default: return "#16845f";
-    }
-  }, [settings.theme, settings.brandColor]);
+  const accentColor = themeAccent(settings);
+  const services = useMemo(() => biz.services.filter((s) => !s.archived), [biz.services]);
 
   const service = biz.services.find((s) => s.id === serviceId);
   const pro = biz.professionals.find((p) => p.id === proId);
@@ -267,134 +261,66 @@ function BookingForm({
   // Filtro de servicios
   const filteredServices = useMemo(() => {
     const q = serviceSearch.trim().toLowerCase();
-    if (!q) return biz.services;
-    return biz.services.filter((s) => s.name.toLowerCase().includes(q));
-  }, [biz.services, serviceSearch]);
+    if (!q) return services;
+    return services.filter((s) => s.name.toLowerCase().includes(q));
+  }, [services, serviceSearch]);
 
-  // Chequeo de día abierto (respetando horarios especiales)
-  const isDayOpen = (key: string) => {
-    const dIdx = dayOfWeek(key);
-    if ((settings.closedDates || []).includes(key)) return false;
-    const dayH = getDayHours(settings, key);
-    if (!dayH || !dayH.open) return false;
-    if (pro) {
-      const proH = getProHours(pro, settings.hours)[dIdx];
-      return !!proH?.open;
-    }
-    if (hasPros) {
-      return biz.professionals.some((p) => {
-        const proH = getProHours(p, settings.hours)[dIdx];
-        return !!proH?.open;
-      });
-    }
-    return true;
-  };
+  // Disponibilidad: el mismo motor que usan el panel y el servidor.
+  const avQuery = { serviceIds: selectedServiceIds.length ? selectedServiceIds : services[0] ? [services[0].id] : [], proId: proId || undefined, online: true };
+  const slotInfos = useMemo(
+    () => (selectedDate && avQuery.serviceIds.length ? slotsFor(biz, { ...avQuery, date: selectedDate }) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [biz, selectedDate, avQuery.serviceIds.join(","), proId]
+  );
+  const freeSlots = useMemo(() => slotInfos.filter((x) => x.free).map((x) => x.time), [slotInfos]);
+  const isSlotDisabled = (t: string) => !freeSlots.includes(t);
 
-  // Turnos brutos para el día seleccionado
-  const rawSlots = useMemo(() => {
-    if (!selectedDate) return [];
-    const dIdx = dayOfWeek(selectedDate);
-    const dayH = getDayHours(settings, selectedDate);
-    if (!dayH || !dayH.open) return [];
-    if (pro) {
-      const proH = getProHours(pro, settings.hours)[dIdx];
-      return proH?.open ? slotsForDay(proH) : [];
+  // Próximos días visibles en la tira (con marca de disponibilidad)
+  const stripDays = useMemo(() => {
+    const out: { key: string; free: boolean; closed: boolean }[] = [];
+    for (let i = 0; i < 21; i++) {
+      const k = dateKey(addDays(now, i));
+      if (k > maxDateKey) break;
+      const closed = !businessHoursOn(settings, k)?.open;
+      const free = !closed && avQuery.serviceIds.length > 0 && slotsFor(biz, { ...avQuery, date: k }).some((x) => x.free);
+      out.push({ key: k, free, closed });
     }
-    if (hasPros) {
-      const set = new Set<string>();
-      biz.professionals.forEach((p) => {
-        const proH = getProHours(p, settings.hours)[dIdx];
-        if (proH?.open) {
-          slotsForDay(proH).forEach((s) => set.add(s));
-        }
-      });
-      return Array.from(set).sort((a, b) => toMinutes(a) - toMinutes(b));
-    }
-    return slotsForDay(dayH);
-  }, [selectedDate, pro, hasPros, biz.professionals, settings]);
-
-  // Verificar si un slot específico está tomado o pasado
-  const isSlotDisabled = (t: string) => {
-    if (!isDemo && user.id !== "test-owner" && selectedDate === todayKey && t <= currentHHMM) return true;
-    const dayH = getDayHours(settings, selectedDate);
-    if (!dayH || !dayH.open) return true;
-    if (pro) {
-      return !isProAvailable(pro, selectedDate, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services);
-    }
-    if (hasPros) {
-      return getAvailablePros(biz.professionals, selectedDate, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services).length === 0;
-    }
-    if (!fitsWorkingDay(dayH, t, dur)) return true;
-    if (isSlotBlocked(biz.blockedSlots || [], selectedDate, t)) return true;
-    return !!findOverlap({ date: selectedDate, time: t, dur }, biz.bookings, biz.services);
-  };
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [biz, avQuery.serviceIds.join(","), proId, todayKey, maxDateKey]);
 
   // Sugerencias de horarios más cercanos en caso de conflicto
-  const findClosestSlots = (date: string, targetTime: string, count = 3) => {
-    const dayH = getDayHours(settings, date);
-    if (!dayH || !dayH.open) return [];
-    const targetMin = toMinutes(targetTime);
-    const available = rawSlots.filter((s) => !isSlotDisabled(s) && s !== targetTime);
-    available.sort((a, b) => Math.abs(toMinutes(a) - targetMin) - Math.abs(toMinutes(b) - targetMin));
-    return available.slice(0, count);
+  const findClosestSlots = (_date: string, targetTime: string, count = 3) => {
+    const toM = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+    return freeSlots.filter((x) => x !== targetTime).sort((a, b) => Math.abs(toM(a) - toM(targetTime)) - Math.abs(toM(b) - toM(targetTime))).slice(0, count);
   };
 
-  // Franjas horarias agrupadas por Mañana y Tarde
-  const morningSlots = useMemo(() => {
-    return rawSlots.filter((t) => {
-      const [h] = t.split(":").map(Number);
-      return h < 13;
-    });
-  }, [rawSlots]);
-
-  const afternoonSlots = useMemo(() => {
-    return rawSlots.filter((t) => {
-      const [h] = t.split(":").map(Number);
-      return h >= 13;
-    });
-  }, [rawSlots]);
+  const morningSlots = useMemo(() => freeSlots.filter((t) => t < "13:00"), [freeSlots]);
+  const afternoonSlots = useMemo(() => freeSlots.filter((t) => t >= "13:00"), [freeSlots]);
 
   // Encontrar próximo día disponible automáticamente
   const findNextAvailableDate = () => {
-    const [y, m, d] = selectedDate.split("-").map(Number);
-    const base = new Date(y, m - 1, d);
-    for (let i = 1; i <= 14; i++) {
-      const nextDate = addDays(base, i);
-      const k = dateKey(nextDate);
-      if (k > maxDateKey) break;
-      if ((settings.closedDates || []).includes(k)) continue;
-      const dIdx = dayOfWeek(k);
-      const daySlots = (() => {
-        if (pro) {
-          const proH = getProHours(pro, settings.hours)[dIdx];
-          return proH?.open ? slotsForDay(proH) : [];
-        }
-        if (hasPros) {
-          const set = new Set<string>();
-          biz.professionals.forEach((p) => {
-            const proH = getProHours(p, settings.hours)[dIdx];
-            if (proH?.open) slotsForDay(proH).forEach((s) => set.add(s));
-          });
-          return Array.from(set).sort((a, b) => toMinutes(a) - toMinutes(b));
-        }
-        const h = settings.hours[dIdx];
-        return h?.open ? slotsForDay(h) : [];
-      })();
-      const free = daySlots.some((t) => {
-        if (pro) return isProAvailable(pro, k, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services);
-        if (hasPros) return getAvailablePros(biz.professionals, k, t, dur, settings.hours, biz.blockedSlots || [], biz.bookings, biz.services).length > 0;
-        if (!fitsWorkingDay(settings.hours[dIdx], t, dur)) return false;
-        if (isSlotBlocked(biz.blockedSlots || [], k, t)) return false;
-        return !findOverlap({ date: k, time: t, dur }, biz.bookings, biz.services);
-      });
-      if (free) {
-        setSelectedDate(k);
-        setTime(null);
-        setError(null);
-        return;
-      }
+    const hit = nextFreeDay(biz, { ...avQuery, from: dateKey(addDays(new Date(selectedDate + "T12:00"), 1)), days: 90 });
+    if (hit && hit.date <= maxDateKey) {
+      setSelectedDate(hit.date);
+      setTime(null);
+      setError(null);
+    } else {
+      setError("No encontramos lugar en los próximos días. Anotate en la lista de espera y te avisamos.");
     }
   };
+
+  // Al llegar al paso de horarios, arrancar en el primer día con lugar.
+  const autoJumped = useRef(false);
+  useEffect(() => {
+    if (step !== 1 || autoJumped.current || !avQuery.serviceIds.length) return;
+    autoJumped.current = true;
+    if (!freeSlots.length) {
+      const hit = nextFreeDay(biz, { ...avQuery, from: todayKey, days: 60 });
+      if (hit && hit.date <= maxDateKey) setSelectedDate(hit.date);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   // Anotarse en lista de espera
   const handleJoinWaitlist = async (e: React.FormEvent) => {
@@ -403,13 +329,18 @@ function BookingForm({
     const err = await store.addWaitlist(
       {
         date: selectedDate,
-        serviceId: serviceId || biz.services[0]?.id || "service",
+        serviceId: serviceId || services[0]?.id || "service",
         client: waitlistClient.trim(),
         phone: waitlistPhone.trim(),
       },
       user.id
     );
-    if (!err) {
+    if (err) {
+      setWaitlistError(err);
+      return;
+    }
+    {
+      setWaitlistError(null);
       setWaitlistSent(true);
       setTimeout(() => {
         setShowWaitlistModal(false);
@@ -520,7 +451,7 @@ function BookingForm({
       return;
     }
 
-    if (selectedDate < todayKey || selectedDate > maxDateKey || (settings.closedDates || []).includes(selectedDate) || isSlotDisabled(time)) {
+    if (selectedDate < todayKey || selectedDate > maxDateKey || isSlotDisabled(time)) {
       const suggestions = findClosestSlots(selectedDate, time, 3);
       if (suggestions.length > 0) {
         setConflictSuggestions(suggestions);
@@ -615,6 +546,26 @@ function BookingForm({
 
     // Scroll suave arriba para ver el comprobante
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const confirmReschedule = async () => {
+    if (!rescheduleTarget || !time || busy) return;
+    setBusy(true);
+    setError(null);
+    const r = await store.rescheduleBookingByClient(user.id, rescheduleTarget.id, selectedDate, time, rescheduleTarget.phone);
+    setBusy(false);
+    if (!r.ok) {
+      setError(r.error === "FALTA_MENOS_24H" ? "Faltan menos de 24 h para tu turno: para cambiarlo escribile directamente al local." : r.error || "No se pudo cambiar el turno. Probá con otro horario.");
+      return;
+    }
+    const moved = rescheduleTarget;
+    setRescheduleTarget(null);
+    setRemoteLookupBookings((prev) => (prev ? prev.map((x) => (x.id === moved.id ? { ...x, date: selectedDate, time } : x)) : prev));
+    setLookupFeedback(`Listo: tu turno quedó para el ${fmtLong(selectedDate)} a las ${time} hs.`);
+    setStep(0);
+    setTime(null);
+    setShowLookupModal(true);
+    sound.playSuccess();
   };
 
   const reset = () => {
@@ -880,9 +831,9 @@ function BookingForm({
                 {client}, te esperamos en <b style={{ color: "#0f172a" }}>{user.business}</b>.
               </p>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>{service?.name}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>{selectedServices.map((x) => x.name).join(" + ") || service?.name}</span>
                 <span style={{ fontSize: 16, fontWeight: 800, color: "var(--business-accent, #16845f)" }}>
-                  {fmtMoney((service?.price || 0) + productsTotal)}
+                  {fmtMoney(totalAmount)}
                 </span>
               </div>
               <p style={{ margin: 0, fontSize: 14, color: "#475569", display: "flex", alignItems: "center", gap: 6 }}>
@@ -1068,7 +1019,7 @@ function BookingForm({
                           <div style={{ textAlign: "left", minWidth: 0, flex: 1 }}>
                             <b style={{ display: "block", fontSize: 15, color: "#0f172a" }}>{v.name}</b>
                             <small style={{ display: "block", color: "#64748b", marginTop: 2, fontSize: 13 }}>
-                              {v.duration} min
+                              {v.duration} min{v.desc ? ` · ${v.desc}` : ""}
                             </small>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
@@ -1141,107 +1092,85 @@ function BookingForm({
             {/* PASO 2: Horarios, Profesional y Productos opcionales */}
             {step === 1 && (
               <>
-                <div className="form-grid">
-                  {hasPros && (
-                    <label>
-                      Profesional
-                      <CustomSelect
-                        value={proId || ""}
-                        onChange={(val) => {
-                          setProId(val || null);
+                {rescheduleTarget && (
+                  <div className="notice" style={{ marginBottom: 14 }}>
+                    Estás cambiando tu turno del <b>{fmtLong(rescheduleTarget.date)} a las {rescheduleTarget.time} hs</b>. Elegí el nuevo día y horario.
+                  </div>
+                )}
+                {hasPros && !rescheduleTarget && (
+                  <div className="bk-field">
+                    <span className="bk-label">¿Con quién?</span>
+                    <div className="bk-chips" role="group" aria-label="Profesional">
+                      <button type="button" className="bk-chip" aria-pressed={!proId} onClick={() => { setProId(null); setTime(null); setError(null); }}>
+                        Sin preferencia
+                      </button>
+                      {biz.professionals.map((p) => (
+                        <button key={p.id} type="button" className="bk-chip" aria-pressed={proId === p.id} onClick={() => { setProId(p.id); setTime(null); setError(null); }}>
+                          <span className="bk-dot" style={{ background: p.color }} />
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bk-field">
+                  <span className="bk-label">
+                    <span>Día</span>
+                    <label className="bk-other-date">
+                      Otra fecha
+                      <input
+                        type="date"
+                        aria-label="Elegir otra fecha"
+                        min={todayKey}
+                        max={maxDateKey === "9999-99-99" ? undefined : maxDateKey}
+                        value={selectedDate}
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          setSelectedDate(e.target.value);
                           setTime(null);
                           setError(null);
                         }}
-                        options={[
-                          {
-                            value: "",
-                            label: "Cualquier profesional disponible",
-                            sublabel: "Sin preferencia · Más rápido",
-                          },
-                          ...biz.professionals.map((p) => ({
-                            value: p.id,
-                            label: p.name,
-                            sublabel: p.role,
-                          })),
-                        ]}
-                        placeholder="Elegir profesional"
-                        buttonClassName="booking-select-trigger"
                       />
                     </label>
-                  )}
-
-                  <label>
-                    Día
-                    <input
-                      type="date"
-                      min={todayKey}
-                      max={maxDateKey}
-                      value={selectedDate}
-                      onChange={(e) => {
-                        setSelectedDate(e.target.value);
-                        setTime(null);
-                        setError(null);
-                      }}
-                    />
-                  </label>
+                  </span>
+                  <div className="bk-days" role="group" aria-label="Elegir día">
+                    {stripDays.map((d) => {
+                      const dt = new Date(d.key + "T12:00");
+                      const label = d.key === todayKey ? "Hoy" : d.key === dateKey(addDays(now, 1)) ? "Mañana" : fmtLong(d.key);
+                      return (
+                        <button
+                          key={d.key}
+                          type="button"
+                          className="bk-day"
+                          aria-label={label}
+                          aria-pressed={selectedDate === d.key}
+                          disabled={d.closed}
+                          data-free={d.free ? "1" : "0"}
+                          onClick={() => { setSelectedDate(d.key); setTime(null); setError(null); }}
+                        >
+                          <small>{d.key === todayKey ? "Hoy" : dt.toLocaleDateString("es-AR", { weekday: "short" }).replace(".", "")}</small>
+                          <b>{dt.getDate()}</b>
+                          <i aria-hidden="true" />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Atajos rápidos de días */}
-                <div className="booking-day-shortcuts">
-                  {[
-                    { label: "Hoy", date: todayKey },
-                    { label: "Mañana", date: dateKey(addDays(now, 1)) },
-                    { label: "Pasado mañana", date: dateKey(addDays(now, 2)) },
-                  ].map((d) => {
-                    const active = selectedDate === d.date;
-                    const open = isDayOpen(d.date);
-                    return (
-                      <button
-                        key={d.label}
-                        type="button"
-                        disabled={!open}
-                        onClick={() => {
-                          setSelectedDate(d.date);
-                          setTime(null);
-                          setError(null);
-                        }}
-                        className={"btn small " + (active ? "primary" : "")}
-                        style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, opacity: !open ? 0.4 : 1 }}
-                      >
-                        {d.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                <p className="bk-day-title">
+                  {fmtLong(selectedDate)} · {freeSlots.length ? `${freeSlots.length} horario${freeSlots.length === 1 ? "" : "s"} libre${freeSlots.length === 1 ? "" : "s"}` : "sin lugar"}
+                </p>
 
-                {/* Disponibilidad en vivo */}
-                <div className="live-availability">
-                  <i />
-                  <span>Disponibilidad en vivo · se actualiza automáticamente</span>
-                </div>
-
-                {/* Grilla de turnos agrupados por Mañana y Tarde */}
                 {morningSlots.length > 0 && (
                   <div className="slot-group">
                     <h4 className="slot-group-title">Mañana</h4>
                     <div className="slots">
-                      {morningSlots.map((t) => {
-                        const disabled = isSlotDisabled(t);
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            disabled={disabled}
-                            className={"slot " + (t === time ? "selected" : "")}
-                            onClick={() => {
-                              setTime(t);
-                              setError(null);
-                            }}
-                          >
-                            {t}
-                          </button>
-                        );
-                      })}
+                      {morningSlots.map((t) => (
+                        <button key={t} type="button" className={"slot " + (t === time ? "selected" : "")} aria-pressed={t === time} onClick={() => { setTime(t); setError(null); }}>
+                          {t}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1250,56 +1179,35 @@ function BookingForm({
                   <div className="slot-group">
                     <h4 className="slot-group-title">Tarde</h4>
                     <div className="slots">
-                      {afternoonSlots.map((t) => {
-                        const disabled = isSlotDisabled(t);
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            disabled={disabled}
-                            className={"slot " + (t === time ? "selected" : "")}
-                            onClick={() => {
-                              setTime(t);
-                              setError(null);
-                            }}
-                          >
-                            {t}
-                          </button>
-                        );
-                      })}
+                      {afternoonSlots.map((t) => (
+                        <button key={t} type="button" className={"slot " + (t === time ? "selected" : "")} aria-pressed={t === time} onClick={() => { setTime(t); setError(null); }}>
+                          {t}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
 
-                {/* Si no hay turnos disponibles o todos están ocupados */}
-                {(rawSlots.length === 0 || rawSlots.every((t) => isSlotDisabled(t))) && (
+                {freeSlots.length === 0 && (
                   <div className="no-slots-notice" style={{ textAlign: "center", padding: "20px 14px", background: "#f8fafc", borderRadius: 14, border: "1px dashed #cbd5e1", margin: "16px 0" }}>
                     <p style={{ margin: "0 0 14px", fontSize: 14, color: "#475569" }}>
-                      No quedan horarios disponibles para este día. Podés buscar el próximo día libre o anotarte en lista de espera.
+                      {businessHoursOn(settings, selectedDate)?.open === false ? "Ese día el local está cerrado." : "No quedan horarios libres para este día."}
                     </p>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" }}>
-                      <button
-                        type="button"
-                        onClick={findNextAvailableDate}
-                        className="btn primary"
-                        style={{ fontSize: 13 }}
-                      >
-                        <Calendar size={14} /> Próximo día disponible
+                      <button type="button" onClick={findNextAvailableDate} className="btn primary" style={{ fontSize: 13 }}>
+                        <Calendar size={14} /> Próximo día con lugar
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowWaitlistModal(true)}
-                        className="btn"
-                        style={{ fontSize: 13 }}
-                      >
-                        <Clock size={14} /> Anotarme en lista de espera
-                      </button>
+                      {!rescheduleTarget && (
+                        <button type="button" onClick={() => setShowWaitlistModal(true)} className="btn" style={{ fontSize: 13 }}>
+                          <Clock size={14} /> Avisarme si se libera
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
 
                 {/* Productos opcionales de tienda */}
-                {biz.products && biz.products.length > 0 && (
+                {biz.products && biz.products.length > 0 && !rescheduleTarget && (
                   <section className="booking-products-panel" aria-label="Productos opcionales">
                     <button
                       type="button"
@@ -1366,8 +1274,8 @@ function BookingForm({
                   <button
                     type="button"
                     className="btn"
-                    onClick={() => setStep(0)}
-                    aria-label="Volver a servicios"
+                    onClick={() => { if (rescheduleTarget) { setRescheduleTarget(null); setShowLookupModal(true); } setStep(0); }}
+                    aria-label={rescheduleTarget ? "Cancelar el cambio" : "Volver a servicios"}
                   >
                     <ArrowLeft size={15} /> Volver
                   </button>
@@ -1380,18 +1288,18 @@ function BookingForm({
                       {time ? `${time} hs` : "Elegí tu horario"}
                     </span>
                     <span className="booking-bottom-bar-price">
-                      {depositOn && depositAmount > 0
+                      {rescheduleTarget ? "Tu turno se mueve a este horario" : depositOn && depositAmount > 0
                         ? `Total ${fmtMoney(totalAmount)} · Reservás con ${fmtMoney(depositAmount)} · Pagás ${fmtMoney(payAtVenue)} en el local`
                         : `Total: ${fmtMoney(totalAmount)}`}
                     </span>
                   </div>
                   <button
                     type="button"
-                    disabled={!time || !selectedDate}
+                    disabled={!time || !selectedDate || busy}
                     className="btn primary booking-bottom-bar-cta"
-                    onClick={() => setStep(2)}
+                    onClick={() => (rescheduleTarget ? void confirmReschedule() : setStep(2))}
                   >
-                    Continuar <ArrowRight size={15} />
+                    {rescheduleTarget ? (busy ? "Guardando…" : "Confirmar cambio") : "Continuar"} <ArrowRight size={15} />
                   </button>
                 </div>
               </>
@@ -1527,7 +1435,6 @@ function BookingForm({
                     {depositOn && depositAmount > 0 && (
                       <li>Seña requerida de {fmtMoney(depositAmount)} ({settings.depositPct}%) para confirmar.</li>
                     )}
-                    <li>Tolerancia de espera: 10 minutos de puntualidad.</li>
                   </ul>
                 </div>
 
@@ -1565,7 +1472,7 @@ function BookingForm({
   // Si está incrustado en el preview del Dashboard, no necesita la barra de navegación exterior completa
   if (isPreview) {
     return (
-      <div className="preview-container w-full" style={{ '--business-accent': accentColor } as React.CSSProperties}>
+      <div className="preview-container w-full" style={{ '--business-accent': accentColor, '--business-accent-contrast': contrastText(accentColor) } as React.CSSProperties}>
         {bookingCardContent}
       </div>
     );
@@ -1575,7 +1482,7 @@ function BookingForm({
   return (
     <main
       className="booking-page business-custom"
-      style={{ '--business-accent': accentColor } as React.CSSProperties}
+      style={{ '--business-accent': accentColor, '--business-accent-contrast': contrastText(accentColor) } as React.CSSProperties}
     >
       {/* Barra de navegación superior */}
       <nav className="booking-nav">
@@ -1702,7 +1609,7 @@ function BookingForm({
                           color: isCancelled ? "#991b1b" : "#166534",
                         }}
                       >
-                        {b.status || "confirmada"}
+                        {({ pendiente: "Por confirmar", confirmada: "Confirmado", atendida: "Atendido", cancelada: "Cancelado", ausente: "No asistió" } as Record<string, string>)[b.status || "confirmada"] || b.status}
                       </span>
                     </div>
 
@@ -1727,40 +1634,51 @@ function BookingForm({
 
                       {!isCancelled && (
                         <>
-                          <button
-                            type="button"
-                            className="btn small"
-                            onClick={() => {
-                              setServiceId(b.serviceId);
-                              setProId(b.proId || null);
-                              setClient(b.client || "");
-                              setPhone(b.phone || "");
-                              setNotes(b.notes || "");
-                              setCart({});
-                              setDone(false);
-                              setShowLookupModal(false);
-                              setStep(1);
-                            }}
-                          >
-                            Reprogramar horario
-                          </button>
-                          <button
-                            type="button"
-                            className="btn small"
-                            style={{ color: "#dc2626", borderColor: "#fecaca" }}
-                            onClick={async () => {
-                              if (!window.confirm("¿Seguro que querés cancelar este turno?")) return;
-                              const r = await cancelBookingByClient(user.id, b.id, "Cancelado por el cliente", lookupPhone || b.phone);
-                              if (r.ok) {
-                                setLookupFeedback("Turno cancelado correctamente.");
-                                setRemoteLookupBookings((prev) => (prev ? prev.map((x) => x.id === b.id ? { ...x, status: "cancelada" } : x) : null));
-                              } else {
-                                setLookupFeedback(r.error || "No se pudo cancelar el turno.");
-                              }
-                            }}
-                          >
-                            Cancelar este turno
-                          </button>
+                          {b.date >= todayKey && (
+                            <button
+                              type="button"
+                              className="btn small"
+                              onClick={() => {
+                                setServiceId(b.serviceId);
+                                setExtraServiceIds(Array.isArray(b.extraServiceIds) ? b.extraServiceIds : []);
+                                setProId(b.proId || null);
+                                setRescheduleTarget({ id: b.id, phone: lookupPhone || b.phone, date: b.date, time: b.time });
+                                setTime(null);
+                                setDone(false);
+                                setError(null);
+                                setShowLookupModal(false);
+                                setStep(1);
+                              }}
+                            >
+                              Cambiar día u horario
+                            </button>
+                          )}
+                          {cancelAsk === b.id ? (
+                            <>
+                              <button type="button" className="btn small" onClick={() => setCancelAsk(null)}>No, mantener</button>
+                              <button
+                                type="button"
+                                className="btn small"
+                                style={{ color: "#fff", background: "#dc2626", borderColor: "#dc2626" }}
+                                onClick={async () => {
+                                  setCancelAsk(null);
+                                  const r = await cancelBookingByClient(user.id, b.id, "Cancelado por el cliente", lookupPhone || b.phone);
+                                  if (r.ok) {
+                                    setLookupFeedback("Turno cancelado. ¡Gracias por avisar!");
+                                    setRemoteLookupBookings((prev) => (prev ? prev.map((x) => x.id === b.id ? { ...x, status: "cancelada" } : x) : null));
+                                  } else {
+                                    setLookupFeedback(r.error === "FALTA_MENOS_24H" ? "Faltan menos de 24 h para tu turno: para cancelarlo escribile directamente al local." : r.error || "No se pudo cancelar el turno.");
+                                  }
+                                }}
+                              >
+                                Sí, cancelar
+                              </button>
+                            </>
+                          ) : (
+                            <button type="button" className="btn small" style={{ color: "#dc2626", borderColor: "#fecaca" }} onClick={() => setCancelAsk(b.id)}>
+                              Cancelar turno
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
@@ -1897,6 +1815,7 @@ function BookingForm({
               </div>
             ) : (
               <form onSubmit={handleJoinWaitlist} className="form-grid">
+                {waitlistError && <div className="error-box" role="alert">{waitlistError}</div>}
                 <p className="text-sm text-slate-600">
                   Dejanos tus datos para el día <b>{shownDate}</b>. Te avisaremos de inmediato si se libera un turno.
                 </p>

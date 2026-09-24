@@ -6,7 +6,7 @@ import { LogoMark } from "./components/kit";
 import Landing from "./Landing";
 const StoreGate = lazy(() => import("./components/StoreGate"));
 const Auth = lazy(() => import("./components/Auth"));
-const Dashboard = lazy(() => import("./components/Dashboard"));
+const Dashboard = lazy(() => import("./components/panel/Panel"));
 const PublicPage = lazy(() => import("./components/PublicPage"));
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 
@@ -152,7 +152,9 @@ function Router() {
 
   if (route.name === "auth") {
     const raw = (window.location.hash || window.location.pathname || "").toLowerCase();
-    const mode = raw.includes("modo=login") || raw.includes("ingresar") || raw.includes("login")
+    const mode = raw.includes("recuperar")
+      ? "recuperar"
+      : raw.includes("modo=login") || raw.includes("ingresar") || raw.includes("login")
       ? "login"
       : "registro";
     return (

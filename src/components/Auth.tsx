@@ -28,7 +28,7 @@ function hashQuery(): URLSearchParams {
   return new URLSearchParams(q);
 }
 
-export default function Auth({ initialMode = "registro" }: { initialMode?: "registro" | "login" }) {
+export default function Auth({ initialMode = "registro" }: { initialMode?: Mode }) {
   const { registerAsync, loginAsync, recoverPasswordAsync, toast } = useStore();
 
   const presetPlan = ((): Plan | null => {

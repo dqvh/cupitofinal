@@ -1,3 +1,35 @@
+# Rediseño del panel y la reserva — septiembre de 2026
+
+## Panel nuevo (`src/components/panel/`)
+
+- Sistema visual propio (`panel.css` + `ui.tsx`): tipografía Inter variable auto‑alojada, tokens de color/radios/sombras, botones, inputs, badges de estado, hojas (drawer lateral en desktop, hoja inferior en mobile), menús con teclado, confirmaciones y skeletons.
+- Navegación: sidebar agrupada con contadores, topbar con buscador global (⌘/Ctrl K), “Copiar mi link”, actividad de clientes y “Nuevo turno”. En mobile, barra inferior (Inicio · Agenda · + · Reservas · Más).
+- Las secciones viven en la URL (`#/app/agenda?d=…`): refrescar o volver atrás ya no pierde la pantalla.
+- **Inicio**: próximo turno con acciones, agenda del día con huecos libres, “Para resolver” (por confirmar, señas, turnos sin cerrar, recordatorios de mañana por WhatsApp, lista de espera), actividad reciente, métricas del día y guía de primeros pasos.
+- **Agenda**: grilla horaria por profesional (día), semana y mes; horario cerrado y bloqueos sombreados, línea de “ahora”, clic en un hueco para agendar y arrastrar para reprogramar con deshacer. Lista de 14 días en mobile.
+- **Ficha del turno**: acción principal según el momento, reprogramar con horarios libres reales, reasignar profesional, cobro (arreglado el cálculo de seña, que estaba fijo en 20 %), nota interna, plantillas de WhatsApp, historial de cambios, exportar a calendario.
+- **Alta de turno**: autocompleta clientes existentes, servicios combinados, profesional, tira de días con disponibilidad y horarios libres; sobreturno manual.
+- **Reservas**: filtros por estado/período/profesional, búsqueda, “Confirmar todos” y exportación CSV.
+- **Clientes**: segmentos (frecuentes, nuevos, para recuperar, con ausencias), ficha con historial, próximos turnos, nota privada y edición de datos en todos sus turnos.
+- **Horarios**: semana con cortes y copiar a Lun–Vie, feriados/vacaciones/horarios especiales y lista de bloqueos que ahora se pueden quitar.
+- **Ajustes** reorganizados: Negocio, Reservas (intervalo, pausa entre turnos, anticipación mínima y máxima), Pagos y seña, Notificaciones, Apariencia, Plan y Cuenta.
+
+## Reservas y datos
+
+- Motor único de disponibilidad (`src/lib/availability.ts`) compartido por panel, página pública y `/api/public`: respeta duración combinada, pausa entre turnos, bloqueos por rango, horarios especiales, feriados y anticipación.
+- `normalizeData` descartaba `brandColor`, `bufferMinutes`, `specialHours` y `logoUrl`: ahora persisten.
+- Eliminar un servicio con historial lo archiva en vez de borrar sus turnos.
+- Los turnos guardan historial (`events`) y nota interna; deshacer una eliminación ya no la revierte la sincronización.
+- Nueva acción `reschedule` en `/api/public`: el cliente cambia su turno desde “Mis turnos” (antes creaba un turno duplicado).
+- Página pública: selector de profesional y días con disponibilidad, arranque en el primer día con lugar, errores claros de cancelación tardía y lista de espera, total correcto con servicios combinados.
+- Recordatorio por email desactivable (`remindersEnabled`).
+
+## Verificación
+
+`npm run typecheck`, `npm run build` y `npm test` (24 pruebas; en contenedores: `PW_EXECUTABLE=/ruta/a/chromium npm test`).
+
+---
+
 # Mejoras de Cupito — septiembre de 2026
 
 ## Interfaz y uso diario

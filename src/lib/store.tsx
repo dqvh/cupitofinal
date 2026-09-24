@@ -1,4 +1,4 @@
-import { fitsWorkingDay } from "./scheduling";
+import { checkSlot, DEFAULT_SLOT_INTERVAL } from "./availability";
 import {
   createContext,
   useCallback,
@@ -43,7 +43,7 @@ import { PLAN_META, SEMILLA_MONTHLY_LIMIT, PRO_LIMIT, type Plan } from "./plans"
 export { PLAN_META, SEMILLA_MONTHLY_LIMIT, PRO_LIMIT, type Plan } from "./plans";
 export type PaymentMethod = "tarjeta" | "transferencia" | "billetera";
 
-export interface Service { id: string; name: string; price: number; duration: number }
+export interface Service { id: string; name: string; price: number; duration: number; archived?: boolean; desc?: string }
 export interface Product { id: string; name: string; price: number; desc: string }
 export interface Review { id: string; client: string; rating: number; text: string; date: string }
 export interface Coupon { id: string; code: string; pct: number; active: boolean }
@@ -83,7 +83,22 @@ export interface Booking {
   depositClaim?: { txId: string; sentAt: number }; // comprobante pendiente de verificación
   reviewRequested?: boolean;
   cancelReason?: string;
+  internalNote?: string; // nota privada del negocio sobre este turno
+  waReminderAt?: number; // cuándo el negocio mandó el recordatorio por WhatsApp
+  events?: BookingEvent[]; // historial breve: creado, confirmado, reprogramado…
 }
+
+export interface BookingEvent {
+  at: number;
+  type: "creada" | "confirmada" | "pendiente" | "atendida" | "cancelada" | "ausente" | "reprogramada" | "cobro" | "seña";
+  by?: "negocio" | "cliente";
+  detail?: string;
+}
+
+const withEvent = (b: Booking, e: Omit<BookingEvent, "at">): Booking => ({
+  ...b,
+  events: [...(b.events || []), { at: Date.now(), ...e }].slice(-20),
+});
 
 export interface BlockedSlot {
   id: string;
@@ -269,6 +284,11 @@ export interface BizSettings {
   specialHours?: Record<string, DayHours>; // excepciones de horario por fecha "YYYY-MM-DD"
   brandColor?: string; // color primario propio del negocio
   logoUrl?: string; // logo del local
+  slotInterval?: number; // cada cuántos minutos se ofrecen horarios (15/30/45/60)
+  minNoticeHours?: number; // anticipación mínima para reservar online
+  remindersEnabled?: boolean; // recordatorio automático por email 24 h antes (default: sí)
+  onboardingHidden?: boolean; // ocultó la guía de primeros pasos
+  hoursConfirmed?: boolean; // revisó/guardó sus horarios al menos una vez
 }
 
 export interface BizData {
@@ -434,7 +454,7 @@ export const isDemoSlug = (s: string | undefined | null) => {
   return x === "studio-nails" || x === "cupito-demo" || x === "demo";
 };
 export const isDemoUser = (u: Pick<User, "email"> | undefined | null) => !!u && u.email === DEMO_EMAIL;
-export const PRO_COLORS = ["#cdf463", "#ff7a59", "#93e6c3", "#b7e33f", "#f4b863"];
+export const PRO_COLORS = ["#0ea5e9", "#f59e0b", "#8b5cf6", "#ec4899", "#10b981", "#ef4444", "#6366f1", "#14b8a6"];
 
 /* ============ storage seguro ============ */
 
@@ -476,6 +496,11 @@ function getTombstones(key: string): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+function removeTombstone(key: string, id: string) {
+  const set = getTombstones(key);
+  if (set.delete(id)) safeSet(key, JSON.stringify([...set]));
 }
 
 function addTombstone(key: string, id: string) {
@@ -596,24 +621,6 @@ export function sortWaitlist(waitlist: WaitlistEntry[], bookings: Booking[], pla
   return list;
 }
 
-/* Horarios según configuración del día (intervalos 45 min), con corte opcional */
-export function slotsForDay(h: DayHours | undefined): string[] {  if (!h || !h.open) return [];
-  const block = (from?: string, to?: string): string[] => {
-    if (!from || !to) return [];
-    const [fh, fm] = from.split(":").map(Number);
-    const [th, tm] = to.split(":").map(Number);
-    const start = fh * 60 + fm;
-    const end = th * 60 + tm;
-    if (!(end > start)) return [];
-    const out: string[] = [];
-    for (let t = start; t + 45 <= end; t += 45) {
-      out.push(`${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`);
-    }
-    return out;
-  };
-  return [...block(h.from, h.to), ...block(h.from2, h.to2)];
-}
-
 export function toMinutes(t: string): number {
   const [h, m] = t.split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
@@ -636,153 +643,6 @@ export function totalDurationOf(
   pro?: { proDurations?: Record<string, number> } | null
 ): number {
   return serviceIds.reduce((sum, sId) => sum + serviceDurationOf(services, sId, pro), 0);
-}
-
-/* ¿El turno nuevo pisa algún turno existente? Compara intervalos reales
-   (hora + duración del servicio + buffer), considerando servicios adicionales combinados. */
-export function findOverlap(
-  slot: { date: string; time: string; dur: number; proId?: string },
-  list: Pick<Booking, "id" | "date" | "time" | "status" | "proId" | "serviceId" | "extraServiceIds" | "client">[],
-  services: Pick<Service, "id" | "duration">[],
-  bufferMinutes: number = 0
-): Booking | undefined {
-  const s = toMinutes(slot.time);
-  const e = s + slot.dur;
-  const buf = Math.max(0, bufferMinutes || 0);
-  return list.find((b) => {
-    if (b.date !== slot.date || b.status === "cancelada") return false;
-    if (b.proId && slot.proId && b.proId !== slot.proId) return false;
-    const bs = toMinutes(b.time);
-    const bServiceIds = [b.serviceId, ...(b.extraServiceIds || [])].filter(Boolean);
-    const bDur = bServiceIds.length > 0
-      ? bServiceIds.reduce((acc, sid) => acc + serviceDurationOf(services, sid), 0)
-      : serviceDurationOf(services, b.serviceId);
-    const be = bs + bDur + buf;
-    return s < be && bs < (e + buf);
-  }) as Booking | undefined;
-}
-
-/**
- * Obtiene los horarios para una fecha dada, priorizando excepciones de specialHours ("Este viernes cierro antes").
- */
-export function getDayHours(
-  settings: Pick<BizSettings, "hours" | "specialHours"> | undefined,
-  dateKeyStr: string
-): DayHours | undefined {
-  if (!settings) return undefined;
-  if (settings.specialHours && settings.specialHours[dateKeyStr]) {
-    return settings.specialHours[dateKeyStr];
-  }
-  const dIdx = dayOfWeek(dateKeyStr);
-  return settings.hours?.[dIdx];
-}
-
-/**
- * Formato conversacional natural para fechas y horas en español:
- * «Hoy, lunes 7 · 15:00 hs» o «Mañana, martes 8 · 10:30 hs».
- */
-export function fmtDateNatural(dateStr: string, timeStr?: string): string {
-  if (!dateStr) return "";
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const now = new Date();
-  const todayK = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const tmrw = new Date(now.getTime() + 86400000);
-  const tmrwK = `${tmrw.getFullYear()}-${String(tmrw.getMonth() + 1).padStart(2, "0")}-${String(tmrw.getDate()).padStart(2, "0")}`;
-
-  const targetDate = new Date(y, m - 1, d);
-  const weekday = targetDate.toLocaleDateString("es-AR", { weekday: "long" });
-  const dayNum = d;
-  const monthName = targetDate.toLocaleDateString("es-AR", { month: "long" });
-
-  let prefix = "";
-  if (dateStr === todayK) {
-    prefix = `Hoy, ${weekday} ${dayNum}`;
-  } else if (dateStr === tmrwK) {
-    prefix = `Mañana, ${weekday} ${dayNum}`;
-  } else {
-    prefix = `${weekday.charAt(0).toUpperCase() + weekday.slice(1)} ${dayNum} de ${monthName}`;
-  }
-
-  return timeStr ? `${prefix} · ${timeStr} hs` : prefix;
-}
-
-export function isSlotBlocked(
-  slots: Pick<BlockedSlot, "date" | "time" | "endTime" | "proId">[],
-  date: string,
-  time: string,
-  proId?: string
-): boolean {
-  return slots.some((bs) => {
-    if (bs.date !== date) return false;
-    if (bs.proId && proId && bs.proId !== proId) return false;
-    if (bs.proId && !proId) return false;
-    if (!bs.time) return true;
-    if (!bs.endTime) return bs.time === time;
-    const t = toMinutes(time);
-    return t >= toMinutes(bs.time) && t < toMinutes(bs.endTime);
-  });
-}
-
-/**
- * Retorna los horarios a usar para un profesional (sus propios horarios si los tiene, o los del negocio como fallback).
- */
-export function getProHours(pro: Professional | undefined, bizHours: DayHours[]): DayHours[] {
-  if (pro?.hours && Array.isArray(pro.hours) && pro.hours.length === 7) {
-    return pro.hours;
-  }
-  return bizHours;
-}
-
-/**
- * ¿El profesional atiende y está libre en (date, time, dur)?
- */
-export function isProAvailable(
-  pro: Professional,
-  date: string,
-  time: string,
-  dur: number,
-  bizHours: DayHours[],
-  blockedSlots: BlockedSlot[],
-  bookings: Pick<Booking, "id" | "date" | "time" | "status" | "proId" | "serviceId" | "extraServiceIds" | "client">[],
-  services: Pick<Service, "id" | "duration">[],
-  bufferMinutes: number = 0
-): boolean {
-  const proHours = getProHours(pro, bizHours);
-  const dayH = proHours[dayOfWeek(date)];
-  if (!dayH || !dayH.open) return false;
-
-  const s = toMinutes(time);
-  const e = s + dur;
-
-  const inShift1 = dayH.from && dayH.to && s >= toMinutes(dayH.from) && e <= toMinutes(dayH.to);
-  const inShift2 = dayH.from2 && dayH.to2 && s >= toMinutes(dayH.from2) && e <= toMinutes(dayH.to2);
-  if (!inShift1 && !inShift2) return false;
-
-  if (isSlotBlocked(blockedSlots, date, time, pro.id)) return false;
-
-  const overlap = findOverlap({ date, time, dur, proId: pro.id }, bookings, services, bufferMinutes);
-  if (overlap) return false;
-
-  return true;
-}
-
-/**
- * Retorna la lista de profesionales disponibles en (date, time, dur).
- */
-export function getAvailablePros(
-  pros: Professional[],
-  date: string,
-  time: string,
-  dur: number,
-  bizHours: DayHours[],
-  blockedSlots: BlockedSlot[],
-  bookings: Pick<Booking, "id" | "date" | "time" | "status" | "proId" | "serviceId" | "extraServiceIds" | "client">[],
-  services: Pick<Service, "id" | "duration">[],
-  bufferMinutes: number = 0
-): Professional[] {
-  return pros.filter((p) =>
-    isProAvailable(p, date, time, dur, bizHours, blockedSlots, bookings, services, bufferMinutes)
-  );
 }
 
 export function defaultHours(): DayHours[] {
@@ -943,6 +803,11 @@ function normalizeData(p: Partial<BizData>): BizData {
     blockedSlots: Array.isArray(p.blockedSlots) ? p.blockedSlots : [],
     settings: {
       ...d.settings,
+      ...s,
+      bufferMinutes: typeof s.bufferMinutes === "number" && s.bufferMinutes >= 0 ? s.bufferMinutes : 0,
+      slotInterval: typeof s.slotInterval === "number" && s.slotInterval >= 5 ? s.slotInterval : DEFAULT_SLOT_INTERVAL,
+      minNoticeHours: typeof s.minNoticeHours === "number" && s.minNoticeHours >= 0 ? s.minNoticeHours : 0,
+      specialHours: typeof s.specialHours === "object" && s.specialHours !== null ? s.specialHours : {},
       depositEnabled: typeof s.depositEnabled === "boolean" ? s.depositEnabled : d.settings.depositEnabled,
       depositPct: typeof s.depositPct === "number" ? s.depositPct : d.settings.depositPct,
       hours: Array.isArray(s.hours) && s.hours.length === 7 ? (s.hours as DayHours[]) : d.settings.hours,
@@ -1461,6 +1326,7 @@ interface StoreApi {
   addService(s: Omit<Service, "id">): void;
   updateService(id: string, patch: Partial<Omit<Service, "id">>): void;
   removeService(id: string): void;
+  moveService(id: string, dir: -1 | 1): void;
   addProduct(p: Omit<Product, "id">): void;
   updateProduct(id: string, patch: Partial<Omit<Product, "id">>): void;
   removeProduct(id: string): void;
@@ -1483,10 +1349,11 @@ interface StoreApi {
   removeWaitlist(id: string): void;
   createBookingFromWaitlist(waitlistId: string, b: { client: string; phone: string; serviceId: string; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   requestReview(bookingId: string): "sent" | "noemail";
-  addBooking(b: { client: string; phone: string; email?: string; notes?: string; serviceId: string; extraServiceIds?: string[]; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
+  addBooking(b: { client: string; phone: string; email?: string; notes?: string; internalNote?: string; force?: boolean; serviceId: string; extraServiceIds?: string[]; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string }): { ok: true; id: string } | { ok: false; error: string };
   addBookingFor(ownerId: string, b: { client: string; phone: string; email?: string; notes?: string; serviceId: string; extraServiceIds?: string[]; date: string; time: string; source: Booking["source"]; items?: Booking["items"]; proId?: string; paidDeposit?: boolean; paymentMethod?: PaymentMethod; status?: BookingStatus; depositClaim?: Booking["depositClaim"] }): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
-  rescheduleBooking(id: string, newDate: string, newTime: string, newProId?: string): { ok: boolean; error?: string };
+  rescheduleBooking(id: string, newDate: string, newTime: string, newProId?: string, force?: boolean): { ok: boolean; error?: string };
   setStatus(id: string, status: BookingStatus): void;
+  updateBooking(id: string, patch: Partial<Pick<Booking, "client" | "phone" | "email" | "internalNote" | "serviceId" | "extraServiceIds" | "waReminderAt">>): void;
   removeBooking(id: string): void;
   markDepositPaid(id: string, method: PaymentMethod): void;
   markBookingPaid(id: string, method: "efectivo" | "tarjeta" | "transferencia", amount?: number): void;
@@ -2150,8 +2017,22 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   removeService(id) {
     if (!sessionUserId) return;
     const data = loadData(sessionUserId);
-    data.services = data.services.filter((s) => s.id !== id);
-    data.bookings = data.bookings.filter((b) => b.serviceId !== id);
+    // Si tiene turnos, se archiva: desaparece de la página pero el historial conserva nombre y precio.
+    const used = data.bookings.some((b) => b.serviceId === id || (b.extraServiceIds || []).includes(id));
+    data.services = used ? data.services.map((s) => (s.id === id ? { ...s, archived: true } : s)) : data.services.filter((s) => s.id !== id);
+    saveData(sessionUserId, data);
+    emit();
+  },
+  moveService(id, dir) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    const list = [...data.services];
+    const i = list.findIndex((s) => s.id === id);
+    let j = i + dir;
+    while (j >= 0 && j < list.length && list[j].archived) j += dir;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    data.services = list;
     saveData(sessionUserId, data);
     emit();
   },
@@ -2414,18 +2295,18 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   },
   createBookingFromWaitlist(waitlistId, { client, phone, serviceId, date, time, source, items, proId }) {
     if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta para crear reservas." } as const;
-    addTombstone(TOMBSTONE_WAITLIST_KEY, waitlistId);
     const data = loadData(sessionUserId);
     const owner = users.find((u) => u.id === sessionUserId);
     if (semillaLimitReached(owner, data))
       return { ok: false, error: `Llegaste a las ${SEMILLA_MONTHLY_LIMIT} reservas del mes del plan Semilla. Subí a Crece para reservas ilimitadas.` } as const;
-    const isClosedDate = (data.settings.closedDates || []).includes(date);
-    if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." } as const;
-    if (isSlotBlocked(data.blockedSlots || [], date, time, proId)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." } as const;
-    const clash = findOverlap({ date, time, dur: serviceDurationOf(data.services, serviceId), proId }, data.bookings, data.services);
-    if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` } as const;
+    const check = checkSlot(data, { date, time, serviceIds: [serviceId], proId, ignoreHours: true });
+    if (!check.ok) return { ok: false, error: check.error } as const;
+    addTombstone(TOMBSTONE_WAITLIST_KEY, waitlistId);
     const id = uid();
-    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId, createdAt: Date.now() };
+    const newBooking: Booking = withEvent(
+      { id, client: client.trim(), phone: phone.trim(), serviceId, date, time, status: "confirmada", source, items, proId: check.proId, createdAt: Date.now() },
+      { type: "creada", by: "negocio", detail: "Desde la lista de espera" }
+    );
     // UN solo guardado atómico: crea el turno Y borra de la lista juntos.
     // Antes eran dos guardados separados y el sync a la nube los pisaba → turnos infinitos.
     data.bookings = [...data.bookings, newBooking];
@@ -2461,54 +2342,21 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     }
     return "noemail" as const;
   },
-  addBooking({ client, phone, email, notes, serviceId, extraServiceIds, date, time, source, items, proId }) {
+  addBooking({ client, phone, email, notes, internalNote, serviceId, extraServiceIds, date, time, source, items, proId, force }) {
     if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta para crear reservas." };
     const data = loadData(sessionUserId);
     const owner = users.find((u) => u.id === sessionUserId);
     if (semillaLimitReached(owner, data))
       return { ok: false, error: `Llegaste a las ${SEMILLA_MONTHLY_LIMIT} reservas del mes del plan Semilla. Subí a Crece para reservas ilimitadas.` };
-    const isClosedDate = (data.settings.closedDates || []).includes(date);
-    if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
-    const allServices = [serviceId, ...(extraServiceIds || [])];
-    const dur = totalDurationOf(data.services, allServices);
-    const buf = data.settings.bufferMinutes || 0;
-
-    let pro = proId;
-    if (!pro && data.professionals.length > 0) {
-      const available = getAvailablePros(
-        data.professionals,
-        date,
-        time,
-        dur,
-        data.settings.hours,
-        data.blockedSlots || [],
-        data.bookings,
-        data.services,
-        buf
-      );
-      if (available.length === 0) {
-        return { ok: false, error: "No hay ningún profesional disponible en ese horario." };
-      }
-      available.sort((a, b) => {
-        const ca = data.bookings.filter((x) => x.date === date && x.proId === a.id && x.status !== "cancelada").length;
-        const cb = data.bookings.filter((x) => x.date === date && x.proId === b.id && x.status !== "cancelada").length;
-        return ca - cb;
-      });
-      pro = available[0].id;
-    } else if (pro && data.professionals.length > 0) {
-      const targetPro = data.professionals.find((p) => p.id === pro);
-      if (targetPro && !isProAvailable(targetPro, date, time, dur, data.settings.hours, data.blockedSlots || [], data.bookings, data.services, buf)) {
-        return { ok: false, error: `${targetPro.name} ya no está disponible en ese horario.` };
-      }
-    } else {
-      if (isSlotBlocked(data.blockedSlots || [], date, time)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
-      const clash = findOverlap({ date, time, dur }, data.bookings, data.services, buf);
-      if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
-    }
-
+    // El negocio puede agendar fuera de horario (sobreturno) si lo pide explícitamente.
+    const check = checkSlot(data, { date, time, serviceIds: [serviceId, ...(extraServiceIds || [])], proId, ignoreHours: !!force });
+    if (!check.ok) return { ok: false, error: check.error };
     const id = uid();
     const cleanEmail = (email || "").trim();
-    const newBooking: Booking = { id, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, notes: notes?.trim().slice(0, 300) || undefined, serviceId, extraServiceIds: extraServiceIds?.length ? extraServiceIds : undefined, date, time, status: "confirmada", source, items, proId: pro, createdAt: Date.now() };
+    const newBooking: Booking = withEvent(
+      { id, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, notes: notes?.trim().slice(0, 300) || undefined, internalNote: internalNote?.trim().slice(0, 500) || undefined, serviceId, extraServiceIds: extraServiceIds?.length ? extraServiceIds : undefined, date, time, status: "confirmada", source, items, proId: check.proId, createdAt: Date.now() },
+      { type: "creada", by: "negocio" }
+    );
     data.bookings = [...data.bookings, newBooking];
     saveData(sessionUserId, data);
     saveRemoteBooking(sessionUserId, newBooking).catch(() => {});
@@ -2540,85 +2388,40 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
       return { ok: false, error: "Este negocio alcanzó el límite de reservas online de este mes. Anotate en la lista de espera y te avisamos si se libera un lugar." };
     const bookingService = data.services.find((service) => service.id === serviceId);
     if (!bookingService) return { ok: false, error: "Este servicio ya no está disponible." };
-    const now = new Date();
-    const today = dateKey(now);
-    if (date < today || (date === today && time <= now.toTimeString().slice(0, 5))) return { ok: false, error: "Elegí un horario futuro." };
-    if (data.settings.maxAdvanceDays && date > dateKey(addDays(now, data.settings.maxAdvanceDays))) return { ok: false, error: "La fecha supera la anticipación permitida por el local." };
-    const allServices = [serviceId, ...(extraServiceIds || [])];
-    const dur = totalDurationOf(data.services, allServices);
-    const dayH = getDayHours(data.settings, date);
-    if (!data.professionals.length && !fitsWorkingDay(dayH, time, dur)) return { ok: false, error: "El servicio debe terminar dentro del horario de atención." };
-    const isClosedDate = (data.settings.closedDates || []).includes(date);
-    if (isClosedDate) return { ok: false, error: "El negocio está cerrado en esa fecha (feriado o no laborable)." };
-    const buf = data.settings.bufferMinutes || 0;
-
-    let pro = proId;
-    if (!pro && data.professionals.length > 0) {
-      const available = getAvailablePros(
-        data.professionals,
-        date,
-        time,
-        dur,
-        data.settings.hours,
-        data.blockedSlots || [],
-        data.bookings,
-        data.services,
-        buf
-      );
-      if (available.length === 0) {
-        return { ok: false, error: "No hay ningún profesional disponible en ese horario." };
-      }
-      available.sort((a, b) => {
-        const ca = data.bookings.filter((x) => x.date === date && x.proId === a.id && x.status !== "cancelada").length;
-        const cb = data.bookings.filter((x) => x.date === date && x.proId === b.id && x.status !== "cancelada").length;
-        return ca - cb;
-      });
-      pro = available[0].id;
-    } else if (pro && data.professionals.length > 0) {
-      const targetPro = data.professionals.find((p) => p.id === pro);
-      if (!targetPro) return { ok: false, error: "Este profesional ya no está disponible." };
-      if (!isProAvailable(targetPro, date, time, dur, data.settings.hours, data.blockedSlots || [], data.bookings, data.services, buf)) {
-        return { ok: false, error: `${targetPro.name} ya no está disponible en ese horario.` };
-      }
-    } else {
-      if (isSlotBlocked(data.blockedSlots || [], date, time)) return { ok: false, error: "Este horario se encuentra bloqueado por el negocio." };
-      const clash = findOverlap({ date, time, dur }, data.bookings, data.services, buf);
-      if (clash) return { ok: false, error: clash.time === time ? `El horario ${time} ya fue tomado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
-    }
+    const check = checkSlot(data, { date, time, serviceIds: [serviceId, ...(extraServiceIds || [])], proId, online: source === "online" });
+    if (!check.ok) return { ok: false, error: check.error };
+    const pro = check.proId;
     const id = uid();
     const cleanEmail = (email || "").trim();
-    const newBooking: Booking = { id, notes: notes?.trim().slice(0, 300) || undefined, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, serviceId, extraServiceIds: extraServiceIds?.length ? extraServiceIds : undefined, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim, createdAt: Date.now() };
+    const newBooking: Booking = { id, notes: notes?.trim().slice(0, 300) || undefined, client: client.trim(), phone: phone.trim(), email: cleanEmail || undefined, serviceId, extraServiceIds: extraServiceIds?.length ? extraServiceIds : undefined, date, time, status: status ?? "confirmada", source, items, proId: pro, paidDeposit, paymentMethod, depositClaim, createdAt: Date.now(), events: [{ at: Date.now(), type: "creada", by: "cliente" }] };
     data.bookings = [...data.bookings, newBooking];
     saveData(ownerId, data);
     if (!bookingIsDemo) saveRemoteBooking(ownerId, newBooking).catch(() => {});
     emit();
     return { ok: true, id };
   },
-  rescheduleBooking(id, newDate, newTime, newProId) {
+  rescheduleBooking(id, newDate, newTime, newProId, force) {
     if (!sessionUserId) return { ok: false, error: "Necesitás una cuenta." };
     const data = loadData(sessionUserId);
     const target = data.bookings.find((b) => b.id === id);
     if (!target) return { ok: false, error: "No se encontró el turno." };
-    const targetDur = totalDurationOf(data.services, [target.serviceId, ...(target.extraServiceIds || [])]);
-    const newPro = newProId !== undefined ? newProId : target.proId;
-    const clash = findOverlap(
-      { date: newDate, time: newTime, dur: targetDur, proId: newPro },
-      data.bookings.filter((b) => b.id !== id),
-      data.services,
-      data.settings.bufferMinutes || 0
-    );
-    if (clash) return { ok: false, error: clash.time === newTime ? `El horario ${newTime} del ${newDate} ya está ocupado por ${clash.client}.` : `Se superpone con el turno de ${clash.client} (${clash.time}).` };
-
+    const unassign = newProId === "" && data.professionals.length > 0;
+    const newPro = newProId !== undefined ? newProId || undefined : target.proId;
+    // "Sin asignar" no compite con la agenda de ningún profesional: solo se validan fecha y bloqueos del local.
+    const check = unassign
+      ? checkSlot({ ...data, professionals: [], bookings: [] }, { date: newDate, time: newTime, serviceIds: [target.serviceId, ...(target.extraServiceIds || [])], ignoreHours: true })
+      : checkSlot(data, { date: newDate, time: newTime, serviceIds: [target.serviceId, ...(target.extraServiceIds || [])], proId: newPro, excludeId: id, ignoreHours: force !== false });
+    if (!check.ok) return { ok: false, error: check.error };
     data.bookings = data.bookings.map((b) => {
       if (b.id !== id) return b;
-      return {
+      return withEvent({
         ...b,
         date: newDate,
         time: newTime,
-        proId: newProId !== undefined ? newProId : b.proId,
-        status: b.status === "cancelada" ? "confirmada" : b.status,
+        proId: unassign ? undefined : check.proId ?? newPro,
+        status: b.status === "cancelada" || b.status === "ausente" ? "confirmada" : b.status,
         reminderSentAt: undefined, // cambió el día: el recordatorio viejo ya no sirve
-      };
+      }, { type: "reprogramada", by: "negocio", detail: `Antes: ${b.date} ${b.time}` });
     });
     saveData(sessionUserId, data);
     emit();
@@ -2627,7 +2430,14 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   setStatus(id, status) {
     if (!sessionUserId) return;
     const data = loadData(sessionUserId);
-    data.bookings = data.bookings.map((b) => (b.id === id ? { ...b, status } : b));
+    data.bookings = data.bookings.map((b) => (b.id === id && b.status !== status ? withEvent({ ...b, status }, { type: status, by: "negocio" }) : b));
+    saveData(sessionUserId, data);
+    emit();
+  },
+  updateBooking(id, patch) {
+    if (!sessionUserId) return;
+    const data = loadData(sessionUserId);
+    data.bookings = data.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b));
     saveData(sessionUserId, data);
     emit();
   },
@@ -2645,6 +2455,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   restoreBooking(b: Booking) {
     if (!sessionUserId) return;
     const data = loadData(sessionUserId);
+    removeTombstone(TOMBSTONE_BOOKING_KEY, b.id);
     if (!data.bookings.some((x) => x.id === b.id)) {
       data.bookings.push(b);
       data.bookings.sort((x, y) => (x.date + x.time).localeCompare(y.date + y.time));
@@ -2655,7 +2466,7 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
   markDepositPaid(id, method) {
     if (!sessionUserId) return;
     const data = loadData(sessionUserId);
-    data.bookings = data.bookings.map((b) => (b.id === id ? { ...b, paidDeposit: true, paymentMethod: method, depositClaim: undefined } : b));
+    data.bookings = data.bookings.map((b) => (b.id === id ? withEvent({ ...b, paidDeposit: true, paymentMethod: method, depositClaim: undefined }, { type: "seña", by: "negocio", detail: "Seña acreditada" }) : b));
     saveData(sessionUserId, data);
     emit();
   },
@@ -2664,12 +2475,12 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     const data = loadData(sessionUserId);
     data.bookings = data.bookings.map((b) => {
       if (b.id !== id) return b;
-      return {
+      return withEvent({
         ...b,
         paymentStatus: "total_pagado",
         finalPaymentMethod: method,
         paidAmount: amount !== undefined ? amount : b.paidAmount,
-      };
+      }, { type: "cobro", by: "negocio", detail: method });
     });
     saveData(sessionUserId, data);
     emit();
@@ -2776,19 +2587,32 @@ const api: Omit<StoreApi, "toast" | "users" | "sessionUserId"> = {
     } catch { /* si no se puede calcular, se permite cancelar */ }
     data.bookings = data.bookings.map((b) =>
       b.id === bookingId
-        ? { ...b, status: "cancelada" as BookingStatus, cancelReason: reason || "Cancelado por el cliente" }
+        ? withEvent({ ...b, status: "cancelada" as BookingStatus, cancelReason: reason || "Cancelado por el cliente" }, { type: "cancelada", by: "cliente", detail: reason })
         : b
     );
     saveData(ownerId, data);
     emit();
     return { ok: true };
   },
-  async rescheduleBookingByClient(ownerId, bookingId, newDate, newTime, _phone) {
+  async rescheduleBookingByClient(ownerId, bookingId, newDate, newTime, phone) {
+    const owner = users.find((u) => u.id === ownerId);
+    if (!isDemoUser(owner) && isSupabaseConfigured) {
+      const r = await callPublicApi({ action: "reschedule", ownerId, bookingId, date: newDate, time: newTime, phone });
+      if (r) {
+        if (r.ok && r.data) {
+          safeSet(dataKey(ownerId), JSON.stringify(normalizeData(r.data)));
+          emit();
+        }
+        return r.ok ? { ok: true } : { ok: false, error: r.error };
+      }
+    }
     const data = loadData(ownerId);
     const target = data.bookings.find((b) => b.id === bookingId);
     if (!target) return { ok: false, error: "No se encontró el turno." };
+    const check = checkSlot(data, { date: newDate, time: newTime, serviceIds: [target.serviceId, ...(target.extraServiceIds || [])], proId: target.proId, excludeId: bookingId, online: true });
+    if (!check.ok) return { ok: false, error: check.error };
     data.bookings = data.bookings.map((b) =>
-      b.id === bookingId ? { ...b, date: newDate, time: newTime } : b
+      b.id === bookingId ? withEvent({ ...b, date: newDate, time: newTime, proId: check.proId ?? b.proId, reminderSentAt: undefined }, { type: "reprogramada", by: "cliente", detail: `Antes: ${b.date} ${b.time}` }) : b
     );
     saveData(ownerId, data);
     emit();
@@ -2926,24 +2750,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={memo}>
       {children}
-      <div className="pointer-events-none fixed bottom-5 left-1/2 z-[90] flex w-full max-w-sm -translate-x-1/2 flex-col items-center gap-2 px-4">
+      <div className="c-toasts" role="status" aria-live="polite">
         {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`toast-in pointer-events-auto flex items-center justify-between gap-3 rounded-full border px-4 py-2.5 text-xs font-semibold shadow-xl backdrop-blur-md ${
-              t.kind === "ok" ? "border-black/10 bg-black text-white" : "border-black/10 bg-neutral-900 text-white"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                  t.kind === "ok" ? "bg-[#16A34A] text-white" : "bg-rose-500 text-white"
-                }`}
-              >
-                {t.kind === "ok" ? "✓" : "!"}
-              </span>
-              <span>{t.text}</span>
-            </div>
+          <div key={t.id} className={`c-toast ${t.kind === "warn" ? "c-toast--warn" : ""}`}>
+            <span className="c-toast-icon" aria-hidden="true">{t.kind === "ok" ? "✓" : "!"}</span>
+            <span className="c-toast-text">{t.text}</span>
             {t.action && (
               <button
                 type="button"
@@ -2951,11 +2762,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   t.action?.onClick();
                   setToasts((prev) => prev.filter((x) => x.id !== t.id));
                 }}
-                className="ml-2 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold text-white transition-all hover:bg-white/30 active:scale-95"
+                className="c-toast-action"
               >
                 {t.action.label}
               </button>
             )}
+            <button type="button" aria-label="Cerrar aviso" className="c-toast-close" onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}>×</button>
           </div>
         ))}
       </div>
