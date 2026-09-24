@@ -1,789 +1,652 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import {
-  ArrowUpRight,
   ArrowRight,
+  ArrowUpRight,
   Check,
-  ChevronRight,
   CalendarDays,
   Clock,
-  Scissors,
-  Stethoscope,
-  Dumbbell,
+  Bell,
+  Wallet,
   Palette,
   Users,
-  Store,
-  Link,
-  Wallet,
-  BarChart3 as ChartNoAxesCombined,
-  Bell,
+  Hourglass,
+  Smartphone,
+  Link2,
+  Sparkles,
   ShieldCheck,
-  Globe,
   Menu,
   X,
   Play,
-  Camera as Instagram,
   Mail,
+  Camera as Instagram,
+  MessageCircle,
   Plus,
-  CheckCheck,
-  MousePointer2,
-  Pause,
-  Sun,
+  Search,
 } from "lucide-react";
-import LandingTour from "./components/LandingTour";
-import { PLAN_META, PLAN_AMOUNTS, PLAN_FEATURES, type Plan } from "./lib/plans";
-import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from "./components/Accordion";
+import { PLAN_META, PLAN_AMOUNTS, PLAN_FEATURES, type Plan, type BillingCycle } from "./lib/plans";
 import { LegalModal, TERMS_DOC, PRIVACY_DOC } from "./components/kit";
 import "./styles/landing.css";
-import "./styles/landing-light.css";
-import "./styles/landing-refinement.css";
-import "./styles/landing-polish.css";
 
-const names = [
-  "Lucía Fernández",
-  "Tomás Ramírez",
-  "Camila López",
-  "Nicolás Pérez",
-  "Martina Gómez",
-  "Sofía Martínez",
+const ROTATING = ["peluquerías", "barberías", "consultorios", "centros de estética", "canchas de pádel", "estudios de tatuaje"];
+
+const SECTORS = [
+  "Peluquerías", "Barberías", "Uñas y pestañas", "Centros de estética", "Consultorios", "Psicología", "Kinesiología",
+  "Nutrición", "Entrenadores", "Yoga y pilates", "Canchas de pádel", "Estudios de tatuaje", "Veterinarias", "Clases particulares",
 ];
 
-const PLAN_PROFILES: Record<Plan, string> = {
-  semilla: "Trabajás solo",
-  crece: "Equipo de hasta 3",
-  escala: "Equipo grande y reportes",
+const PLAN_PROFILE: Record<Plan, string> = {
+  semilla: "Para empezar solo/a",
+  crece: "Para el día a día de un local",
+  escala: "Para equipos y reportes",
 };
 
-const plans = (["semilla", "crece", "escala"] as Plan[]).map((key) => ({
-  key,
-  name: PLAN_META[key].name,
-  profile: PLAN_PROFILES[key],
-  price: key === "semilla" ? "0" : PLAN_AMOUNTS[key].mensual.toLocaleString("es-AR"),
-  intro: key === "semilla" ? "Para dar el primer paso." : key === "crece" ? "Para organizar tu día a día." : "Para conocer mejor tu negocio.",
-  cta: key === "semilla" ? "Empezar gratis" : "Elegir " + PLAN_META[key].name,
-  features: PLAN_FEATURES[key],
-}));
+const SWATCHES = ["#146c48", "#0369a1", "#6d28d9", "#be185d", "#c2410c", "#1f2937"];
+
+const FAQ: [string, string][] = [
+  ["¿Mis clientes tienen que descargar una app?", "No. Entran a tu link (cupito.app/tu-negocio) desde cualquier celular o compu, eligen servicio y horario, y listo. Sin cuentas ni contraseñas."],
+  ["¿Necesito saber de tecnología?", "No. Cargás tus servicios y horarios en unos minutos y compartís el link. Todo se maneja desde el panel, también desde el celular."],
+  ["¿Cómo se evitan los turnos superpuestos?", "Cupito calcula los horarios libres con la duración real de cada servicio, la pausa entre turnos, los bloqueos y el horario de cada profesional. Nadie puede reservar un hueco que no existe."],
+  ["¿Puedo cobrar seña?", "Sí, en los planes Crece y Escala. El cliente transfiere a tu cuenta y vos confirmás la seña desde el panel. Cupito nunca toca ese dinero."],
+  ["¿Qué pasa si un cliente quiere cancelar o cambiar el turno?", "Lo hace solo desde “Mis turnos” hasta 24 h antes y el horario se libera al instante. Dentro de las 24 h te tiene que escribir a vos."],
+  ["¿El plan gratis vence?", "No. Semilla es gratis para siempre, con hasta 25 reservas por mes y sin tarjeta. Cuando necesites más, cambiás de plan desde el panel."],
+];
+
+function go(hash: string) {
+  return (e: MouseEvent) => {
+    e.preventDefault();
+    window.location.hash = hash;
+  };
+}
+
+/* ---------- escena del hero: el cliente reserva → aparece en tu agenda ---------- */
+
+function HeroScene() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !window.matchMedia("(pointer: fine)").matches || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    const onMove = (e: PointerEvent) => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const r = el.getBoundingClientRect();
+        const x = (e.clientX - (r.left + r.width / 2)) / r.width;
+        const y = (e.clientY - (r.top + r.height / 2)) / r.height;
+        el.style.setProperty("--rx", `${(-y * 5).toFixed(2)}deg`);
+        el.style.setProperty("--ry", `${(x * 7).toFixed(2)}deg`);
+      });
+    };
+    const reset = () => { el.style.setProperty("--rx", "0deg"); el.style.setProperty("--ry", "0deg"); };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    document.addEventListener("pointerleave", reset);
+    return () => { window.removeEventListener("pointermove", onMove); document.removeEventListener("pointerleave", reset); cancelAnimationFrame(raf); };
+  }, []);
+
+  return (
+    <div className="lp-scene" ref={ref} aria-label="Animación: un cliente reserva desde el celular y el turno aparece en la agenda del negocio" role="img">
+      <div className="lp-scene-tilt">
+        {/* agenda del negocio */}
+        <div className="lp-agenda">
+          <div className="lp-agenda-top">
+            <span className="lp-dots"><i /><i /><i /></span>
+            <span className="lp-agenda-title">Agenda · jueves 24</span>
+            <span className="lp-agenda-chip">Hoy</span>
+          </div>
+          <div className="lp-agenda-cols">
+            <span><i style={{ background: "#0ea5e9" }} />Lucas</span>
+            <span><i style={{ background: "#f59e0b" }} />Sofi</span>
+          </div>
+          <div className="lp-agenda-grid">
+            {["14:00", "15:00", "16:00", "17:00", "18:00"].map((h, i) => (
+              <div key={h} className="lp-agenda-hour" style={{ top: i * 56 }}><span>{h}</span></div>
+            ))}
+            <div className="lp-ev" style={{ top: 6, height: 44, left: "14%", ["--c" as string]: "#0ea5e9" } as CSSProperties}><b>Martín G.</b><small>Corte · 14:00</small></div>
+            <div className="lp-ev" style={{ top: 34, height: 70, left: "57%", ["--c" as string]: "#f59e0b" } as CSSProperties}><b>Camila R.</b><small>Color · 14:30</small></div>
+            <div className="lp-ev" style={{ top: 118, height: 44, left: "14%", ["--c" as string]: "#0ea5e9" } as CSSProperties}><b>Nico P.</b><small>Barba · 16:00</small></div>
+            <div className="lp-ev lp-ev-new" style={{ top: 146, height: 50, left: "57%", ["--c" as string]: "#146c48" } as CSSProperties}><b>Lucía F.</b><small>Corte + brushing · 16:30</small></div>
+            <div className="lp-ev" style={{ top: 230, height: 44, left: "14%", ["--c" as string]: "#0ea5e9" } as CSSProperties}><b>Tomás R.</b><small>Corte · 18:00</small></div>
+            <div className="lp-now" style={{ top: 96 }} />
+          </div>
+        </div>
+
+        {/* celular del cliente */}
+        <div className="lp-phone">
+          <div className="lp-phone-notch" />
+          <div className="lp-phone-screen">
+            <div className="lp-ph-head">
+              <span className="lp-ph-logo">EB</span>
+              <div><b>Estudio Bloom</b><small>Palermo · abierto hoy</small></div>
+            </div>
+            <div className="lp-ph-service"><span>Corte + brushing</span><small>45 min · $18.000</small></div>
+            <div className="lp-ph-days">
+              {[["jue", "24"], ["vie", "25"], ["sáb", "26"], ["lun", "28"]].map(([d, n], i) => (
+                <span key={n} className={i === 0 ? "on" : ""}><small>{d}</small>{n}</span>
+              ))}
+            </div>
+            <div className="lp-ph-slots">
+              {["11:00", "12:30", "15:00", "16:30", "17:00", "18:30"].map((t) => (
+                <span key={t} className={t === "16:30" ? "lp-ph-target" : ""}>{t}</span>
+              ))}
+              <i className="lp-tap" />
+            </div>
+            <div className="lp-ph-cta">Confirmar turno</div>
+            <div className="lp-ph-foot"><ShieldCheck size={12} /> Recordatorio 24 h antes</div>
+            <div className="lp-ph-done">
+              <span className="lp-ph-check"><Check size={22} strokeWidth={3} /></span>
+              <b>¡Listo, Lucía!</b>
+              <small>Jueves 24 · 16:30 hs</small>
+            </div>
+          </div>
+        </div>
+
+        {/* aviso en tiempo real */}
+        <div className="lp-toast">
+          <span className="lp-toast-dot"><Bell size={14} /></span>
+          <div><b>Nueva reserva</b><small>Lucía F. · hoy 16:30</small></div>
+          <span className="lp-toast-time">ahora</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- bloques del bento con micro‑animaciones ---------- */
+
+function MiniCalendar() {
+  return (
+    <div className="lp-mini-cal" aria-hidden="true">
+      {[0, 1, 2].map((c) => (
+        <div key={c} className="lp-mini-col">
+          {[0, 1, 2, 3, 4, 5].map((r) => <i key={r} />)}
+        </div>
+      ))}
+      <span className="lp-mb" style={{ ["--c" as string]: "#0ea5e9", left: "3%", top: "6%", height: "26%" } as CSSProperties}>Martín · 10:00</span>
+      <span className="lp-mb" style={{ ["--c" as string]: "#f59e0b", left: "36%", top: "22%", height: "34%" } as CSSProperties}>Camila · 11:00</span>
+      <span className="lp-mb" style={{ ["--c" as string]: "#8b5cf6", left: "69%", top: "10%", height: "22%" } as CSSProperties}>Nico · 10:30</span>
+      <span className="lp-mb lp-mb-drag" style={{ ["--c" as string]: "#146c48", left: "3%", top: "60%", height: "24%" } as CSSProperties}>Lucía · 14:00</span>
+      <span className="lp-cursor" />
+    </div>
+  );
+}
+
+function ReminderStack() {
+  return (
+    <div className="lp-rem" aria-hidden="true">
+      {[
+        ["Recordatorio enviado", "Martín · mañana 10:00"],
+        ["Confirmó asistencia", "Camila · mañana 11:30"],
+        ["Recordatorio enviado", "Sofía · mañana 16:00"],
+      ].map(([a, b], i) => (
+        <div key={i} className="lp-rem-item" style={{ ["--i" as string]: i } as CSSProperties}>
+          <span><MessageCircle size={13} /></span>
+          <div><b>{a}</b><small>{b}</small></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ColorCycle() {
+  return (
+    <div className="lp-cc" aria-hidden="true">
+      <div className="lp-cc-card">
+        <b>Tu negocio</b>
+        <div className="lp-cc-slots"><i /><i className="on" /><i /></div>
+        <span className="lp-cc-btn">Reservar</span>
+      </div>
+      <div className="lp-cc-sw">{SWATCHES.slice(0, 5).map((c) => <i key={c} style={{ background: c }} />)}</div>
+    </div>
+  );
+}
+
+/* ---------- personalizador ---------- */
+
+function Customizer() {
+  const [name, setName] = useState("Estudio Bloom");
+  const [color, setColor] = useState(SWATCHES[0]);
+  const [slot, setSlot] = useState("16:30");
+  const slug = (name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tu-negocio").slice(0, 28);
+  const initials = name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "TN";
+  return (
+    <div className="lp-custom">
+      <div className="lp-custom-controls">
+        <label className="lp-field">
+          <span>Nombre de tu negocio</span>
+          <input value={name} maxLength={32} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <div className="lp-field">
+          <span>Color de tu marca</span>
+          <div className="lp-swatches" role="group" aria-label="Color de tu marca">
+            {SWATCHES.map((c) => (
+              <button key={c} type="button" aria-label={`Color ${c}`} aria-pressed={color === c} onClick={() => setColor(c)} style={{ ["--sw" as string]: c } as CSSProperties} />
+            ))}
+          </div>
+        </div>
+        <div className="lp-url"><Link2 size={15} />cupito.app/<b>{slug}</b></div>
+        <a className="lp-btn lp-btn-primary" href="#/registro" onClick={go("#/registro")}>
+          Crear esta página gratis <ArrowRight size={17} />
+        </a>
+      </div>
+      <div className="lp-custom-preview" style={{ ["--brand" as string]: color } as CSSProperties}>
+        <div className="lp-phone lp-phone-static">
+          <div className="lp-phone-notch" />
+          <div className="lp-phone-screen">
+            <div className="lp-ph-head">
+              <span className="lp-ph-logo" style={{ background: color }}>{initials}</span>
+              <div><b>{name || "Tu negocio"}</b><small>Reservá tu turno online</small></div>
+            </div>
+            <div className="lp-ph-service lp-ph-service-sel"><span>Corte + brushing</span><small>45 min · $18.000</small></div>
+            <div className="lp-ph-days">
+              {[["jue", "24"], ["vie", "25"], ["sáb", "26"], ["lun", "28"]].map(([d, n], i) => (
+                <span key={n} className={i === 1 ? "on" : ""}><small>{d}</small>{n}</span>
+              ))}
+            </div>
+            <div className="lp-ph-slots">
+              {["11:00", "12:30", "15:00", "16:30", "17:00", "18:30"].map((t) => (
+                <button type="button" key={t} className={t === slot ? "sel" : ""} onClick={() => setSlot(t)}>{t}</button>
+              ))}
+            </div>
+            <div className="lp-ph-cta lp-ph-cta-live">Confirmar {slot} hs</div>
+            <div className="lp-ph-foot"><ShieldCheck size={12} /> Recordatorio 24 h antes</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- landing ---------- */
 
 export default function Landing() {
   const [user, setUser] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [billing, setBilling] = useState<BillingCycle>("mensual");
+  const [legal, setLegal] = useState<{ title: string; body: string[] } | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const sync = () => { try { setUser(!!localStorage.getItem("cupito_session")); } catch { /* navegación pública sin almacenamiento */ } };
+    const sync = () => { try { setUser(!!localStorage.getItem("cupito_session")); } catch { /* sin almacenamiento */ } };
     sync();
     window.addEventListener("storage", sync);
     return () => window.removeEventListener("storage", sync);
   }, []);
-  const [mobile, setMobile] = useState(false);
-  const [tick, setTick] = useState(0);
-  const [running, setRunning] = useState(true);
-  const [industry, setIndustry] = useState(0);
-  const [legalDoc, setLegalDoc] = useState<{ title: string; body: string[] } | null>(null);
 
+  // header con fondo al scrollear + barra de progreso
   useEffect(() => {
-    if (!running || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const t = setInterval(() => setTick((v) => (v + 1) % 12), 6500);
-    return () => clearInterval(t);
-  }, [running]);
+    let raf = 0;
+    const on = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        setScrolled(window.scrollY > 8);
+        const max = document.documentElement.scrollHeight - innerHeight;
+        root.current?.style.setProperty("--progress", String(max > 0 ? window.scrollY / max : 0));
+      });
+    };
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    return () => { window.removeEventListener("scroll", on); cancelAnimationFrame(raf); };
+  }, []);
 
+  // revelado al scrollear (sin JS todo queda visible)
   useEffect(() => {
-    if (!("IntersectionObserver" in window)) return;
-    const targets = document.querySelectorAll(".lp-reveal");
+    const el = root.current;
+    if (!el) return;
+    const items = Array.from(el.querySelectorAll<HTMLElement>(".lp-rv"));
+    if (!("IntersectionObserver" in window) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      items.forEach((i) => i.classList.add("is-in"));
+      return;
+    }
+    items.forEach((i) => { if (i.getBoundingClientRect().top < innerHeight * 0.92) i.classList.add("is-in"); });
+    el.classList.add("lp-js");
     const io = new IntersectionObserver(
-      (es) =>
-        es.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("visible");
-            io.unobserve(e.target);
-          }
-        }),
-      { threshold: 0.08 }
+      (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("is-in"); io.unobserve(e.target); } }),
+      { rootMargin: "0px 0px -8% 0px", threshold: 0.12 }
     );
-    targets.forEach((e) => io.observe(e));
+    items.forEach((i) => !i.classList.contains("is-in") && io.observe(i));
     return () => io.disconnect();
   }, []);
 
   useEffect(() => {
-    if (!mobile) return;
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobile(false);
-    };
-    window.addEventListener("keydown", handle);
-    return () => window.removeEventListener("keydown", handle);
-  }, [mobile]);
+    if (!menu) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [menu]);
 
-  const services = [
-    "Corte + brushing",
-    "Consulta inicial",
-    "Entrenamiento",
-    "Sesión de estudio",
-    "Reserva de cancha",
-  ];
-
-  const sectors = [
-    ["Belleza", Scissors],
-    ["Salud", Stethoscope],
-    ["Bienestar", Dumbbell],
-    ["Estudios", Palette],
-    ["Deportes", CalendarDays],
-  ] as const;
-
-  const goToLogin = (e: React.MouseEvent) => {
-    e.preventDefault();
-    window.location.hash = "#/login";
-  };
-
-  const goToRegister = (planKey?: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    window.location.hash = planKey ? `#/registro?plan=${planKey}` : "#/registro";
-  };
-
-  const goToDemo = (e: React.MouseEvent) => {
-    e.preventDefault();
-    window.location.hash = "#/reservar/studio-nails";
-  };
+  const price = (p: Plan) => (p === "semilla" ? "0" : PLAN_AMOUNTS[p][billing].toLocaleString("es-AR"));
 
   return (
-    <div className={"lp " + (!running ? "lp-paused" : "")}>
-      <div className="lp-scroll-progress" />
-      <a className="skip-link" href="#landing-main">
-        Saltar al contenido
-      </a>
+    <div className={`lp ${menu ? "lp-menu-open" : ""}`} ref={root}>
+      <div className="lp-progress" aria-hidden="true" />
+      <a className="lp-skip" href="#contenido">Saltar al contenido</a>
 
-      {/* HEADER */}
-      <header className="lp-header">
-        <a className="lp-logo" href="#/" aria-label="Cupito, inicio">
-          <picture>
-            <source srcSet="/cupito-logo.webp" type="image/webp" />
-            <img src="/cupito-logo.png" width="39" height="39" alt="Cupito Logo" decoding="async" />
-          </picture>
-          <span>
-            cupito<span className="lp-logo-dot">.</span>
-          </span>
-        </a>
-        <nav
-          id="landing-navigation"
-          className={mobile ? "lp-nav open" : "lp-nav"}
-          aria-label="Navegación principal"
-        >
-          <a href="#beneficios" onClick={() => setMobile(false)}>
-            Beneficios
+      <header className={`lp-header ${scrolled ? "is-scrolled" : ""}`}>
+        <div className="lp-header-inner">
+          <a className="lp-logo" href="#/" aria-label="Cupito, inicio">
+            <picture>
+              <source srcSet="/cupito-logo.webp" type="image/webp" />
+              <img src="/cupito-logo.png" width="30" height="30" alt="" decoding="async" />
+            </picture>
+            <b>cupito<i>.</i></b>
           </a>
-          <a href="#como-funciona" onClick={() => setMobile(false)}>
-            Cómo funciona
-          </a>
-          <a href="#precios" onClick={() => setMobile(false)}>
-            Precios
-          </a>
-          <a href="#tu-marca" onClick={() => setMobile(false)}>
-            Tu marca
-          </a>
-          <a href="#faq" onClick={() => setMobile(false)}>
-            Preguntas
-          </a>
-          {user && (
-            <a
-              href="#/app"
-              onClick={(e) => {
-                e.preventDefault();
-                setMobile(false);
-                window.location.hash = "#/app";
-              }}
-              className="font-bold text-lime"
-            >
-              Mi panel →
-            </a>
-          )}
-        </nav>
-        <div className="lp-header-actions">
-          {user ? (
-            <a
-              className="lp-button lime compact"
-              href="#/app"
-              onClick={(e) => {
-                e.preventDefault();
-                window.location.hash = "#/app";
-              }}
-            >
-              Mi panel <ArrowRight size={15} />
-            </a>
-          ) : (
-            <>
-              <a className="lp-login" href="#/login" onClick={goToLogin}>
-                Ingresar
-              </a>
-              <a
-                className="lp-button lime compact"
-                href="#/registro"
-                onClick={goToRegister()}
-              >
-                Probar gratis <ArrowUpRight size={15} />
-              </a>
-            </>
-          )}
-          <button
-            className="lp-menu"
-            aria-controls="landing-navigation"
-            aria-expanded={mobile}
-            aria-label={mobile ? "Cerrar menú" : "Abrir menú"}
-            onClick={() => setMobile(!mobile)}
-          >
-            {mobile ? <X /> : <Menu />}
-          </button>
+          <nav id="lp-nav" className="lp-nav" aria-label="Navegación principal">
+            <a href="#producto" onClick={() => setMenu(false)}>Producto</a>
+            <a href="#como-funciona" onClick={() => setMenu(false)}>Cómo funciona</a>
+            <a href="#tu-pagina" onClick={() => setMenu(false)}>Tu página</a>
+            <a href="#precios" onClick={() => setMenu(false)}>Precios</a>
+            <a href="#faq" onClick={() => setMenu(false)}>Preguntas</a>
+            <div className="lp-nav-mobile-cta">
+              {user ? (
+                <a className="lp-btn lp-btn-primary" href="#/app" onClick={go("#/app")}>Ir a mi panel <ArrowRight size={16} /></a>
+              ) : (
+                <>
+                  <a className="lp-btn lp-btn-primary" href="#/registro" onClick={go("#/registro")}>Probar gratis <ArrowRight size={16} /></a>
+                  <a className="lp-btn lp-btn-ghost" href="#/login" onClick={go("#/login")}>Ingresar</a>
+                </>
+              )}
+            </div>
+          </nav>
+          <div className="lp-header-actions">
+            {user ? (
+              <a className="lp-btn lp-btn-primary lp-btn-sm" href="#/app" onClick={go("#/app")}>Mi panel <ArrowRight size={15} /></a>
+            ) : (
+              <>
+                <a className="lp-login" href="#/login" onClick={go("#/login")}>Ingresar</a>
+                <a className="lp-btn lp-btn-primary lp-btn-sm" href="#/registro" onClick={go("#/registro")}>Probar gratis <ArrowRight size={15} /></a>
+              </>
+            )}
+            <button type="button" className="lp-burger" aria-controls="lp-nav" aria-expanded={menu} aria-label={menu ? "Cerrar menú" : "Abrir menú"} onClick={() => setMenu(!menu)}>
+              {menu ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* MAIN */}
-      <main id="landing-main">
-        {/* HERO SECTION */}
+      <main id="contenido">
+        {/* ============ HERO ============ */}
         <section className="lp-hero">
-          <div className="lp-hero-glow" />
+          <div className="lp-hero-bg" aria-hidden="true"><i className="lp-orb lp-orb-a" /><i className="lp-orb lp-orb-b" /><i className="lp-grid" /></div>
           <div className="lp-hero-copy">
-            <a href="#como-funciona" className="lp-eyebrow">
-              <span className="lp-tiny-icon">
-                <CalendarDays size={13} />
-              </span>{" "}
-              MENOS IDAS Y VUELTAS. MÁS CUPITO. <ChevronRight size={13} />
+            <a className="lp-pill" href="#producto">
+              <span className="lp-pill-new">Nuevo</span> Agenda con arrastrar y soltar <ArrowRight size={13} />
             </a>
-            <h1>
-              Menos mensajes.
-              <br />
-              <span>Más turnos.</span>
+            <h1 className="lp-h1">
+              <span className="lp-line"><span>Tu agenda</span></span>
+              <span className="lp-line"><span className="lp-accent">se llena sola.</span></span>
             </h1>
-            <p>
-              Tu página de reservas, agenda y clientes en un solo lugar. Compartí un enlace, dejá que elijan su horario y recuperá tiempo todos los días.
+            <p className="lp-lead">
+              Página de reservas con tu nombre, agenda clara y recordatorios que bajan las ausencias. Hecho para{" "}
+              <span className="lp-rotator" aria-label="negocios con turnos">
+                <span className="lp-rotator-track" aria-hidden="true">
+                  {[...ROTATING, ROTATING[0]].map((w, i) => <span key={i}>{w}</span>)}
+                </span>
+              </span>
             </p>
-            <div className="lp-hero-buttons">
-              <a
-                className="lp-button lime"
-                href="#/registro"
-                onClick={goToRegister()}
-              >
-                Crear mi página gratis <ArrowUpRight size={19} />
+            <div className="lp-cta-row">
+              <a className="lp-btn lp-btn-primary lp-btn-lg" href="#/registro" onClick={go("#/registro")}>
+                Crear mi página gratis <ArrowRight size={18} />
               </a>
-              <a
-                className="lp-button ghost"
-                href="#/reservar/studio-nails"
-                onClick={goToDemo}
-              >
-                <Play size={14} fill="currentColor" />
-                Ver demo en vivo
+              <a className="lp-btn lp-btn-ghost lp-btn-lg" href="#/reservar/studio-nails" onClick={go("#/reservar/studio-nails")}>
+                <span className="lp-play"><Play size={11} fill="currentColor" /></span> Ver demo en vivo
               </a>
             </div>
-            <div className="lp-under-cta flex flex-wrap items-center justify-center gap-4 text-xs">
-              <span className="inline-flex items-center gap-1.5 text-[#1D1D1F] font-medium">
-                <Check size={14} className="stroke-[2.5] text-[#15803D]" /> Sin tarjeta de crédito
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-[#1D1D1F] font-medium">
-                <Check size={14} className="stroke-[2.5] text-[#15803D]" /> Configuración en 2 minutos
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-[#1D1D1F] font-medium">
-                <Check size={14} className="stroke-[2.5] text-[#15803D]" /> Plan gratuito para siempre
-              </span>
-            </div>
-            <div className="lp-hero-proof" aria-label="Ventajas de Cupito">
-              <span><ShieldCheck size={15} /><strong>Sin app</strong><small>para tus clientes</small></span>
-              <span><Clock size={15} /><strong>24/7</strong><small>reservas abiertas</small></span>
-              <span><Palette size={15} /><strong>Tu marca</strong><small>en cada detalle</small></span>
-            </div>
+            <ul className="lp-checks">
+              <li><Check size={15} /> Gratis hasta 25 reservas por mes</li>
+              <li><Check size={15} /> Sin tarjeta</li>
+              <li><Check size={15} /> Listo en 5 minutos</li>
+            </ul>
           </div>
+          <HeroScene />
+        </section>
 
-          {/* VISTA PREVIA INTERACTIVA DE AGENDA */}
-          <div
-            className="lp-product-visual"
-            aria-label="Demostración animada de la agenda de Cupito"
-          >
-            <div className="lp-orbit-label">
-              <span />
-              TU DÍA, DE UN VISTAZO
-            </div>
-            <div className="lp-demo-window">
-              <div className="lp-demo-top">
-                <div className="lp-window-dots">
-                  <i />
-                  <i />
-                  <i />
-                </div>
-                <span>
-                  <ShieldCheck size={11} /> Tu espacio en Cupito
-                </span>
-                <ArrowUpRight size={13} />
-              </div>
-              <div className="lp-demo-body">
-                <aside className="lp-demo-sidebar">
-                  <div className="lp-demo-brand">
-                    <img src="/cupito-logo.webp" alt="" width="20" height="20" loading="lazy" decoding="async" />
-                    cupito.
-                  </div>
-                  <div className="lp-demo-store">
-                    <span>EB</span>
-                    <div>
-                      Estudio Bloom<small>Mi negocio</small>
-                    </div>
-                  </div>
-                  {[
-                    [ChartNoAxesCombined, "Resumen"],
-                    [CalendarDays, "Agenda"],
-                    [Users, "Clientes"],
-                    [Scissors, "Servicios"],
-                    [Globe, "Mi página"],
-                  ].map(([Icon, label]: any, i) => (
-                    <div
-                      key={label}
-                      className={"lp-demo-nav " + (!i ? "selected" : "")}
-                    >
-                      <Icon size={13} />
-                      {label}
-                    </div>
-                  ))}
-                  <div className="lp-demo-bottom">Hecho para tu día a día.</div>
-                </aside>
-                <div className="lp-demo-main">
-                  <div className="lp-demo-heading">
-                    <div>
-                      <span>MIÉRCOLES, 16 DE SEPTIEMBRE</span>
-                      <p className="lp-demo-heading-title font-display text-lg font-bold text-[#254c36] flex items-center gap-1">
-                        ¡Buen día, Sofi! <Sun size={16} className="text-amber-500 inline" />
-                      </p>
-                      <p>Tu agenda se ocupa. Vos, de lo tuyo.</p>
-                    </div>
-                    <div className="lp-demo-avatar">SF</div>
-                  </div>
-                  <div className="lp-demo-stats">
-                    <div>
-                      <small>Turnos del día</small>
-                      <strong key={tick}>
-                        {18 + tick}
-                        <span>+{3 + tick} hoy</span>
-                      </strong>
-                      <div className="lp-stat-dash" />
-                    </div>
-                    <div>
-                      <small>Ocupación</small>
-                      <strong>
-                        {68 + tick}%<ChartNoAxesCombined size={23} />
-                      </strong>
-                      <div className="lp-demo-bars">
-                        {[35, 53, 43, 68, 47, 80, 62, 90, 75, 100, 87, 75].map((n, i) => (
-                          <i
-                            key={i}
-                            style={{ height: (n + ((tick + i) % 4) * 3) / 5 }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="lp-demo-agenda-title">
-                    <b>Próximos turnos</b>
-                    <span>
-                      <i /> Agenda al día
-                    </span>
-                  </div>
-                  <div className="lp-demo-days">
-                    {["L 14", "M 15", "M 16", "J 17", "V 18", "S 19"].map((x, i) => (
-                      <span className={i === 2 ? "active" : ""} key={i}>
-                        {x.split(" ")[0]}
-                        <b>{x.split(" ")[1]}</b>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="lp-demo-rows" key={"rows" + tick}>
-                    {[0, 1, 2].map((i) => (
-                      <div className="lp-demo-row" key={i}>
-                        <time>{14 + i}:00</time>
-                        <span className={"lp-initials tone" + i}>
-                          {names[(tick + i) % names.length]
-                            .split(" ")
-                            .map((x) => x[0])
-                            .join("")}
-                        </span>
-                        <div>
-                          <b>{names[(tick + i) % names.length]}</b>
-                          <small>
-                            {i === 0
-                              ? services[industry]
-                              : i === 1
-                              ? "Servicio personalizado"
-                              : "Primera visita"}
-                          </small>
-                        </div>
-                        <span className="lp-status">
-                          <Check size={9} />
-                          Confirmado
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="lp-demo-footer">
-                    <span>Tu agenda, sin mensajes pendientes.</span>
-                    <CheckCheck size={14} />
-                  </div>
-                </div>
-              </div>
-              {/* Floating Preview Toast */}
-              <div className="lp-floating-booking absolute right-4 bottom-4 overflow-hidden shadow-lg z-20" key={tick}>
-                <span className="lp-float-icon">
-                  <Check size={20} />
-                </span>
-                <div>
-                  <strong>¡Entró una nueva reserva!</strong>
-                  <p>
-                    {names[tick % names.length].split(" ")[0]} · {services[industry]}
-                  </p>
-                </div>
-                <span className="lp-float-now">Ahora</span>
-              </div>
-            </div>
-            <div className="lp-floating-link">
-              <Link size={15} />
-              <span>Tu negocio. Tu propio link.</span>
-              <ArrowUpRight size={14} />
-            </div>
-            <div className="lp-simulation">
-              <span>Vista ilustrativa · datos simulados</span>
-              <button
-                type="button"
-                onClick={() => setRunning(!running)}
-                aria-label={running ? "Pausar demostración" : "Reanudar demostración"}
-              >
-                {running ? <Pause size={12} /> : <Play size={12} />}
-              </button>
+        {/* ============ SECTORES ============ */}
+        <section className="lp-marquee" aria-label="Rubros que usan Cupito">
+          <p>Para cualquier negocio que trabaja con turnos</p>
+          <div className="lp-marquee-mask">
+            <div className="lp-marquee-track">
+              {[...SECTORS, ...SECTORS].map((s, i) => <span key={i} aria-hidden={i >= SECTORS.length}>{s}</span>)}
             </div>
           </div>
         </section>
 
-        {/* 3 BENEFICIOS CUANTIFICABLES */}
-        <section id="beneficios" className="lp-benefits-quantifiable lp-reveal">
-          <div className="lp-benefits-heading">
-            <span className="lp-kicker">VALOR REAL PARA TU DÍA A DÍA</span>
-            <h2>Resultados concretos desde la primera semana</h2>
-            <p>Pensado para profesionales y locales que quieren recuperar tiempo y ordenar su atención.</p>
+        {/* ============ PROBLEMA → SOLUCIÓN ============ */}
+        <section className="lp-section lp-problem" id="producto">
+          <div className="lp-chat lp-rv" aria-hidden="true">
+            <div className="lp-chat-head"><span className="lp-chat-av">WA</span><div><b>Clientes</b><small>14 chats sin leer</small></div></div>
+            <div className="lp-chat-body">
+              {[
+                ["in", "Hola! ¿tenés lugar mañana?"],
+                ["out", "Tengo a las 11 o a las 17"],
+                ["in", "Uh, ¿y a las 15?"],
+                ["in", "¿Cuánto sale el color?"],
+                ["out", "A las 15 no, perdón 🙏"],
+                ["in", "Bueno, te aviso"],
+              ].map(([k, t], i) => <p key={i} className={`lp-bubble ${k}`} style={{ ["--i" as string]: i } as CSSProperties}>{t}</p>)}
+            </div>
+            <div className="lp-chat-fix">
+              <span><Link2 size={15} /></span>
+              <div><b>cupito.app/estudio-bloom</b><small>Horarios libres, precios y reserva en un toque</small></div>
+            </div>
           </div>
-          <div className="lp-benefits-grid">
-            <article className="lp-benefit-card">
-              <div className="lp-benefit-icon">
-                <Clock size={22} />
-              </div>
-              <span className="lp-benefit-metric">+15 hs</span>
-              <span className="lp-benefit-kicker">Semanales recuperadas</span>
-              <p className="lp-benefit-desc">
-                Menos idas y vueltas por WhatsApp preguntando "¿a qué hora tenés?". Tu disponibilidad se actualiza en tiempo real y tus clientes reservan solos.
-              </p>
-            </article>
-
-            <article className="lp-benefit-card">
-              <div className="lp-benefit-icon">
-                <Bell size={22} />
-              </div>
-              <span className="lp-benefit-metric">0</span>
-              <span className="lp-benefit-kicker">Mensajes perdidos</span>
-              <p className="lp-benefit-desc">
-                Tus clientes eligen horario en cualquier momento, incluso mientras atendés o fuera del horario comercial, sin esperas ni chats sin responder.
-              </p>
-            </article>
-
-            <article className="lp-benefit-card">
-              <div className="lp-benefit-icon">
-                <CheckCheck size={22} />
-              </div>
-              <span className="lp-benefit-metric">100%</span>
-              <span className="lp-benefit-kicker">Turnos organizados</span>
-              <p className="lp-benefit-desc">
-                Recordatorios directos, cobro de seña opcional por transferencia y políticas de cancelación claras para que tu agenda respire sin ausencias.
-              </p>
-            </article>
+          <div className="lp-problem-copy lp-rv">
+            <span className="lp-kicker">El problema</span>
+            <h2 className="lp-h2">Dejá de coordinar turnos por chat.</h2>
+            <p className="lp-p">Cada “¿tenés lugar?” te saca de lo que estás haciendo. Con Cupito, tus clientes ven los horarios libres y reservan solos, a cualquier hora.</p>
+            <ul className="lp-list">
+              <li><span><Clock size={16} /></span><div><b>Reservas las 24 h</b>Mientras atendés, dormís o estás de vacaciones.</div></li>
+              <li><span><CalendarDays size={16} /></span><div><b>Sin superposiciones</b>Respeta la duración de cada servicio, tus descansos y los horarios de tu equipo.</div></li>
+              <li><span><Bell size={16} /></span><div><b>Menos ausencias</b>Recordatorio automático el día antes y aviso cuando alguien cancela.</div></li>
+            </ul>
           </div>
         </section>
 
-        {/* CÓMO FUNCIONA */}
-        <section id="como-funciona" className="lp-how lp-reveal">
-          <span className="lp-kicker">ARRANCAR ES LA PARTE FÁCIL</span>
-          <h2>
-            Tres pasos.
-            <br />
-            Y el próximo turno ya puede llegar.
-          </h2>
-          <div className="lp-steps-grid">
-            {[
-              [
-                "01",
-                "Dale tu toque.",
-                "Poné el nombre de tu negocio, tus servicios y los horarios en los que atendés.",
-                Palette,
-              ],
-              [
-                "02",
-                "Compartí tu link.",
-                "En tu Instagram, en WhatsApp o donde te encuentren tus clientes.",
-                Link,
-              ],
-              [
-                "03",
-                "Dejá que reserven.",
-                "Ellos eligen su momento. Vos lo ves en tu agenda y seguís con tu día.",
-                CalendarDays,
-              ],
-            ].map(([n, title, desc, Icon]: any) => (
-              <article key={n}>
-                <div className="lp-step-top">
-                  <span>{n}</span>
-                  <Icon size={24} />
-                </div>
-                <h3>{title}</h3>
-                <p>{desc}</p>
-              </article>
-            ))}
+        {/* ============ BENTO ============ */}
+        <section className="lp-section">
+          <div className="lp-head lp-rv">
+            <span className="lp-kicker">Producto</span>
+            <h2 className="lp-h2">Todo lo que necesita un negocio con turnos.<br /><span>Nada que sobre.</span></h2>
           </div>
-          <a className="lp-inline-link" href="#/reservar/studio-nails" onClick={goToDemo}>
-            Probalo como si fueras tu cliente <ArrowRight size={16} />
-          </a>
-        </section>
-
-        {/* PRECIOS */}
-        <section id="precios" className="lp-pricing lp-reveal">
-          <div className="lp-pricing-heading">
-            <span className="lp-kicker">CRECÉ A TU RITMO</span>
-            <h2>
-              Empezá simple.
-              <br />
-              <span>Sumá más cuando lo necesites.</span>
-            </h2>
-            <p>Planes en pesos argentinos. Sin vueltas.</p>
-          </div>
-          <div className="lp-price-grid">
-            {plans.map((p, i) => (
-              <article
-                className={"lp-price-card " + (i === 1 ? "recommended" : "")}
-                key={p.key}
-              >
-                {i === 1 && <span className="lp-recommended">PARA EL DÍA A DÍA</span>}
-                <div className="lp-plan-name">
-                  {p.name}
-                  <span>
-                    {i === 0 ? <Globe size={20} /> : i === 1 ? <Store size={20} /> : <Users size={20} />}
-                  </span>
-                </div>
-                <div className="lp-plan-profile">
-                  <Users size={12} />
-                  <span>{p.profile}</span>
-                </div>
-                <p>{p.intro}</p>
-                <div className="lp-price">
-                  $ {p.price}
-                  <small>ARS / mes</small>
-                </div>
-                <a
-                  className={"lp-button " + (i === 1 ? "lime" : "outlined")}
-                  href={`#/registro?plan=${p.key}`}
-                  onClick={goToRegister(p.key)}
-                >
-                  {p.cta}
-                  <ArrowUpRight size={17} />
-                </a>
-                <div className="lp-price-rule" />
-                {p.features.map((f) => (
-                  <div className="lp-plan-feature" key={f}>
-                    <Check size={15} />
-                    {f}
-                  </div>
+          <div className="lp-bento">
+            <article className="lp-tile lp-tile-xl lp-rv">
+              <div className="lp-tile-copy">
+                <span className="lp-tile-icon"><CalendarDays size={18} /></span>
+                <h3>Una agenda que se entiende en segundos</h3>
+                <p>Columnas por profesional, huecos libres a la vista y turnos que se mueven arrastrando.</p>
+              </div>
+              <MiniCalendar />
+            </article>
+            <article className="lp-tile lp-rv" style={{ ["--d" as string]: "80ms" } as CSSProperties}>
+              <span className="lp-tile-icon"><Bell size={18} /></span>
+              <h3>Recordatorios que bajan las ausencias</h3>
+              <p>Email automático 24 h antes y WhatsApp listo para enviar.</p>
+              <ReminderStack />
+            </article>
+            <article className="lp-tile lp-rv" style={{ ["--d" as string]: "160ms" } as CSSProperties}>
+              <span className="lp-tile-icon"><Palette size={18} /></span>
+              <h3>Tu página, tu marca</h3>
+              <p>Tu nombre, tu color y tu link para Instagram y WhatsApp.</p>
+              <ColorCycle />
+            </article>
+            <article className="lp-tile lp-rv">
+              <span className="lp-tile-icon"><Wallet size={18} /></span>
+              <h3>Seña por transferencia</h3>
+              <p>Asegurá el turno con un anticipo que va directo a tu cuenta.</p>
+              <div className="lp-deposit" aria-hidden="true">
+                <div><small>Seña 30%</small><b>$5.400</b></div>
+                <span className="lp-deposit-state"><Check size={13} /> Acreditada</span>
+              </div>
+            </article>
+            <article className="lp-tile lp-rv" style={{ ["--d" as string]: "80ms" } as CSSProperties}>
+              <span className="lp-tile-icon"><Users size={18} /></span>
+              <h3>Clientes con historial</h3>
+              <p>Visitas, ausencias, notas y el servicio que siempre piden.</p>
+              <div className="lp-clients" aria-hidden="true">
+                {[["LF", "Lucía F.", "12 visitas"], ["MG", "Martín G.", "8 visitas"], ["CR", "Camila R.", "Nueva"]].map(([a, n, v], i) => (
+                  <div key={n} style={{ ["--i" as string]: i } as CSSProperties}><span>{a}</span><b>{n}</b><small>{v}</small></div>
                 ))}
+              </div>
+            </article>
+            <article className="lp-tile lp-rv" style={{ ["--d" as string]: "160ms" } as CSSProperties}>
+              <span className="lp-tile-icon"><Hourglass size={18} /></span>
+              <h3>Lista de espera</h3>
+              <p>Si se libera un lugar, se lo ofrecés a quien estaba esperando en un toque.</p>
+              <div className="lp-wait" aria-hidden="true"><span>Se liberó 17:00</span><ArrowRight size={14} /><b>Avisar a Sofía</b></div>
+            </article>
+          </div>
+          <div className="lp-mini-features lp-rv">
+            {[
+              [Smartphone, "Panel pensado para el celular"],
+              [Search, "Buscador de clientes y turnos"],
+              [Sparkles, "Estadísticas claras"],
+              [ShieldCheck, "Tus datos, solo tuyos"],
+            ].map(([Icon, t]) => {
+              const I = Icon as typeof Smartphone;
+              return <span key={t as string}><I size={16} />{t as string}</span>;
+            })}
+          </div>
+        </section>
+
+        {/* ============ CÓMO FUNCIONA ============ */}
+        <section className="lp-section lp-how" id="como-funciona">
+          <div className="lp-head lp-rv">
+            <span className="lp-kicker">Cómo funciona</span>
+            <h2 className="lp-h2">De cero a tu primera reserva<br /><span>en una tarde.</span></h2>
+          </div>
+          <ol className="lp-steps lp-rv">
+            {[
+              ["Creá tu cuenta", "Nombre del negocio y listo. Sin tarjeta.", Plus],
+              ["Cargá servicios y horarios", "Duración, precio y los días que atendés.", Clock],
+              ["Compartí tu link", "En tu bio de Instagram, en WhatsApp o con un QR en el local.", Link2],
+            ].map(([t, d, Icon], i) => {
+              const I = Icon as typeof Plus;
+              return (
+                <li key={t as string} style={{ ["--i" as string]: i } as CSSProperties}>
+                  <span className="lp-step-n"><I size={18} /><em>{i + 1}</em></span>
+                  <h3>{t as string}</h3>
+                  <p>{d as string}</p>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+
+        {/* ============ PERSONALIZADOR ============ */}
+        <section className="lp-section lp-brand" id="tu-pagina">
+          <div className="lp-head lp-rv">
+            <span className="lp-kicker">Tu página</span>
+            <h2 className="lp-h2">Probá cómo se vería la tuya.</h2>
+            <p className="lp-p">Escribí el nombre de tu negocio y elegí un color. Así la ven tus clientes desde el celular.</p>
+          </div>
+          <div className="lp-rv"><Customizer /></div>
+        </section>
+
+        {/* ============ PRECIOS ============ */}
+        <section className="lp-section lp-pricing" id="precios">
+          <div className="lp-head lp-rv">
+            <span className="lp-kicker">Precios</span>
+            <h2 className="lp-h2">Empezá gratis.<br /><span>Crecé cuando lo necesites.</span></h2>
+            <div className="lp-billing" role="group" aria-label="Frecuencia de pago">
+              <button type="button" aria-pressed={billing === "mensual"} onClick={() => setBilling("mensual")}>Mensual</button>
+              <button type="button" aria-pressed={billing === "anual"} onClick={() => setBilling("anual")}>Anual <em>−17%</em></button>
+              <i className="lp-billing-pill" style={{ transform: `translateX(${billing === "anual" ? "100%" : "0"})` }} />
+            </div>
+          </div>
+          <div className="lp-prices">
+            {(["semilla", "crece", "escala"] as Plan[]).map((p, i) => (
+              <article key={p} className={`lp-price-card lp-rv ${p === "crece" ? "is-featured" : ""}`} style={{ ["--d" as string]: `${i * 90}ms` } as CSSProperties}>
+                {p === "crece" && <span className="lp-price-badge">El más elegido</span>}
+                <h3>{PLAN_META[p].name}</h3>
+                <p className="lp-price-profile">{PLAN_PROFILE[p]}</p>
+                <div className="lp-price">
+                  <span className="lp-price-cur">$</span>
+                  <span className="lp-price-num" key={billing + p}>{price(p)}</span>
+                  <span className="lp-price-per">/mes</span>
+                </div>
+                <p className="lp-price-note">{p === "semilla" ? "Gratis para siempre" : billing === "anual" ? "Facturado anualmente" : "Cancelás cuando quieras"}</p>
+                <a className={`lp-btn ${p === "crece" ? "lp-btn-primary" : "lp-btn-outline"} lp-btn-block`} href={`#/registro?plan=${p}`} onClick={go(`#/registro?plan=${p}`)}>
+                  {p === "semilla" ? "Empezar gratis" : `Elegir ${PLAN_META[p].name}`} <ArrowRight size={16} />
+                </a>
+                <ul>
+                  {PLAN_FEATURES[p].map((f) => <li key={f}><Check size={15} />{f}</li>)}
+                </ul>
               </article>
             ))}
           </div>
-          <p className="lp-pricing-note">
-            Precios en pesos argentinos. Podés cambiar de plan o cancelar en cualquier momento desde
-            tu panel.
-          </p>
+          <p className="lp-fine lp-rv">Precios en pesos argentinos. La suscripción se paga con Mercado Pago; las señas de tus clientes van directo a tu cuenta.</p>
         </section>
 
-        {/* PERSONALIZADOR INTERACTIVO */}
-        <section className="lp-reveal" id="tu-marca">
-          {/* SELECTOR DE INDUSTRIAS */}
-          <section className="lp-industries">
-            <p>
-              SI TU NEGOCIO TIENE TURNOS,
-              <br />
-              <b>TIENE LUGAR EN CUPITO.</b>
-            </p>
-            <div>
-              {sectors.map(([name, Icon], i) => (
-                <button
-                  type="button"
-                  className={industry === i ? "active" : ""}
-                  key={name}
-                  aria-pressed={industry === i}
-                  onClick={() => setIndustry(i)}
-                >
-                  <Icon size={19} />
-                  {name}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* TOUR INTERACTIVO DE MARCA */}
-          <LandingTour />
-        </section>
-
-        {/* MERCADO PAGO / CONFIANZA */}
-        <section className="lp-trust lp-reveal">
-          <span>
-            <ShieldCheck size={25} />
-            <b>Tu suscripción, por Mercado Pago.</b>
-          </span>
-          <p>
-            Pagás tu plan de Cupito con Mercado Pago. Las señas de tus clientes se transfieren directamente a la cuenta de tu negocio.
-            <br />
-            Cupito no recibe ni guarda los datos de las tarjetas.
-          </p>
-          <a href="mailto:hola@cupito.app">
-            ¿Tenés una pregunta? Hablemos <ArrowUpRight size={14} />
-          </a>
-        </section>
-
-        {/* FAQ ACCORDION */}
-        <section className="lp-faq lp-reveal">
-          <div>
-            <span className="lp-kicker">SIN DUDAS, MEJOR.</span>
-            <h2>
-              Lo que quizás
-              <br />
-              te estás preguntando.
-            </h2>
-            <p>
-              Y si falta algo, escribinos.
-              <br />
-              Del otro lado hay una persona.
-            </p>
+        {/* ============ FAQ ============ */}
+        <section className="lp-section lp-faq" id="faq">
+          <div className="lp-faq-side lp-rv">
+            <span className="lp-kicker">Preguntas</span>
+            <h2 className="lp-h2">Lo que seguro te estás preguntando.</h2>
+            <p className="lp-p">¿Falta algo? Escribinos a <a href="mailto:hola@cupito.app">hola@cupito.app</a>. Del otro lado hay una persona.</p>
           </div>
-          <Accordion type="single" collapsible className="lp-accordion">
-            {[
-              [
-                "¿Necesito saber de tecnología?",
-                "No. Elegís el nombre del negocio, cargás tus servicios y horarios, y compartís tu enlace. Todo se configura desde el panel en pocos toques, sin escribir código.",
-              ],
-              [
-                "¿Mis clientes tienen que descargar una app?",
-                "No, para nada. Tus clientes reservan directamente desde cualquier navegador (Chrome, Safari, etc.) entrando a tu link personalizado (ej. cupito.app/tu-negocio).",
-              ],
-              [
-                "¿Puedo usar Cupito desde el celular?",
-                "Sí, está 100% optimizado para celulares tanto para vos como para tus clientes. Incluso podés instalarlo como app en tu pantalla de inicio en 1 toque.",
-              ],
-              [
-                "¿El plan gratis tiene vencimiento?",
-                "El plan Gratis (Semilla) está pensado para empezar sin pagar, con hasta 25 reservas activas por mes. No se te pide tarjeta de crédito para crear tu cuenta.",
-              ],
-              [
-                "¿Puedo cobrar una seña o vender productos?",
-                "Sí. Con Crece y Escala podés pedir señas por transferencia y ofrecer productos al reservar. El local verifica la transferencia. Mercado Pago se usa para pagar tu suscripción a Cupito.",
-              ],
-            ].map(([q, a], i) => (
-              <AccordionItem value={String(i)} key={q}>
-                <AccordionTrigger>{q}</AccordionTrigger>
-                <AccordionContent>{a}</AccordionContent>
-              </AccordionItem>
+          <div className="lp-faq-list lp-rv">
+            {FAQ.map(([q, a], i) => (
+              <details key={q} open={i === 0}>
+                <summary>{q}<span className="lp-faq-icon" aria-hidden="true" /></summary>
+                <p>{a}</p>
+              </details>
             ))}
-          </Accordion>
+          </div>
         </section>
 
-        {/* FINAL CALL TO ACTION */}
-        <section className="lp-final lp-reveal">
-          <div className="lp-final-glow" />
-          <span className="lp-kicker">HACÉ LUGAR PARA LO QUE IMPORTA</span>
-          <h2>
-            Vos hacé lo tuyo.
-            <br />
-            <span>Cupito organiza los turnos.</span>
-          </h2>
-          <p>Tu próximo cliente puede estar buscando un horario ahora.</p>
-          <a
-            className="lp-button lime"
-            href="#/registro"
-            onClick={goToRegister()}
-          >
-            Dale lugar a tu negocio <ArrowUpRight size={20} />
-          </a>
-          <span className="lp-final-note">Gratis para empezar. Sin tarjeta. Sin complicarte.</span>
+        {/* ============ CTA FINAL ============ */}
+        <section className="lp-final">
+          <div className="lp-final-card lp-rv">
+            <i className="lp-final-orb" aria-hidden="true" />
+            <i className="lp-final-grid" aria-hidden="true" />
+            <span className="lp-kicker lp-kicker-light">Tu próximo cliente está buscando horario</span>
+            <h2 className="lp-h2">Dale un lugar para reservar.</h2>
+            <p>Creá tu página en minutos. Gratis, sin tarjeta y sin complicarte.</p>
+            <div className="lp-cta-row">
+              <a className="lp-btn lp-btn-light lp-btn-lg" href="#/registro" onClick={go("#/registro")}>Crear mi página gratis <ArrowRight size={18} /></a>
+              <a className="lp-btn lp-btn-ghost-light lp-btn-lg" href="#/reservar/studio-nails" onClick={go("#/reservar/studio-nails")}>Ver una página de ejemplo</a>
+            </div>
+          </div>
         </section>
       </main>
 
-      {/* FOOTER */}
       <footer className="lp-footer">
-        <div className="lp-footer-top">
-          <div>
+        <div className="lp-footer-inner">
+          <div className="lp-footer-brand">
             <a className="lp-logo" href="#/" aria-label="Cupito, inicio">
-              <picture>
-                <source srcSet="/cupito-logo.webp" type="image/webp" />
-                <img src="/cupito-logo.png" alt="Cupito Logo" width="36" height="36" loading="lazy" decoding="async" />
-              </picture>
-              cupito<span className="lp-logo-dot">.</span>
+              <img src="/cupito-logo.png" width="28" height="28" alt="" loading="lazy" decoding="async" />
+              <b>cupito<i>.</i></b>
             </a>
-            <p>Más tiempo para lo que hacés bien.</p>
+            <p>Reservas online para negocios con turnos. Hecho en Argentina.</p>
           </div>
-          <div className="lp-footer-links">
-            <a href="#beneficios">Beneficios</a>
-            <a href="#como-funciona">Cómo funciona</a>
-            <a href="#precios">Precios</a>
-            <a href="#tu-marca">Tu marca</a>
-            {user ? (
-              <a
-                href="#/app"
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.location.hash = "#/app";
-                }}
-              >
-                Mi panel
-              </a>
-            ) : (
-              <a href="#/login" onClick={goToLogin}>
-                Ingresar
-              </a>
-            )}
-            <button
-              type="button"
-              onClick={() => setLegalDoc(TERMS_DOC)}
-              className="text-left cursor-pointer hover:underline"
-            >
-              Términos del Servicio
-            </button>
-            <button
-              type="button"
-              onClick={() => setLegalDoc(PRIVACY_DOC)}
-              className="text-left cursor-pointer hover:underline"
-            >
-              Privacidad
-            </button>
-          </div>
-          <div className="lp-footer-contact">
-            <a href="mailto:hola@cupito.app">
-              <Mail size={16} />
-              hola@cupito.app
-            </a>
-            <a
-              href="https://www.instagram.com/cupitoapp/"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Instagram de Cupito @cupitoapp"
-            >
-              <Instagram size={16} />
-              @cupitoapp <ArrowUpRight size={13} />
-            </a>
+          <div className="lp-footer-cols">
+            <div>
+              <b>Producto</b>
+              <a href="#producto">Funciones</a>
+              <a href="#precios">Precios</a>
+              <a href="#/reservar/studio-nails" onClick={go("#/reservar/studio-nails")}>Demo</a>
+            </div>
+            <div>
+              <b>Cuenta</b>
+              {user ? <a href="#/app" onClick={go("#/app")}>Mi panel</a> : <a href="#/login" onClick={go("#/login")}>Ingresar</a>}
+              <a href="#/registro" onClick={go("#/registro")}>Crear cuenta</a>
+            </div>
+            <div>
+              <b>Contacto</b>
+              <a href="mailto:hola@cupito.app"><Mail size={14} /> hola@cupito.app</a>
+              <a href="https://www.instagram.com/cupitoapp/" target="_blank" rel="noreferrer"><Instagram size={14} /> @cupitoapp <ArrowUpRight size={12} /></a>
+            </div>
           </div>
         </div>
         <div className="lp-footer-bottom">
-          <span>&copy; {new Date().getFullYear()} Cupito.app</span>
-          <span className="inline-flex items-center gap-1">
-            Hecho con ganas, en Argentina. <ArrowUpRight size={13} />
+          <span>© {new Date().getFullYear()} Cupito</span>
+          <span>
+            <button type="button" onClick={() => setLegal(TERMS_DOC)}>Términos</button>
+            <button type="button" onClick={() => setLegal(PRIVACY_DOC)}>Privacidad</button>
           </span>
         </div>
       </footer>
 
-      {/* MODAL DE TÉRMINOS / PRIVACIDAD */}
-      {legalDoc && <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />}
+      {legal && <LegalModal doc={legal} onClose={() => setLegal(null)} />}
     </div>
   );
 }

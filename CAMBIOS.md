@@ -86,3 +86,11 @@ Las 11 pruebas cubren HTML sin JavaScript, hidratación, rutas, menú mobile, pl
 Playwright usa Edge para las pruebas en esta configuración. La auditoría inicia su propio servidor del build y abre el Chromium de Playwright con un puerto de depuración temporal, lo que evita depender de una instalación global de Chrome o Edge. En otros sistemas requiere `npx playwright install chromium`.
 
 Los informes JSON/HTML de Lighthouse y las capturas de pantalla se guardan en `artifacts/`, fuera de Git.
+
+## Landing rediseñada
+
+- Nueva portada con sistema visual propio (Bricolage Grotesque + Inter autoalojadas, verde marca + lima).
+- Hero con escena animada: el cliente reserva desde el celular y el turno aparece en la agenda (loop sincronizado, con tilt al mover el mouse).
+- Secciones: problema → solución (chat animado), funciones en bento con microanimaciones, cómo funciona, personalizador en vivo, precios con toggle mensual/anual, preguntas y CTA final.
+- Animaciones de entrada al hacer scroll sin romper el HTML prerenderizado; todo respeta `prefers-reduced-motion`.
+- Se eliminaron los estilos y componentes viejos de la landing (`landing-light/refinement/polish.css`, `Accordion`, `LandingTour`).
